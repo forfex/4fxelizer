@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { collectGpuReport } from './gpu/report'
 import { installPixelSnap } from './lib/pixelSnap'
+import { startSettingsSync } from './settings'
 import { getEngine } from './engine'
 import { useApp } from './store'
 import './styles/index.css'
@@ -18,6 +19,7 @@ if (new URLSearchParams(location.search).get('mode') === 'gpu-report') {
   root.render(<p>Collecting GPU report…</p>)
   collectGpuReport().then((report) => window.fx.submitGpuReport(report))
 } else {
+  startSettingsSync()
   root.render(
     <StrictMode>
       <App />

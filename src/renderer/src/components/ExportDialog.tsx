@@ -3,6 +3,7 @@ import { describeOutput, exportImage, type ExportFormat, type OutputSummary } fr
 import type { DitherParams } from '@/gpu/passes/dither'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
 import { indexedBitDepth } from '@/image/png'
+import { savedSettings, saveSettings } from '@/settings'
 import { snapsColors } from '@/stack/analyze'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
@@ -25,7 +26,7 @@ export function ExportDialog() {
   const open = useApp((s) => s.exportOpen)
   const setOpen = useApp((s) => s.setExportOpen)
   const palettes = useApp((s) => s.palettes)
-  const [format, setFormat] = useState<ExportFormat>('png-indexed')
+  const [format, setFormat] = useState<ExportFormat>(() => savedSettings().exportFormat)
   const [paletteChoice, setPaletteChoice] = useState<string>(IMAGE_COLORS)
   const [output, setOutput] = useState<OutputSummary | null>(null)
   const [busy, setBusy] = useState(false)
@@ -65,7 +66,10 @@ export function ExportDialog() {
             <Segmented<ExportFormat>
               className="flex-1"
               value={format}
-              onChange={setFormat}
+              onChange={(f) => {
+                setFormat(f)
+                saveSettings({ exportFormat: f })
+              }}
               options={[
                 { value: 'png-indexed', label: 'PNG indexed', hint: 'Palette-based PNG (1/2/4/8-bit), like game textures.' },
                 { value: 'png-rgba', label: 'PNG RGBA', hint: 'Full-color PNG.' }

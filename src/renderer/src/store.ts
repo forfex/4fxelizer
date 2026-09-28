@@ -130,7 +130,7 @@ export const useApp = create<AppState>()((set, get) => ({
   image: null,
   view: { zoom: 1, x: 0, y: 0 },
   canvasSize: { width: 0, height: 0 },
-  grid: true,
+  grid: false,
   split: true,
   splitPos: 0.5,
   cursor: null,

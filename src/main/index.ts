@@ -5,6 +5,7 @@ import { IPC, type FileFilter, type MainGpuInfo, type PresetEntry, type Renderer
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
+import { getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
 const gpuFlags = applyGpuFlags()
@@ -88,6 +89,11 @@ function registerIpc(): void {
     if (error) throw new Error(error)
   })
 
+  ipcMain.on(IPC.settingsLoad, (event) => {
+    event.returnValue = getSettings()
+  })
+  ipcMain.on(IPC.settingsSave, (_event, patch: unknown) => updateSettings(patch))
+
   ipcMain.handle(IPC.gpuInfo, getGpuInfo)
 
   ipcMain.on(IPC.gpuReport, async (_event, renderer: RendererGpuReport) => {
@@ -113,12 +119,16 @@ function loadRenderer(win: BrowserWindow): void {
   }
 }
 
+const MIN_WINDOW = { width: 900, height: 600 }
+
 function createWindow(): void {
+  const saved = gpuReportPath ? { maximized: false } : savedWindowBounds(MIN_WINDOW)
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 900,
-    minHeight: 600,
+    ...saved.bounds,
+    minWidth: MIN_WINDOW.width,
+    minHeight: MIN_WINDOW.height,
     show: false,
     title: '4FXELIZER',
     backgroundColor: '#1d1c1a',
@@ -130,7 +140,11 @@ function createWindow(): void {
   })
 
   if (!gpuReportPath) {
-    win.once('ready-to-show', () => win.show())
+    win.once('ready-to-show', () => {
+      if (saved.maximized) win.maximize()
+      win.show()
+    })
+    trackWindow(win)
     Menu.setApplicationMenu(buildMenu(win, isDev))
   }
 

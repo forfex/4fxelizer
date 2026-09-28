@@ -3,6 +3,9 @@ import { IPC, type FxApi, type MenuCommand } from '@shared/api'
 
 const api: FxApi = {
   platform: process.platform,
+  // Synchronous so the first render already uses the saved settings (the file is tiny).
+  settings: ipcRenderer.sendSync(IPC.settingsLoad),
+  saveSettings: (patch) => ipcRenderer.send(IPC.settingsSave, patch),
   openImage: () => ipcRenderer.invoke(IPC.openImage),
   openFile: (filters) => ipcRenderer.invoke(IPC.openFile, filters),
   saveFile: (defaultName, bytes, filters) => ipcRenderer.invoke(IPC.saveFile, defaultName, bytes, filters),
