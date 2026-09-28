@@ -10,7 +10,10 @@ Load a texture (drag and drop, or **File › Open**), then shape it with a reord
 - **Downscale**: nearest, bilinear, bicubic, box, Lanczos, dominant color, median, edge-preserving,
   contrast-aware; longest side / exact size / scale, optional power-of-two.
 - **Quantize**: snap to a palette (perceptual OKLab or RGB matching) or to N levels per channel (32 = PSX 15-bit).
-- **Dither**: Bayer 2×2 to 16×16 or blue noise; to palette, to levels, or pattern only.
+- **Dither**: ordered (Bayer 2×2–16×16, blue noise, white noise, IGN, clustered dots, halftone, lines) or
+  error diffusion (Floyd–Steinberg, Atkinson, Jarvis–Judice–Ninke, Stucki, Burkes, Sierra ×3); to palette,
+  to levels, or pattern only. Palette mixing: offset, two nearest or Knoll. Saturation, and a mask
+  (edges, flats, shadows, midtones, highlights, saturated, grays) with strength, gamma and a mask view.
 
 Every stage has on/off, opacity and a blend mode; click a stage to preview the image at that point.
 Quantize and Dither take their colors from a **palette** or a **generated** palette (2–8192 colors, built
