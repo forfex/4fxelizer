@@ -9,8 +9,8 @@ Load a texture (drag and drop, or **File › Open**), then shape it with a reord
 - **Adjust**: brightness, contrast, gamma, saturation, hue, levels, sharpen.
 - **Downscale**: nearest, bilinear, bicubic, box, Lanczos, dominant color, median, edge-preserving,
   contrast-aware; longest side / exact size / scale, optional power-of-two.
-- **Upscale**: enlarge ×2–×16 or back to the original size with the N64 3-point filter, bilinear, bicubic
-  or nearest (optional edge wrap for tiling textures). Downscale → Dither → Upscale gives the N64 blur.
+- **Upscale**: enlarge ×2–×16 or back to the original size with the N64 3-point filter, bilinear, bicubic,
+  sharp bilinear, Lanczos, Scale2x/Scale3x (EPX, pixel art) or nearest (optional edge wrap for tiling textures). Downscale → Dither → Upscale gives the N64 blur.
 - **Quantize**: snap to a palette (perceptual OKLab or RGB matching) or to N levels per channel (32 = PSX 15-bit).
 - **Dither**: ordered (Bayer 2×2–16×16, blue noise, white noise, IGN, clustered dots, halftone, lines, N64 magic square) or
   error diffusion (Floyd–Steinberg, Atkinson, Jarvis–Judice–Ninke, Stucki, Burkes, Sierra ×3); to palette,
@@ -24,6 +24,7 @@ automatically from the stage's input). Palettes are shared resources: generate t
 `.hex/.gpl/.pal/.act/.ase`, edit and lock colors.
 **Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
 PSX 15-bit, N64, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
+Grid, split view, the export format and the window size and position are remembered between sessions.
 **File › Export** writes PNG (RGBA) or indexed PNG (1/2/4/8-bit, palette order kept, transparency at index 0).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
 
