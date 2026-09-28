@@ -122,7 +122,9 @@ describe('encodeTga', () => {
     const bytes = encodeIndexedTga(indexed)
     expect(bytes[1]).toBe(1) // has a color map
     expect(bytes[7]).toBe(32) // translucent entry → 32-bit map
-    expect([...bytes.subarray(bytes.length - 4)]).toEqual([...indexed.indices])
+    expect(bytes[17]).toBe(0) // bottom-left origin, no alpha bits on the 8-bit indices
+    // Rows are stored bottom-up.
+    expect([...bytes.subarray(bytes.length - 4)]).toEqual([...indexed.indices.subarray(2), ...indexed.indices.subarray(0, 2)])
     expect(decodeTga(bytes)).toEqual(img)
   })
 

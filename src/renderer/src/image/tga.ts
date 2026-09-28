@@ -1,7 +1,7 @@
 // TGA decoder and encoder. Browsers can't decode TGA, but it's everywhere in game texture pipelines.
 // Decodes color-mapped (1/9), truecolor (2/10) and grayscale (3/11), raw or RLE,
 // 8/15/16/24/32-bit pixels, and both origins. Encodes uncompressed truecolor and color-mapped,
-// top-left origin (the most widely readable variants).
+// bottom-left origin (the TGA default, so even readers that ignore the origin bit get it right).
 
 import type { IndexedImage, RgbaImage } from './png'
 
@@ -140,7 +140,7 @@ function tgaHeader(fields: {
   view.setUint16(12, fields.width, true)
   view.setUint16(14, fields.height, true)
   out[16] = fields.depth
-  out[17] = 0x20 | fields.alphaBits // top-left origin
+  out[17] = fields.alphaBits // bottom-left origin: rows are stored bottom-up
   return out
 }
 
@@ -157,7 +157,8 @@ export function encodeTga(image: RgbaImage): Uint8Array {
   const bpp = opaque ? 3 : 4
   const out = new Uint8Array(18 + width * height * bpp)
   out.set(tgaHeader({ colorMapType: 0, imageType: 2, width, height, depth: bpp * 8, alphaBits: opaque ? 0 : 8 }))
-  for (let i = 0, o = 18; i < width * height; i++, o += bpp) {
+  for (let j = 0, o = 18; j < width * height; j++, o += bpp) {
+    const i = (height - 1 - Math.floor(j / width)) * width + (j % width)
     out[o] = data[i * 4 + 2]!
     out[o + 1] = data[i * 4 + 1]!
     out[o + 2] = data[i * 4]!
@@ -182,9 +183,11 @@ export function encodeIndexedTga(image: IndexedImage): Uint8Array {
     width,
     height,
     depth: 8,
-    alphaBits: opaque ? 0 : 8
+    // Attribute bits count per pixel; with 8-bit indices the alpha lives in the color map instead.
+    alphaBits: 0
   }))
   palette.forEach(([r, g, b, a], i) => out.set(opaque ? [b, g, r] : [b, g, r, a], 18 + i * entry))
-  out.set(indices, 18 + palette.length * entry)
+  const start = 18 + palette.length * entry
+  for (let y = 0; y < height; y++) out.set(indices.subarray(y * width, (y + 1) * width), start + (height - 1 - y) * width)
   return out
 }
