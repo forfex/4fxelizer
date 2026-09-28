@@ -22,7 +22,7 @@ import { useApp } from '@/store'
 import { Button } from './ui/button'
 import { Checkbox, Field, ParamSlider } from './ui/controls'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
-import { GroupBox, Led } from './ui/retro'
+import { GroupBox, Led, PanelBody } from './ui/retro'
 import { Select } from './ui/select'
 
 export function PalettePanel() {
@@ -31,7 +31,7 @@ export function PalettePanel() {
   const palette = palettes.find((p) => p.id === selectedId) ?? palettes[0]
 
   return (
-    <aside className="bevel-raised flex w-72 shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-panel p-3">
+    <PanelBody>
       <GroupBox title="Palettes">
         <div className="flex gap-1">
           <Select
@@ -46,9 +46,14 @@ export function PalettePanel() {
         {palette && <NameField key={palette.id} palette={palette} />}
       </GroupBox>
       {palette && <PaletteEditor key={palette.id} palette={palette} />}
-      {palette && <GeneratorBox palette={palette} />}
-    </aside>
+    </PanelBody>
   )
+}
+
+/** Generator settings of the palette shown in the palette panel. */
+export function GeneratePanel() {
+  const palette = useApp((s) => s.palettes.find((p) => p.id === s.selectedPaletteId) ?? s.palettes[0])
+  return <PanelBody>{palette ? <GeneratorBox palette={palette} /> : <p className="text-dim">No palette selected.</p>}</PanelBody>
 }
 
 function PaletteMenu({ palette }: { palette: Palette | undefined }) {

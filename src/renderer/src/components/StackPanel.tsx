@@ -8,7 +8,7 @@ import { BlendRow, PaletteSelect, StageEditor } from './stages/editors'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/controls'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './ui/menu'
-import { GroupBox, Led, LedToggle } from './ui/retro'
+import { GroupBox, Led, LedToggle, PanelBody } from './ui/retro'
 
 export function StackPanel() {
   const image = useApp((s) => s.image)
@@ -21,7 +21,7 @@ export function StackPanel() {
   const finalSize = stages.length ? info.get(stages[stages.length - 1]!.uid)?.output : image
 
   return (
-    <aside className="bevel-raised flex w-80 shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-panel p-3">
+    <PanelBody>
       <GroupBox title="Source">
         {image ? (
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
@@ -92,7 +92,7 @@ export function StackPanel() {
           )}
         </div>
       </GroupBox>
-    </aside>
+    </PanelBody>
   )
 }
 

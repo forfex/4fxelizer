@@ -3,6 +3,7 @@ import { useApp } from '@/store'
 import { PresetsMenu } from './Presets'
 import { Button } from './ui/button'
 import { Led, Lcd } from './ui/retro'
+import { WorkspaceMenu } from './Workspace'
 
 const mod = window.fx.platform === 'darwin' ? '⌘' : 'Ctrl+'
 
@@ -66,6 +67,8 @@ export function Toolbar() {
       </Button>
 
       <div className="flex-1" />
+      <WorkspaceMenu />
+      <Separator />
       <Button variant="ghost" size="sm" onClick={() => setDiagnosticsOpen(true)} title="GPU diagnostics">
         <Led state={gpu.status === 'ready' ? 'on' : gpu.status === 'error' ? 'error' : 'warn'} />
         <span className="max-w-64 truncate text-small text-dim">

@@ -6,12 +6,10 @@ import { startPaletteController } from '@/palette/controller'
 import { useApp } from '@/store'
 import { ExportDialog } from './components/ExportDialog'
 import { GpuDiagnostics } from './components/GpuDiagnostics'
-import { PalettePanel } from './components/PalettePanel'
 import { PresetsDialog } from './components/Presets'
-import { StackPanel } from './components/StackPanel'
 import { StatusBar } from './components/StatusBar'
 import { Toolbar } from './components/Toolbar'
-import { Viewer } from './components/Viewer'
+import { DockArea } from './components/Workspace'
 
 export function App() {
   const [dragging, setDragging] = useState(false)
@@ -73,12 +71,9 @@ export function App() {
       onDrop={onDrop}
     >
       <Toolbar />
-      <div className="flex min-h-0 flex-1">
-        <StackPanel />
-        <main className="flex min-w-0 flex-1 p-1.5">
-          <Viewer />
-        </main>
-        <PalettePanel />
+      {/* `isolate` keeps dockview's high z-indexes (floating panels) below menus and dialogs. */}
+      <div className="isolate flex min-h-0 flex-1 flex-col">
+        <DockArea />
       </div>
       <StatusBar />
       <GpuDiagnostics />

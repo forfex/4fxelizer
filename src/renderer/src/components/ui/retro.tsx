@@ -21,6 +21,16 @@ export function GroupBox({ title, className, children, ...props }: ComponentProp
   )
 }
 
+/** Scrollable content of a dockable panel (fills the panel, scrolls vertically). */
+export function PanelBody({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      className={cn('flex h-full min-h-0 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-panel p-3', className)}
+      {...props}
+    />
+  )
+}
+
 /** Monospace value readout in an inset LCD box. */
 export function Lcd({ className, ...props }: ComponentProps<'output'>) {
   return (
