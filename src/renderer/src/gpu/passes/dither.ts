@@ -1,3 +1,4 @@
+import type { PaletteParams } from '@/stack/doc'
 import { definePass, packStruct } from '../pass'
 import type { ColorMetric } from './quantize'
 
@@ -19,10 +20,9 @@ export const DITHER_MODES = [
 
 export type DitherMode = (typeof DITHER_MODES)[number]['id']
 
-export interface DitherParams {
+export interface DitherParams extends PaletteParams {
   pattern: DitherPattern
   mode: DitherMode
-  paletteId: string | null
   metric: ColorMetric
   levels: number
   /** 0 = no dithering, 1 = full. */
@@ -39,6 +39,8 @@ export const DEFAULT_DITHER: DitherParams = {
   pattern: 'bayer4',
   mode: 'palette',
   paletteId: null,
+  autoColors: 16,
+  projectPaletteId: null,
   metric: 'oklab',
   levels: 32,
   strength: 0.5,

@@ -1,11 +1,11 @@
+import type { PaletteParams } from '@/stack/doc'
 import { definePass, packStruct } from '../pass'
 
 export type ColorMetric = 'oklab' | 'rgb'
 
-export interface QuantizeParams {
+export interface QuantizeParams extends PaletteParams {
   /** palette: snap to the nearest palette color; levels: N evenly spaced levels per channel. */
   mode: 'palette' | 'levels'
-  paletteId: string | null
   /** Levels per channel (32 = 5-bit, PSX 15-bit color). */
   levels: number
   metric: ColorMetric
@@ -17,6 +17,8 @@ export interface QuantizeParams {
 export const DEFAULT_QUANTIZE: QuantizeParams = {
   mode: 'palette',
   paletteId: null,
+  autoColors: 16,
+  projectPaletteId: null,
   levels: 32,
   metric: 'oklab',
   alpha: 'keep',

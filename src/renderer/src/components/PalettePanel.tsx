@@ -81,9 +81,9 @@ function PaletteMenu({ palette }: { palette: Palette | undefined }) {
         <MenuLabel>This palette</MenuLabel>
         <MenuItem
           disabled={!palette}
-          onSelect={() => palette && addPalette({ ...structuredClone(palette), name: `${palette.name} copy` })}
+          onSelect={() => palette && addPalette(projectCopy(palette))}
         >
-          Duplicate
+          Duplicate{palette?.ownerUid ? ' as project palette' : ''}
         </MenuItem>
         <MenuSub>
           <MenuSubTrigger disabled={!palette?.colors.length}>Export as</MenuSubTrigger>
@@ -96,12 +96,22 @@ function PaletteMenu({ palette }: { palette: Palette | undefined }) {
             </MenuItem>
           </MenuSubContent>
         </MenuSub>
-        <MenuItem disabled={!palette} onSelect={() => palette && removePalette(palette.id)}>
+        <MenuItem
+          disabled={!palette || !!palette.ownerUid}
+          title={palette?.ownerUid ? 'Generated for a stage: switch that stage to "Palette" to remove it.' : undefined}
+          onSelect={() => palette && removePalette(palette.id)}
+        >
           Delete
         </MenuItem>
       </MenuContent>
     </Menu>
   )
+}
+
+/** A copy that belongs to the project: detached from any stage and no longer regenerating. */
+function projectCopy(palette: Palette): Omit<Palette, 'id'> {
+  const { id: _id, ownerUid: _owner, ...rest } = structuredClone(palette)
+  return { ...rest, name: `${palette.name} copy`, generator: rest.generator && { ...rest.generator, auto: false } }
 }
 
 function NameField({ palette }: { palette: Palette }) {
@@ -373,21 +383,28 @@ function GeneratorBox({ palette }: { palette: Palette }) {
     useApp.getState().updatePalette(palette.id, { generator: { ...gen, ...patch } }, { coalesce: `gen:${palette.id}:${Object.keys(patch)}` })
   const fromValue = gen.from.kind === 'source' ? 'source' : gen.from.uid
   const lockedCount = palette.colors.filter((c) => c.locked).length
+  const ownerIndex = palette.ownerUid ? stages.findIndex((s) => s.uid === palette.ownerUid) : -1
 
   return (
     <GroupBox title="Generate">
       <div className="flex flex-col gap-1.5">
-        <Field label="From" hint="Which image the colors come from.">
-          <Select
-            className="flex-1"
-            value={fromValue}
-            onValueChange={(v) => set({ from: v === 'source' ? { kind: 'source' } : { kind: 'stage', uid: v } })}
-            options={[
-              { value: 'source', label: 'Source image' },
-              ...stages.map((s, i) => ({ value: s.uid, label: `Input of ${i + 1}. ${stageLabel(s.passId)}` }))
-            ]}
-          />
-        </Field>
+        {ownerIndex >= 0 ? (
+          <p className="text-small text-dim">
+            Generated automatically from the input of stage {ownerIndex + 1} ({stageLabel(stages[ownerIndex]!.passId)}).
+          </p>
+        ) : (
+          <Field label="From" hint="Which image the colors come from.">
+            <Select
+              className="flex-1"
+              value={fromValue}
+              onValueChange={(v) => set({ from: v === 'source' ? { kind: 'source' } : { kind: 'stage', uid: v } })}
+              options={[
+                { value: 'source', label: 'Source image' },
+                ...stages.map((s, i) => ({ value: s.uid, label: `Input of ${i + 1}. ${stageLabel(s.passId)}` }))
+              ]}
+            />
+          </Field>
+        )}
         <Field label="Method">
           <Segmented
             className="flex-1"
@@ -411,7 +428,9 @@ function GeneratorBox({ palette }: { palette: Palette }) {
           </p>
         )}
         <div className="flex items-center gap-2">
-          <Checkbox checked={gen.auto} onCheckedChange={(auto) => set({ auto })} label="Auto" hint="Regenerate whenever the image or these settings change." />
+          {!palette.ownerUid && (
+            <Checkbox checked={gen.auto} onCheckedChange={(auto) => set({ auto })} label="Auto" hint="Regenerate whenever the image or these settings change." />
+          )}
           <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
             {job && (
               <span className="flex min-w-0 items-center gap-1 text-small" title={'message' in job ? job.message : undefined}>

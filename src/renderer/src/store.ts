@@ -1,9 +1,8 @@
 import { create } from 'zustand'
-import { DEFAULT_BLEND } from '@/gpu/pass'
-import { STAGE_TYPES } from '@/gpu/passes'
 import type { StageSpec } from '@/gpu/plan'
-import { DEFAULT_GENERATOR, type Palette } from '@/palette/palette'
-import type { OutputLock } from '@/stack/analyze'
+import type { Palette } from '@/palette/palette'
+import * as docOps from '@/stack/doc'
+import type { Doc } from '@/stack/doc'
 import { centered, fitView, stepZoom, zoomAt, type Size, type View } from '@/viewer/viewport'
 
 export interface ImageInfo {
@@ -24,12 +23,8 @@ export interface Message {
   kind: 'info' | 'error'
 }
 
-/** The undoable part of the state: what a recipe/project file will contain. */
-export interface Doc {
-  stages: StageSpec[]
-  palettes: Palette[]
-  outputLock: OutputLock
-}
+/** The undoable part of the state (stages, palettes, output lock): what a preset file contains. */
+export type { Doc }
 
 export type PaletteJob = { status: 'running' } | { status: 'error'; message: string } | { status: 'blocked'; message: string }
 
@@ -90,6 +85,8 @@ interface AppState extends Doc {
   addStage(passId: string, index?: number): void
   duplicateStage(uid: string): void
   removeStage(uid: string): void
+  /** Palette stages: use a project palette, or their own palette generated from their input. */
+  setStagePaletteSource(uid: string, source: 'palette' | 'generated'): void
   moveStage(uid: string, toIndex: number): void
   updateStage(uid: string, patch: Partial<Omit<StageSpec, 'uid' | 'passId'>>, coalesce?: string): void
   updateParams<P>(uid: string, patch: Partial<P>): void
@@ -99,38 +96,11 @@ interface AppState extends Doc {
   removePalette(id: string): void
 }
 
-export const newId = (prefix: string): string => `${prefix}-${crypto.randomUUID().slice(0, 8)}`
-
-function defaultParams(passId: string, paletteId: string | null): unknown {
-  const type = STAGE_TYPES.find((t) => t.passId === passId)
-  if (!type) throw new Error(`Unknown stage type "${passId}"`)
-  const params = structuredClone(type.defaults) as unknown as Record<string, unknown>
-  if ('paletteId' in params) params.paletteId = paletteId
-  return params
-}
-
-function makeStage(passId: string, paletteId: string | null, patch: Record<string, unknown> = {}): StageSpec {
-  return {
-    uid: newId(passId),
-    passId,
-    params: { ...(defaultParams(passId, paletteId) as object), ...patch },
-    enabled: true,
-    blend: { ...DEFAULT_BLEND }
-  }
-}
-
-function initialDoc(): Doc {
-  const palette: Palette = { id: newId('pal'), name: 'Generated', colors: [], generator: { ...DEFAULT_GENERATOR } }
-  return {
-    stages: [makeStage('adjust', null), makeStage('downscale', null), makeStage('dither', palette.id)],
-    palettes: [palette],
-    outputLock: { enabled: false, paletteId: palette.id }
-  }
-}
+export const newId = docOps.newId
 
 const snapshot = (s: Doc): Doc => ({ stages: s.stages, palettes: s.palettes, outputLock: s.outputLock })
 
-const doc0 = initialDoc()
+const doc0 = docOps.initialDoc()
 
 export const useApp = create<AppState>()((set, get) => ({
   ...doc0,
@@ -230,27 +200,26 @@ export const useApp = create<AppState>()((set, get) => ({
   },
 
   addStage: (passId, index) => {
-    const s = get()
-    const paletteId = s.selectedPaletteId ?? s.palettes[0]?.id ?? null
-    const stage = makeStage(passId, paletteId)
-    s.edit((d) => {
+    const { stage, palettes } = docOps.makeStage(passId)
+    get().edit((d) => {
       const stages = [...d.stages]
       stages.splice(index ?? stages.length, 0, stage)
-      return { stages }
+      return { stages, palettes: [...d.palettes, ...palettes] }
     })
   },
-  duplicateStage: (uid) =>
-    get().edit((d) => {
-      const i = d.stages.findIndex((st) => st.uid === uid)
-      if (i < 0) return {}
-      const copy = { ...structuredClone(d.stages[i]!), uid: newId(d.stages[i]!.passId) }
-      const stages = [...d.stages]
-      stages.splice(i + 1, 0, copy)
-      return { stages }
-    }),
+  duplicateStage: (uid) => get().edit((d) => docOps.duplicateStage(d, uid)),
   removeStage: (uid) => {
     if (get().previewUid === uid) set({ previewUid: null })
-    get().edit((d) => ({ stages: d.stages.filter((st) => st.uid !== uid) }))
+    get().edit((d) => docOps.removeStage(d, uid))
+  },
+  setStagePaletteSource: (uid, source) => {
+    const s = get()
+    s.edit((d) =>
+      source === 'generated' ? docOps.toGeneratedPalette(d, uid) : docOps.toProjectPalette(d, uid, s.selectedPaletteId)
+    )
+    // Show the stage's generated palette in the palette panel.
+    const owned = docOps.ownedPalette(get(), uid)
+    if (source === 'generated' && owned) set({ selectedPaletteId: owned.id })
   },
   moveStage: (uid, toIndex) =>
     get().edit((d) => {

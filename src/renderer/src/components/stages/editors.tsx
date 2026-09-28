@@ -6,10 +6,13 @@ import { DITHER_MODES, DITHER_PATTERNS, type DitherParams } from '@/gpu/passes/d
 import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
 import type { StageSpec } from '@/gpu/plan'
+import { MAX_PALETTE, type GeneratorSettings, type Palette } from '@/palette/palette'
 import type { StageInfo } from '@/stack/analyze'
+import { ownedPalette } from '@/stack/doc'
 import { useApp } from '@/store'
 import { Button } from '../ui/button'
 import { Checkbox, Field, NumberField, ParamSlider, Segmented } from '../ui/controls'
+import { Led } from '../ui/retro'
 import { Select } from '../ui/select'
 
 interface EditorProps<P> {
@@ -24,6 +27,28 @@ const METRICS: { value: ColorMetric; label: string; hint: string }[] = [
   { value: 'rgb', label: 'RGB', hint: 'Plain RGB distance, like most older tools.' }
 ]
 
+/** Most swatches a strip draws; larger palettes are sampled evenly. */
+const STRIP_MAX = 128
+
+/** Thin row of a palette's colors; click to open the palette in the palette panel. */
+export function PaletteStrip({ palette }: { palette: Palette }) {
+  if (!palette.colors.length) return null
+  const step = Math.max(1, palette.colors.length / STRIP_MAX)
+  const shown = Array.from({ length: Math.min(palette.colors.length, STRIP_MAX) }, (_, i) => palette.colors[Math.floor(i * step)]!)
+  return (
+    <button
+      type="button"
+      className="bevel-sunken flex h-2.5 w-full overflow-hidden"
+      title="Edit this palette"
+      onClick={() => useApp.getState().selectPalette(palette.id)}
+    >
+      {shown.map((c, i) => (
+        <span key={i} className="h-full flex-1" style={{ backgroundColor: c.hex }} />
+      ))}
+    </button>
+  )
+}
+
 export function PaletteSelect({ value, onChange }: { value: string | null; onChange(id: string): void }) {
   const palettes = useApp((s) => s.palettes)
   const palette = palettes.find((p) => p.id === value)
@@ -36,19 +61,84 @@ export function PaletteSelect({ value, onChange }: { value: string | null; onCha
         onValueChange={onChange}
         options={palettes.map((p) => ({ value: p.id, label: `${p.name} (${p.colors.length})` }))}
       />
-      {palette && palette.colors.length > 0 && (
-        <button
-          type="button"
-          className="bevel-sunken flex h-2.5 overflow-hidden"
-          title="Edit this palette"
-          onClick={() => useApp.getState().selectPalette(palette.id)}
-        >
-          {palette.colors.map((c, i) => (
-            <span key={i} className="h-full flex-1" style={{ backgroundColor: c.hex }} />
-          ))}
-        </button>
-      )}
+      {palette && <PaletteStrip palette={palette} />}
     </div>
+  )
+}
+
+/**
+ * Where a palette stage gets its colors: a project palette, or its own palette generated from its
+ * input (count and method right here; everything else in the palette panel).
+ */
+function PaletteSource({ stage, paletteId, set }: { stage: StageSpec; paletteId: string | null; set(p: { paletteId: string }): void }) {
+  const owned = useApp((s) => ownedPalette(s, stage.uid))
+  const job = useApp((s) => (owned ? s.paletteJobs[owned.id] : undefined))
+  const generated = !!owned && owned.id === paletteId
+  const gen = owned?.generator
+  const updateGen = (patch: Partial<GeneratorSettings>): void => {
+    if (owned && gen) {
+      useApp.getState().updatePalette(owned.id, { generator: { ...gen, ...patch } }, { coalesce: `gen:${owned.id}:${Object.keys(patch)}` })
+    }
+  }
+  return (
+    <>
+      <Field label="Colors from">
+        <Segmented
+          className="flex-1"
+          value={generated ? 'generated' : 'palette'}
+          onChange={(v) => useApp.getState().setStagePaletteSource(stage.uid, v)}
+          options={[
+            { value: 'palette', label: 'Palette', hint: 'Use a project palette (built-in, imported or edited).' },
+            { value: 'generated', label: 'Generated', hint: "Generate a palette from this stage's input automatically." }
+          ]}
+        />
+      </Field>
+      {generated && owned && gen ? (
+        <>
+          <ParamSlider
+            label="Colors"
+            hint="Number of colors to generate from this stage's input (2–8192)."
+            scale="log"
+            value={gen.count}
+            min={2}
+            max={MAX_PALETTE}
+            onChange={(count) => updateGen({ count })}
+          />
+          <Field label="Method">
+            <Segmented
+              className="flex-1"
+              value={gen.method}
+              onChange={(method) => updateGen({ method })}
+              options={[
+                { value: 'median-cut', label: 'Median cut', hint: 'Fast, splits the color space evenly.' },
+                { value: 'kmeans', label: 'K-means', hint: 'Refines median cut; closer to the image.' }
+              ]}
+            />
+          </Field>
+          <Field label="" hint="More settings (weights, locked colors) in the palette panel.">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <PaletteStrip palette={owned} />
+              <span className="flex items-center gap-1.5 text-small text-dim">
+                {job ? (
+                  <>
+                    <Led state={job.status === 'running' ? 'warn' : 'error'} />
+                    <span className="truncate" title={'message' in job ? job.message : undefined}>
+                      {job.status === 'running' ? 'Generating…' : job.message}
+                    </span>
+                  </>
+                ) : (
+                  `${owned.colors.length} colors · click the strip for more settings`
+                )}
+              </span>
+            </div>
+          </Field>
+        </>
+      ) : (
+        <Field label="Palette">
+          <PaletteSelect value={paletteId} onChange={(id) => set({ paletteId: id })} />
+        </Field>
+      )}
+    </>
   )
 }
 
@@ -164,7 +254,7 @@ function LevelsSlider({ value, onChange }: { value: number; onChange(v: number):
   )
 }
 
-function QuantizeEditor({ params: p, set }: EditorProps<QuantizeParams>) {
+function QuantizeEditor({ stage, params: p, set }: EditorProps<QuantizeParams>) {
   return (
     <>
       <Field label="Mode">
@@ -180,9 +270,7 @@ function QuantizeEditor({ params: p, set }: EditorProps<QuantizeParams>) {
       </Field>
       {p.mode === 'palette' ? (
         <>
-          <Field label="Palette">
-            <PaletteSelect value={p.paletteId} onChange={(paletteId) => set({ paletteId })} />
-          </Field>
+          <PaletteSource stage={stage} paletteId={p.paletteId} set={set} />
           <Field label="Matching">
             <Segmented className="flex-1" value={p.metric} onChange={(metric) => set({ metric })} options={METRICS} />
           </Field>
@@ -208,7 +296,7 @@ function QuantizeEditor({ params: p, set }: EditorProps<QuantizeParams>) {
   )
 }
 
-function DitherEditor({ params: p, set }: EditorProps<DitherParams>) {
+function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
   return (
     <>
       <Field label="Mode" hint={DITHER_MODES.find((m) => m.id === p.mode)?.hint}>
@@ -229,9 +317,7 @@ function DitherEditor({ params: p, set }: EditorProps<DitherParams>) {
       </Field>
       {p.mode === 'palette' && (
         <>
-          <Field label="Palette">
-            <PaletteSelect value={p.paletteId} onChange={(paletteId) => set({ paletteId })} />
-          </Field>
+          <PaletteSource stage={stage} paletteId={p.paletteId} set={set} />
           <Field label="Matching">
             <Segmented className="flex-1" value={p.metric} onChange={(metric) => set({ metric })} options={METRICS} />
           </Field>

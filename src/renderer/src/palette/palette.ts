@@ -31,6 +31,8 @@ export interface Palette {
   name: string
   colors: PaletteColor[]
   generator?: GeneratorSettings
+  /** Set when a stage owns this palette ("Generated" in Quantize/Dither): it lives and dies with the stage. */
+  ownerUid?: string
 }
 
 /** Largest palette a stage can use (dithering/quantizing works with thousands of colors). */
