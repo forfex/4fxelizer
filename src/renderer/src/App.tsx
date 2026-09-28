@@ -8,6 +8,7 @@ import { ExportDialog } from './components/ExportDialog'
 import { GpuDiagnostics } from './components/GpuDiagnostics'
 import { PresetsDialog } from './components/Presets'
 import { StatusBar } from './components/StatusBar'
+import { TitleBar } from './components/TitleBar'
 import { Toolbar } from './components/Toolbar'
 import { DockArea } from './components/Workspace'
 
@@ -70,6 +71,7 @@ export function App() {
       }}
       onDrop={onDrop}
     >
+      <TitleBar />
       <Toolbar />
       {/* `isolate` keeps dockview's high z-indexes (floating panels) below menus and dialogs. */}
       <div className="isolate flex min-h-0 flex-1 flex-col">

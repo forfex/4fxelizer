@@ -24,7 +24,6 @@ export function Toolbar() {
 
   return (
     <header className="bevel-raised flex h-10 shrink-0 items-center gap-1 bg-panel px-2">
-      <span className="mr-2 font-mono text-ui font-bold tracking-widest text-accent">4FXELIZER</span>
       <Button onClick={openImage} disabled={gpu.status !== 'ready'} title={`Open image (${mod}O)`}>
         Open…
       </Button>

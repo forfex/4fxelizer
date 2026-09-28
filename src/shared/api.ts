@@ -1,5 +1,7 @@
 // Contract between the preload bridge (window.fx) and the renderer.
 
+import type { MenuRole } from './menu'
+
 export interface FileFilter {
   name: string
   extensions: string[]
@@ -142,6 +144,10 @@ export interface FxApi {
   getGpuInfo(): Promise<MainGpuInfo>
   submitGpuReport(report: RendererGpuReport): void
   onMenuCommand(listener: (command: MenuCommand) => void): () => void
+  /** Clipboard/window actions of the in-app menu bar, performed by main. */
+  runMenuRole(role: MenuRole): void
+  /** Restyles the native window buttons drawn over the custom title bar (Windows/Linux). */
+  setTitleBarOverlay(overlay: TitleBarOverlay): void
 }
 
 export const IPC = {
@@ -157,5 +163,14 @@ export const IPC = {
   gpuReport: 'gpu:report',
   menuCommand: 'menu:command',
   settingsLoad: 'settings:load',
-  settingsSave: 'settings:save'
+  settingsSave: 'settings:save',
+  menuRole: 'menu:role',
+  titleBarOverlay: 'window:title-bar-overlay'
 } as const
+
+/** Colors (CSS color strings) and height (CSS px) of the native window buttons over the custom title bar. */
+export interface TitleBarOverlay {
+  color: string
+  symbolColor: string
+  height: number
+}

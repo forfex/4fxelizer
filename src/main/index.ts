@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
-import { IPC, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport } from '@shared/api'
+import { IPC, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
+import type { MenuRole } from '@shared/menu'
 import { applyGpuFlags } from './gpuFlags'
-import { buildMenu } from './menu'
+import { buildMenu, runMenuRole } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
 import { getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
 
@@ -96,6 +97,21 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.gpuInfo, getGpuInfo)
 
+  ipcMain.on(IPC.menuRole, (event, role: MenuRole) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && MENU_ROLES.includes(role)) runMenuRole(win, role)
+  })
+  ipcMain.on(IPC.titleBarOverlay, (event, overlay: TitleBarOverlay) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    // Only Windows and Linux draw native buttons over the page (macOS has its traffic lights).
+    if (!win || process.platform === 'darwin') return
+    try {
+      win.setTitleBarOverlay({ color: overlay.color, symbolColor: overlay.symbolColor, height: Math.round(overlay.height) })
+    } catch (e) {
+      console.warn('Could not restyle the title bar buttons:', e)
+    }
+  })
+
   ipcMain.on(IPC.gpuReport, async (_event, renderer: RendererGpuReport) => {
     if (!gpuReportPath) return
     const report = { generatedAt: new Date().toISOString(), main: await getGpuInfo(), renderer }
@@ -120,6 +136,16 @@ function loadRenderer(win: BrowserWindow): void {
 }
 
 const MIN_WINDOW = { width: 900, height: 600 }
+const MENU_ROLES: MenuRole[] = ['cut', 'copy', 'paste', 'selectAll', 'togglefullscreen', 'quit', 'close', 'reload', 'toggleDevTools']
+
+/**
+ * The app draws its own title bar (menus included). Windows and Linux keep the native window
+ * buttons, drawn over it (the renderer sets their colors from the theme); macOS keeps its traffic lights.
+ */
+function titleBarOptions(): Electron.BrowserWindowConstructorOptions {
+  if (process.platform === 'darwin') return { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 10 } }
+  return { titleBarStyle: 'hidden', titleBarOverlay: { color: '#2b2a27', symbolColor: '#e4e0d6', height: 32 } }
+}
 
 function createWindow(): void {
   const saved = gpuReportPath ? { maximized: false } : savedWindowBounds(MIN_WINDOW)
@@ -133,6 +159,7 @@ function createWindow(): void {
     title: '4FXELIZER',
     icon: join(app.getAppPath(), 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     backgroundColor: '#1d1c1a',
+    ...(gpuReportPath ? {} : titleBarOptions()),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       sandbox: true,

@@ -31,6 +31,12 @@
   --fx-lcd-bg: #121810;
   --fx-lcd-text: #9fdc7c;
 
+  /* Title bar (the native window buttons on Windows/Linux are sized to match) */
+  --fx-titlebar-height: 32px;
+  --fx-titlebar-bg: var(--fx-bg);
+  --fx-titlebar-text: var(--fx-text-dim);
+  --fx-titlebar-symbol: var(--fx-text);
+
   /* Scrollbars: sunken track, raised bevel thumb */
   --fx-scrollbar-size: 12px;
   --fx-scrollbar-track: var(--fx-well);
