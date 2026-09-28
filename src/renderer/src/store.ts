@@ -62,6 +62,8 @@ interface AppState extends Doc {
   presetsVersion: number
   /** Stage whose output the viewer shows (null = final output). */
   previewUid: string | null
+  /** Stage whose dither mask the viewer shows (null = none). */
+  maskUid: string | null
   selectedPaletteId: string | null
   /** Auto/manual palette generation status by palette id (absent = idle). */
   paletteJobs: Record<string, PaletteJob>
@@ -90,6 +92,7 @@ interface AppState extends Doc {
   /** Replaces the whole document (e.g. loading a preset) as one undo step. */
   loadDoc(doc: Doc): void
   setPreview(uid: string | null): void
+  setMaskView(uid: string | null): void
   selectPalette(id: string | null): void
   setPaletteJob(id: string, job: PaletteJob | null): void
 
@@ -138,6 +141,7 @@ export const useApp = create<AppState>()((set, get) => ({
   presetName: null,
   presetsVersion: 0,
   previewUid: null,
+  maskUid: null,
   selectedPaletteId: doc0.palettes[0]!.id,
   paletteJobs: {},
   past: [],
@@ -195,9 +199,10 @@ export const useApp = create<AppState>()((set, get) => ({
   loadDoc: (doc) => {
     get().edit(() => doc)
     const firstStagePalette = doc.palettes.find((p) => p.ownerUid) ?? doc.palettes[0]
-    set({ previewUid: null, selectedPaletteId: firstStagePalette?.id ?? null })
+    set({ previewUid: null, maskUid: null, selectedPaletteId: firstStagePalette?.id ?? null })
   },
-  setPreview: (previewUid) => set({ previewUid }),
+  setPreview: (previewUid) => set({ previewUid, maskUid: null }),
+  setMaskView: (maskUid) => set({ maskUid }),
   selectPalette: (selectedPaletteId) => set({ selectedPaletteId }),
   setPaletteJob: (id, job) => {
     const jobs = { ...get().paletteJobs }
@@ -246,6 +251,7 @@ export const useApp = create<AppState>()((set, get) => ({
   duplicateStage: (uid) => get().edit((d) => docOps.duplicateStage(d, uid)),
   removeStage: (uid) => {
     if (get().previewUid === uid) set({ previewUid: null })
+    if (get().maskUid === uid) set({ maskUid: null })
     get().edit((d) => docOps.removeStage(d, uid))
   },
   setStagePaletteSource: (uid, source) => {

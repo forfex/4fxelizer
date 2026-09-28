@@ -21,6 +21,8 @@ export function Viewer() {
   const splitX = useApp((s) => (s.split && s.image ? splitScreenX(s.view, s.image, s.splitPos) : null))
   const canvasWidth = useApp((s) => s.canvasSize.width)
   const previewLabel = useApp((s) => {
+    const m = s.stages.findIndex((st) => st.uid === s.maskUid)
+    if (m >= 0) return `Mask of ${m + 1}. ${stageLabel(s.stages[m]!.passId)}`
     const i = s.stages.findIndex((st) => st.uid === s.previewUid)
     return i < 0 ? null : `After ${i + 1}. ${stageLabel(s.stages[i]!.passId)}`
   })
@@ -42,11 +44,17 @@ export function Viewer() {
     // Processing happens inside the frame, so dragging a slider runs the stack at most once per frame.
     const frame = (): void => {
       const s = useApp.getState()
-      const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid]
+      const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid]
       if (s.image && (!processed || inputs.some((v, i) => v !== processed![i]))) {
         processed = inputs
         try {
-          engine.process({ stages: s.stages, palettes: s.palettes, outputLock: s.outputLock, previewUid: s.previewUid })
+          engine.process({
+            stages: s.stages,
+            palettes: s.palettes,
+            outputLock: s.outputLock,
+            previewUid: s.previewUid,
+            maskUid: s.maskUid
+          })
         } catch (e) {
           s.setMessage({ kind: 'error', text: `Processing failed: ${(e as Error).message}` })
         }

@@ -23,6 +23,8 @@ export interface ProcessInput {
   outputLock: OutputLock
   /** Stage whose output to show; null = final output. */
   previewUid: string | null
+  /** Stage whose dither mask to show instead (overrides previewUid); null = none. */
+  maskUid?: string | null
 }
 
 /** The output palette lock as a trailing Quantize stage (reuses the stage cache). */
@@ -41,6 +43,8 @@ export class Engine {
   private source: { key: string; texture: GPUTexture } | null = null
   private output: GPUTexture | null = null
   private shown: GPUTexture | null = null
+  /** Mask view output, kept outside the stage cache so it never affects the real output. */
+  private mask: { texture: GPUTexture; uniforms: GPUBuffer[] } | null = null
   private viewer: ViewerRenderer | null = null
   private sourceVersion = 0
   private lastPlan: ChainPlan | null = null
@@ -91,9 +95,44 @@ export class Engine {
     this.output = output
     this.lastPlan = plan
     const preview = input.previewUid ? plan.stages.find((s) => s.stage.uid === input.previewUid) : undefined
-    this.shown = (preview && this.textureForKey(preview.outputKey)) || output
+    this.shown = this.renderMask(plan, input.maskUid ?? null) ?? (preview && this.textureForKey(preview.outputKey)) ?? output
     this.viewer?.setTextures(this.source.texture, this.shown)
     for (const listener of this.planListeners) listener(plan, this.source.key)
+  }
+
+  /** Runs a stage with `showMask` on its input, into a texture of its own. */
+  private renderMask(plan: ChainPlan, uid: string | null): GPUTexture | null {
+    const old = this.mask
+    this.mask = null
+    const planned = uid ? plan.stages.find((s) => s.stage.uid === uid) : undefined
+    const def = planned && (PASSES.get(planned.stage.passId) as PassDef<unknown> | undefined)
+    const input = planned && this.textureForKey(planned.inputKey)
+    if (planned && def && input) {
+      const params = { ...(planned.stage.params as object), showMask: true }
+      const size = def.outputSize?.(input, params) ?? input
+      const texture = this.gpu.device.createTexture({
+        label: 'mask view',
+        size: [Math.max(1, size.width), Math.max(1, size.height)],
+        format: WORK_FORMAT,
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
+      })
+      const uniforms = this.runner.createUniforms(def, params, DEFAULT_BLEND, 0)
+      const encoder = this.gpu.device.createCommandEncoder({ label: 'mask view' })
+      this.runner.encode(encoder, def as PassDef<never>, input, texture, uniforms, {
+        palette: this.resources.emptyPalette,
+        paletteCount: 0,
+        pattern: this.resources.pattern
+      })
+      this.gpu.device.queue.submit([encoder.finish()])
+      this.mask = { texture, uniforms }
+    }
+    // The viewer must drop the old texture before it's destroyed; process() rebinds right after.
+    if (old) {
+      this.viewer?.setTextures(this.source?.texture ?? null, this.mask?.texture ?? this.output)
+      old.texture.destroy()
+      for (const u of old.uniforms) u.destroy()
+    }
+    return this.mask?.texture ?? null
   }
 
   /** Called after every process() with the plan that ran. */
