@@ -3,6 +3,7 @@ import { describeOutput, exportImage, type ExportFormat, type OutputSummary } fr
 import type { DitherParams } from '@/gpu/passes/dither'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
 import { indexedBitDepth } from '@/image/png'
+import { MAX_INDEXED } from '@/palette/palette'
 import { savedSettings, saveSettings } from '@/settings'
 import { snapsColors } from '@/stack/analyze'
 import { useApp } from '@/store'
@@ -13,13 +14,17 @@ import { Select } from './ui/select'
 
 const IMAGE_COLORS = '__image'
 
-/** Palette the result was most likely snapped to: the output lock's, else the last snapping stage's. */
+/**
+ * Palette the result was most likely snapped to: the output lock's, else the last snapping stage's.
+ * Only palettes that fit an indexed PNG.
+ */
 function likelyPalette(): string | null {
-  const { outputLock, stages } = useApp.getState()
-  if (outputLock.enabled && outputLock.paletteId) return outputLock.paletteId
+  const { outputLock, stages, palettes } = useApp.getState()
   const last = [...stages].reverse().find(snapsColors)
   const params = last?.params as QuantizeParams | DitherParams | undefined
-  return params && params.mode === 'palette' ? params.paletteId : null
+  const id = outputLock.enabled && outputLock.paletteId ? outputLock.paletteId : params?.mode === 'palette' ? params.paletteId : null
+  const palette = palettes.find((p) => p.id === id)
+  return palette && palette.colors.length <= MAX_INDEXED ? palette.id : null
 }
 
 export function ExportDialog() {
@@ -39,9 +44,9 @@ export function ExportDialog() {
   }, [open])
 
   const palette = palettes.find((p) => p.id === paletteChoice)
-  const tooManyColors = format === 'png-indexed' && !palette && output !== null && output.colors > 256
   // Fully transparent pixels share one extra entry at index 0 when exporting against a palette.
   const entries = output && (palette ? palette.colors.length + (output.transparent ? 1 : 0) : output.colors)
+  const tooManyColors = format === 'png-indexed' && entries !== null && entries > MAX_INDEXED
   let summary = ''
   if (format === 'png-rgba') summary = '32-bit RGBA, every color and alpha value kept exactly.'
   else if (entries && entries <= 256) {
@@ -98,7 +103,9 @@ export function ExportDialog() {
           <p className="text-small text-dim">{summary}</p>
           {tooManyColors && (
             <p className="text-small text-led-warn">
-              The result has more than 256 colors. Add a Quantize or Dither stage, or turn on the output palette lock.
+              {palette
+                ? `"${palette.name}" has ${entries} entries; indexed PNG allows 256. Pick a smaller palette or "Colors in the image".`
+                : 'The result has more than 256 colors. Add a Quantize or Dither stage, or turn on the output palette lock.'}
             </p>
           )}
           <div className="flex justify-end gap-2">
