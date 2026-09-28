@@ -51,6 +51,7 @@ export class PassChain {
       key === source.key ? source.texture : this.cache.get(key)!.texture
 
     const encoder = this.device.createCommandEncoder({ label: 'chain' })
+    const scratch: GPUBuffer[] = []
     let ran = 0
     for (const planned of plan.stages) {
       if (!planned.run) continue
@@ -66,15 +67,20 @@ export class PassChain {
       })
       const palette = this.resources.palette(def.resources?.(stage.params).palette)
       const uniforms = this.runner.createUniforms(def, stage.params, stage.blend, palette?.count ?? 0)
+      const buffer = this.runner.createScratch(def, stage.params, texture)
+      if (buffer) scratch.push(buffer)
       this.runner.encode(encoder, def as PassDef<never>, input, texture, uniforms, {
         palette: palette?.buffer ?? this.resources.emptyPalette,
         paletteCount: palette?.count ?? 0,
-        pattern: this.resources.pattern
+        pattern: this.resources.pattern,
+        serial: def.serial?.(stage.params) ?? false,
+        scratch: buffer
       })
       this.cache.set(planned.outputKey, { texture, uniforms })
       ran++
     }
     this.device.queue.submit([encoder.finish()])
+    for (const buffer of scratch) buffer.destroy() // released once the submitted work finishes
 
     // Release outputs no longer reachable from the current stack. WebGPU keeps
     // destroyed resources alive until already-submitted work that uses them finishes.

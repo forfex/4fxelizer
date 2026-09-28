@@ -50,7 +50,13 @@ export interface PassDef<P = unknown> {
    *   fn run(p: vec2u, size: vec2u) -> vec4f   // color for output texel p of an output of `size`
    * and, if the pass has parameters, `struct Params { ... }` matching `pack`.
    * In scope: `src` (texture_2d<f32>), `params` (uniform Params), `linearSampler`, `palette`,
-   * `pattern` (blue noise), and the helpers in wgslLib.ts.
+   * `pattern` (blue noise), `scratch` (read-write storage, see `scratchBytes`) and the helpers in
+   * wgslLib.ts.
+   *
+   * A pass whose pixels depend on each other (error diffusion) can also define
+   *   fn runRows(thread: u32, size: vec2u)      // one workgroup of ROW_THREADS threads
+   * which writes every output texel itself through `emit(p, size, color)`. It runs instead of
+   * `run` when `serial(params)` returns true.
    */
   wgsl: string
   /** Packs params into uniform data laid out like `struct Params` (16-byte aligned). */
@@ -59,6 +65,10 @@ export interface PassDef<P = unknown> {
   outputSize?(input: Size, params: P): Size
   /** Project resources the pass reads. */
   resources?(params: P): PassResources
+  /** True to run `runRows` (a single workgroup) instead of `run` per texel. */
+  serial?(params: P): boolean
+  /** Bytes of zeroed `scratch` storage the serial path needs for an output of `size`. */
+  scratchBytes?(size: Size, params: P): number
 }
 
 export function definePass<P>(def: PassDef<P>): PassDef<P> {
@@ -79,6 +89,8 @@ export function packStruct(...fields: ['f' | 'u' | 'i', number][]): ArrayBuffer 
 }
 
 const WORKGROUP = 8
+/** Threads in the single workgroup of a serial (`runRows`) pass. */
+export const ROW_THREADS = 256
 
 /** Bytes per palette entry: vec4f color + vec4f OKLab. */
 export const PALETTE_ENTRY_BYTES = 32
@@ -97,8 +109,20 @@ struct PaletteEntry { color: vec4f, lab: vec4f }
 @group(0) @binding(4) var<storage, read> palette: array<PaletteEntry>;
 @group(0) @binding(5) var pattern: texture_2d<f32>;
 @group(0) @binding(6) var<uniform> stage: Stage;
+@group(0) @binding(7) var<storage, read_write> scratch: array<vec4f>;
+
+const ROW_THREADS = ${ROW_THREADS}u;
 
 ${WGSL_LIB}
+
+/** Applies the stage blend and writes output texel p (for serial passes). */
+fn emit(p: vec2u, size: vec2u, color: vec4f) {
+  var c = color;
+  if (stage.opacity < 1.0 || stage.blendMode != 0u) {
+    c = blendStage(inputAt(p, size), c);
+  }
+  textureStore(dst, p, c);
+}
 
 ${def.wgsl}
 
@@ -112,14 +136,25 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   }
   textureStore(dst, id.xy, c);
 }
-`
+${/\bfn\s+runRows\b/.test(def.wgsl) ? ROWS_ENTRY : ''}`
 }
+
+const ROWS_ENTRY = /* wgsl */ `
+@compute @workgroup_size(${ROW_THREADS})
+fn mainRows(@builtin(local_invocation_index) thread: u32) {
+  runRows(thread, textureDimensions(dst));
+}
+`
 
 /** GPU inputs bound to every pass besides its source texture. */
 export interface PassBindings {
   palette: GPUBuffer
   paletteCount: number
   pattern: GPUTexture
+  /** Run the pass's serial `runRows` entry (see PassDef.serial). */
+  serial?: boolean
+  /** Zeroed storage for the serial path; defaults to a tiny placeholder. */
+  scratch?: GPUBuffer | null
 }
 
 export class PassRunner {
@@ -127,6 +162,8 @@ export class PassRunner {
   private readonly pipelineLayout: GPUPipelineLayout
   private readonly sampler: GPUSampler
   private readonly pipelines = new Map<string, GPUComputePipeline>()
+  private readonly modules = new Map<string, GPUShaderModule>()
+  private readonly emptyScratch: GPUBuffer
 
   constructor(private readonly device: GPUDevice) {
     const compute = GPUShaderStage.COMPUTE
@@ -139,31 +176,57 @@ export class PassRunner {
         { binding: 3, visibility: compute, sampler: { type: 'filtering' } },
         { binding: 4, visibility: compute, buffer: { type: 'read-only-storage' } },
         { binding: 5, visibility: compute, texture: { sampleType: 'float' } },
-        { binding: 6, visibility: compute, buffer: { type: 'uniform' } }
+        { binding: 6, visibility: compute, buffer: { type: 'uniform' } },
+        { binding: 7, visibility: compute, buffer: { type: 'storage' } }
       ]
     })
+    this.emptyScratch = device.createBuffer({ label: 'empty scratch', size: 16, usage: GPUBufferUsage.STORAGE })
     this.pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [this.layout] })
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
   }
 
-  private pipeline(def: PassDef<never>): GPUComputePipeline {
-    let pipeline = this.pipelines.get(def.id)
-    if (!pipeline) {
-      const module = this.device.createShaderModule({ label: def.id, code: shaderSource(def) })
+  private module(def: PassDef<never>): GPUShaderModule {
+    let module = this.modules.get(def.id)
+    if (!module) {
+      module = this.device.createShaderModule({ label: def.id, code: shaderSource(def) })
       module.getCompilationInfo().then((info) => {
         for (const m of info.messages) {
           const log = m.type === 'error' ? console.error : console.warn
           log(`[wgsl:${def.id}] ${m.lineNum}:${m.linePos} ${m.message}`)
         }
       })
+      this.modules.set(def.id, module)
+    }
+    return module
+  }
+
+  private pipeline(def: PassDef<never>, entryPoint: 'main' | 'mainRows'): GPUComputePipeline {
+    const key = `${def.id}:${entryPoint}`
+    let pipeline = this.pipelines.get(key)
+    if (!pipeline) {
       pipeline = this.device.createComputePipeline({
-        label: def.id,
+        label: key,
         layout: this.pipelineLayout,
-        compute: { module, entryPoint: 'main' }
+        compute: { module: this.module(def), entryPoint }
       })
-      this.pipelines.set(def.id, pipeline)
+      this.pipelines.set(key, pipeline)
     }
     return pipeline
+  }
+
+  /**
+   * Zeroed scratch storage for a serial run of `def` with output `size`, or null when the run
+   * needs none. The caller destroys it after submitting.
+   */
+  createScratch<P>(def: PassDef<P>, params: P, size: Size): GPUBuffer | null {
+    if (!def.serial?.(params)) return null
+    const bytes = def.scratchBytes?.(size, params) ?? 0
+    if (bytes <= 0) return null
+    return this.device.createBuffer({
+      label: `${def.id} scratch`,
+      size: Math.ceil(bytes / 16) * 16,
+      usage: GPUBufferUsage.STORAGE
+    })
   }
 
   private uniform(label: string, data: ArrayBuffer | Float32Array): GPUBuffer {
@@ -206,13 +269,19 @@ export class PassRunner {
         { binding: 3, resource: this.sampler },
         { binding: 4, resource: { buffer: bindings.palette } },
         { binding: 5, resource: bindings.pattern.createView() },
-        { binding: 6, resource: { buffer: uniforms[1]! } }
+        { binding: 6, resource: { buffer: uniforms[1]! } },
+        { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } }
       ]
     })
     const pass = encoder.beginComputePass({ label: def.id })
-    pass.setPipeline(this.pipeline(def))
     pass.setBindGroup(0, bindGroup)
-    pass.dispatchWorkgroups(Math.ceil(output.width / WORKGROUP), Math.ceil(output.height / WORKGROUP))
+    if (bindings.serial) {
+      pass.setPipeline(this.pipeline(def, 'mainRows'))
+      pass.dispatchWorkgroups(1)
+    } else {
+      pass.setPipeline(this.pipeline(def, 'main'))
+      pass.dispatchWorkgroups(Math.ceil(output.width / WORKGROUP), Math.ceil(output.height / WORKGROUP))
+    }
     pass.end()
   }
 }
