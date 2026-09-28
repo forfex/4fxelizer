@@ -36,7 +36,7 @@ Windows setup `.exe`, macOS `.dmg` (Apple Silicon and Intel), Linux `.AppImage` 
 Builds are not code-signed yet: Windows SmartScreen may warn (More info › Run anyway), and on macOS, if the app is
 reported as damaged, run `xattr -cr /Applications/4FXELIZER.app`. A GPU with WebGPU is required.
 
-## What it does (Phase 1)
+## What it does
 
 Load a texture (drag and drop, or **File › Open**), then shape it with a reorderable stack of stages:
 
