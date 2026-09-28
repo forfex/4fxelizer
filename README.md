@@ -36,7 +36,7 @@ Windows setup `.exe`, macOS `.dmg` (Apple Silicon and Intel), Linux `.AppImage` 
 Builds are not code-signed yet: Windows SmartScreen may warn (More info › Run anyway), and on macOS, if the app is
 reported as damaged, run `xattr -cr /Applications/4FXELIZER.app`. A GPU with WebGPU is required.
 
-## What it does (Phase 1)
+## What it does
 
 Load a texture (drag and drop, or **File › Open**), then shape it with a reorderable stack of stages:
 
@@ -54,12 +54,16 @@ Load a texture (drag and drop, or **File › Open**), then shape it with a reord
 Every stage has on/off, opacity and a blend mode; click a stage to preview the image at that point.
 Quantize and Dither take their colors from a **palette** or a **generated** palette (2–8192 colors, built
 automatically from the stage's input). Palettes are shared resources: generate them from the image
-(median cut / k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
-`.hex/.gpl/.pal/.act/.ase`, edit and lock colors.
+(median cut, Wu, octree or k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
+`.hex/.gpl/.pal/.act/.ase`, edit and lock colors, or pick colors from the image with the eyedropper
+(**Pick**, or Alt+click the viewer).
 **Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
 PSX 15-bit, N64, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
-Grid, split view, the export format and the window size and position are remembered between sessions.
-**File › Export** writes PNG (RGBA) or indexed PNG (1/2/4/8-bit, palette order kept, transparency at index 0).
+Panels dock, tab together, float over the viewer and resize, like in Photoshop; the toolbar's workspace menu
+switches between built-in layouts (Essentials, Wide viewer, Palette editing, Floating), saves your own and resets them.
+Grid, split view, the export format, the panel layout and the window size and position are remembered between sessions.
+**File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
+BMP has no transparency).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
 
 ## Development

@@ -20,7 +20,9 @@ const api: FxApi = {
     const handler = (_: unknown, command: MenuCommand): void => listener(command)
     ipcRenderer.on(IPC.menuCommand, handler)
     return () => ipcRenderer.removeListener(IPC.menuCommand, handler)
-  }
+  },
+  runMenuRole: (role) => ipcRenderer.send(IPC.menuRole, role),
+  setTitleBarOverlay: (overlay) => ipcRenderer.send(IPC.titleBarOverlay, overlay)
 }
 
 contextBridge.exposeInMainWorld('fx', api)

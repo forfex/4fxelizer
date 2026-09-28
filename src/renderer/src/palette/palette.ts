@@ -9,7 +9,14 @@ export interface PaletteColor {
   locked?: boolean
 }
 
-export type GenerateMethod = 'median-cut' | 'kmeans'
+export const GENERATE_METHODS = [
+  { id: 'median-cut', label: 'Median cut', hint: 'Fast, splits the color space evenly.' },
+  { id: 'wu', label: 'Wu', hint: 'Fast, splits where it lowers the color error most. Good at small counts.' },
+  { id: 'octree', label: 'Octree', hint: 'Merges similar colors bottom-up. Keeps small, distinct details.' },
+  { id: 'kmeans', label: 'K-means', hint: 'Refines median cut; closest to the image, slower.' }
+] as const
+
+export type GenerateMethod = (typeof GENERATE_METHODS)[number]['id']
 
 export interface GeneratorSettings {
   method: GenerateMethod
@@ -43,7 +50,7 @@ export interface Palette {
 /** Largest palette a stage can use (dithering/quantizing works with thousands of colors). */
 export const MAX_PALETTE = 8192
 
-/** Largest palette an indexed PNG (and .act file) can hold. */
+/** Largest palette an indexed image (and .act file) can hold. */
 export const MAX_INDEXED = 256
 
 export const DEFAULT_GENERATOR: GeneratorSettings = {
@@ -127,6 +134,31 @@ function hashColors(colors: PaletteColor[]): string {
     }
   }
   return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36)
+}
+
+/**
+ * Puts an eyedropper color into a palette: replaces the color at `index`, or else adds it at the
+ * end (an existing identical color is selected instead). `lock` marks it locked, so a generated
+ * palette keeps it when it regenerates. Returns the new colors and the index of the picked color;
+ * null when the palette is full.
+ */
+export function applyPick(
+  colors: PaletteColor[],
+  hex: string,
+  index: number | null,
+  lock: boolean
+): { colors: PaletteColor[]; index: number } | null {
+  const picked = (c?: PaletteColor): PaletteColor => (lock || c?.locked ? { hex, locked: true } : { hex })
+  if (index !== null && index >= 0 && index < colors.length) {
+    return { colors: colors.map((c, i) => (i === index ? picked(c) : c)), index }
+  }
+  const existing = colors.findIndex((c) => c.hex === hex)
+  if (existing >= 0) {
+    if (!lock || colors[existing]!.locked) return { colors, index: existing }
+    return { colors: colors.map((c, i) => (i === existing ? picked(c) : c)), index: existing }
+  }
+  if (colors.length >= MAX_PALETTE) return null
+  return { colors: [...colors, picked()], index: colors.length }
 }
 
 /**

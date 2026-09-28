@@ -1,4 +1,4 @@
-// Palette generation: weighted median cut and k-means, both in (weighted) OKLab.
+// Palette generation: weighted median cut, Wu, octree and k-means, all in (weighted) OKLab.
 // Runs in a worker (palette.worker.ts); pure so it can be unit-tested.
 
 import { oklabToRgb, rgbToOklab, type Vec3 } from '@/color/oklab'
@@ -75,6 +75,14 @@ function mean(points: Point[], idx: number[]): Vec3 {
 /** Weighted median cut: repeatedly split the box with the largest squared error at its weighted median. */
 export function medianCut(points: Point[], k: number): Vec3[] {
   if (!points.length || k <= 0) return []
+  return splitGroups(points, [points.map((_, i) => i)], k)
+}
+
+/**
+ * Median-cut splitting that starts from the given groups of point indices (each non-empty) and
+ * splits until there are `k` groups or no group can be split. Returns each group's mean.
+ */
+function splitGroups(points: Point[], groups: number[][], k: number): Vec3[] {
   interface Box { idx: number[]; sse: number; axis: number }
   const makeBox = (idx: number[]): Box => {
     const m = mean(points, idx)
@@ -86,7 +94,7 @@ export function medianCut(points: Point[], k: number): Vec3[] {
     const axis = v[0] >= v[1] && v[0] >= v[2] ? 0 : v[1] >= v[2] ? 1 : 2
     return { idx, sse: idx.length > 1 ? v[0] + v[1] + v[2] : 0, axis }
   }
-  const boxes = [makeBox(points.map((_, i) => i))]
+  const boxes = groups.map(makeBox)
   while (boxes.length < k) {
     let best = -1
     for (let i = 0; i < boxes.length; i++) if (boxes[i]!.sse > 0 && (best < 0 || boxes[i]!.sse > boxes[best]!.sse)) best = i
@@ -104,6 +112,220 @@ export function medianCut(points: Point[], k: number): Vec3[] {
     boxes.splice(best, 1, makeBox(sorted.slice(0, cut)), makeBox(sorted.slice(cut)))
   }
   return boxes.map((b) => mean(points, b.idx))
+}
+
+/**
+ * Tops up a result that came out short of `k` colors (Wu and octree work on a fixed grid, so
+ * distinct colors can share a cell, and an octree merge can drop up to 7 leaves at once): every
+ * point joins its nearest center, then the worst clusters are split by median cut.
+ */
+export function fillTo(points: Point[], centers: Vec3[], k: number): Vec3[] {
+  if (centers.length >= k || !centers.length) return centers
+  const index = new CenterIndex(centers)
+  const groups: number[][] = centers.map(() => [])
+  points.forEach((pt, i) => groups[index.nearest(pt.p)]!.push(i))
+  return splitGroups(points, groups.filter((g) => g.length), k)
+}
+
+/** Per-axis minimum and extent of the points (extent at least a tiny epsilon). */
+function bounds(points: Point[]): { min: Vec3; size: Vec3 } {
+  const min: Vec3 = [Infinity, Infinity, Infinity]
+  const max: Vec3 = [-Infinity, -Infinity, -Infinity]
+  for (const { p } of points) {
+    for (let c = 0; c < 3; c++) {
+      if (p[c]! < min[c]!) min[c] = p[c]!
+      if (p[c]! > max[c]!) max[c] = p[c]!
+    }
+  }
+  return { min, size: [0, 1, 2].map((c) => Math.max(max[c]! - min[c]!, 1e-9)) as Vec3 }
+}
+
+/**
+ * Wu's quantizer: points are binned into a grid over their bounding box, with cumulative moments
+ * (weight, weighted sum, weighted squared length) so any box's variance costs 8 lookups. The box
+ * with the largest variance is split repeatedly, at the cut that lowers the total error most.
+ * Centers are the exact weighted means of the points in each box.
+ */
+export function wu(points: Point[], k: number): Vec3[] {
+  if (!points.length || k <= 0) return []
+  const n = k > 256 ? 64 : 32
+  const s = n + 1
+  const at = (x: number, y: number, z: number): number => (x * s + y) * s + z
+  const W = new Float64Array(s * s * s)
+  const M = [new Float64Array(s * s * s), new Float64Array(s * s * s), new Float64Array(s * s * s)]
+  const Q = new Float64Array(s * s * s)
+  const { min, size } = bounds(points)
+  for (const { p, w } of points) {
+    const q = [0, 1, 2].map((c) => 1 + Math.min(n - 1, Math.floor(((p[c]! - min[c]!) / size[c]!) * n)))
+    const i = at(q[0]!, q[1]!, q[2]!)
+    W[i] += w
+    for (let c = 0; c < 3; c++) M[c]![i] += w * p[c]!
+    Q[i] += w * (p[0] * p[0] + p[1] * p[1] + p[2] * p[2])
+  }
+  // 3D prefix sums, one axis at a time.
+  for (const arr of [W, M[0]!, M[1]!, M[2]!, Q]) {
+    for (let x = 1; x < s; x++) for (let y = 1; y < s; y++) for (let z = 1; z < s; z++) arr[at(x, y, z)] += arr[at(x, y, z - 1)]!
+    for (let x = 1; x < s; x++) for (let y = 1; y < s; y++) for (let z = 1; z < s; z++) arr[at(x, y, z)] += arr[at(x, y - 1, z)]!
+    for (let x = 1; x < s; x++) for (let y = 1; y < s; y++) for (let z = 1; z < s; z++) arr[at(x, y, z)] += arr[at(x - 1, y, z)]!
+  }
+
+  /** Box: lower bounds exclusive, upper bounds inclusive (grid indices). */
+  interface Box { lo: [number, number, number]; hi: [number, number, number]; v: number }
+  const vol = (arr: Float64Array, lo: number[], hi: number[]): number =>
+    arr[at(hi[0]!, hi[1]!, hi[2]!)]! - arr[at(hi[0]!, hi[1]!, lo[2]!)]! - arr[at(hi[0]!, lo[1]!, hi[2]!)]! + arr[at(hi[0]!, lo[1]!, lo[2]!)]! -
+    arr[at(lo[0]!, hi[1]!, hi[2]!)]! + arr[at(lo[0]!, hi[1]!, lo[2]!)]! + arr[at(lo[0]!, lo[1]!, hi[2]!)]! - arr[at(lo[0]!, lo[1]!, lo[2]!)]!
+  const moments = (lo: number[], hi: number[]): [number, number, number, number] => [
+    vol(W, lo, hi), vol(M[0]!, lo, hi), vol(M[1]!, lo, hi), vol(M[2]!, lo, hi)
+  ]
+  const variance = (lo: number[], hi: number[]): number => {
+    const [w, a, b, c] = moments(lo, hi)
+    const cells = (hi[0]! - lo[0]!) * (hi[1]! - lo[1]!) * (hi[2]! - lo[2]!)
+    return w > 0 && cells > 1 ? vol(Q, lo, hi) - (a * a + b * b + c * c) / w : 0
+  }
+  const makeBox = (lo: [number, number, number], hi: [number, number, number]): Box => ({ lo, hi, v: variance(lo, hi) })
+
+  const boxes = [makeBox([0, 0, 0], [n, n, n])]
+  while (boxes.length < k) {
+    let best = -1
+    for (let i = 0; i < boxes.length; i++) if (boxes[i]!.v > 0 && (best < 0 || boxes[i]!.v > boxes[best]!.v)) best = i
+    if (best < 0) break
+    const box = boxes[best]!
+    const [tw, ta, tb, tc] = moments(box.lo, box.hi)
+    // Best cut: maximizes |sum|²/w over both halves (equivalently, minimizes their summed variance).
+    let bestScore = -Infinity
+    let bestAxis = -1
+    let bestCut = 0
+    for (let axis = 0; axis < 3; axis++) {
+      for (let cut = box.lo[axis]! + 1; cut < box.hi[axis]!; cut++) {
+        const hi = [...box.hi]
+        hi[axis] = cut
+        const [w, a, b, c] = moments(box.lo, hi)
+        const w2 = tw - w
+        if (w <= 0 || w2 <= 0) continue
+        const score = (a * a + b * b + c * c) / w + ((ta - a) ** 2 + (tb - b) ** 2 + (tc - c) ** 2) / w2
+        if (score > bestScore) {
+          bestScore = score
+          bestAxis = axis
+          bestCut = cut
+        }
+      }
+    }
+    if (bestAxis < 0) {
+      box.v = 0 // All points share one cell: can't split further.
+      continue
+    }
+    const loHi = [...box.hi] as [number, number, number]
+    loHi[bestAxis] = bestCut
+    const hiLo = [...box.lo] as [number, number, number]
+    hiLo[bestAxis] = bestCut
+    boxes.splice(best, 1, makeBox(box.lo, loHi), makeBox(hiLo, box.hi))
+  }
+  return boxes.map((b) => {
+    const [w, a, bb, c] = moments(b.lo, b.hi)
+    return [a / w, bb / w, c / w] as Vec3
+  })
+}
+
+/**
+ * Octree quantizer: points go into a 64-per-axis octree over a cube around them (a cube, so the
+ * luma/chroma weights still shape the result). Then the node whose leaf children cost the least
+ * error to merge is folded into one leaf, until at most `k` leaves remain. A merge can remove up
+ * to 7 leaves, so the result can fall short of `k`; `generatePalette` tops it up with `fillTo`.
+ */
+export function octree(points: Point[], k: number): Vec3[] {
+  if (!points.length || k <= 0) return []
+  const DEPTH = 6
+  interface Node { w: number; m: Vec3; children: (Node | null)[] | null; parent: Node | null; leaves: number }
+  const makeNode = (parent: Node | null, leaf: boolean): Node => ({
+    w: 0, m: [0, 0, 0], children: leaf ? null : [null, null, null, null, null, null, null, null], parent, leaves: 0
+  })
+  const { min, size } = bounds(points)
+  const extent = Math.max(size[0], size[1], size[2])
+  const side = 1 << DEPTH
+  const root = makeNode(null, false)
+  let leafCount = 0
+  for (const { p, w } of points) {
+    const q = [0, 1, 2].map((c) => Math.min(side - 1, Math.floor(((p[c]! - min[c]!) / extent) * side)))
+    let node = root
+    for (let level = DEPTH - 1; level >= 0; level--) {
+      node.w += w
+      for (let c = 0; c < 3; c++) node.m[c] += w * p[c]!
+      const child = (((q[0]! >> level) & 1) << 2) | (((q[1]! >> level) & 1) << 1) | ((q[2]! >> level) & 1)
+      let next = node.children![child]!
+      if (!next) {
+        next = node.children![child] = makeNode(node, level === 0)
+        if (level === 0) leafCount++
+      }
+      node = next
+    }
+    node.w += w
+    for (let c = 0; c < 3; c++) node.m[c] += w * p[c]!
+  }
+
+  // Cost of folding a node's children into it: the weighted squared error the merge adds.
+  const mergeCost = (node: Node): number => {
+    const mean = node.m.map((v) => v / node.w)
+    let cost = 0
+    for (const ch of node.children!) {
+      if (!ch) continue
+      cost += ch.w * dist2(ch.m.map((v) => v / ch.w) as Vec3, mean as Vec3)
+    }
+    return cost
+  }
+  const allLeafChildren = (node: Node): boolean => node.children!.every((ch) => !ch || !ch.children)
+
+  // Binary min-heap of nodes whose children are all leaves.
+  const heap: { cost: number; node: Node }[] = []
+  const push = (node: Node): void => {
+    heap.push({ cost: mergeCost(node), node })
+    let i = heap.length - 1
+    while (i > 0) {
+      const up = (i - 1) >> 1
+      if (heap[up]!.cost <= heap[i]!.cost) break
+      ;[heap[up], heap[i]] = [heap[i]!, heap[up]!]
+      i = up
+    }
+  }
+  const pop = (): Node => {
+    const top = heap[0]!.node
+    const last = heap.pop()!
+    if (heap.length) {
+      heap[0] = last
+      let i = 0
+      for (;;) {
+        const l = 2 * i + 1
+        const r = l + 1
+        let m = i
+        if (l < heap.length && heap[l]!.cost < heap[m]!.cost) m = l
+        if (r < heap.length && heap[r]!.cost < heap[m]!.cost) m = r
+        if (m === i) break
+        ;[heap[m], heap[i]] = [heap[i]!, heap[m]!]
+        i = m
+      }
+    }
+    return top
+  }
+  const visit = (node: Node): void => {
+    if (!node.children) return
+    node.children.forEach((ch) => ch && visit(ch))
+    if (allLeafChildren(node)) push(node)
+  }
+  visit(root)
+
+  while (leafCount > k && heap.length) {
+    const node = pop()
+    leafCount -= node.children!.filter(Boolean).length - 1
+    node.children = null
+    if (node.parent && allLeafChildren(node.parent)) push(node.parent)
+  }
+
+  const out: Vec3[] = []
+  const collect = (node: Node): void => {
+    if (!node.children) out.push(node.m.map((v) => v / node.w) as Vec3)
+    else node.children.forEach((ch) => ch && collect(ch))
+  }
+  collect(root)
+  return out
 }
 
 /**
@@ -206,7 +428,8 @@ export function generatePalette(rgba: Uint8Array, opts: GenerateOptions): string
   if (want === 0) return []
 
   const lockedCenters = opts.locked.map((hex) => weigh(hexToOklab(hex), lw, cw))
-  let centers = medianCut(points, want)
+  let centers = opts.method === 'wu' ? wu(points, want) : opts.method === 'octree' ? octree(points, want) : medianCut(points, want)
+  centers = fillTo(points, centers, want)
   if (opts.method === 'kmeans' && opts.quality > 0) {
     centers = kmeans(points, [...lockedCenters, ...centers], lockedCenters.length, opts.quality).slice(
       lockedCenters.length

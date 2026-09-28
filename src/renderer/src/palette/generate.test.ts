@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { oklabToRgb, rgbToOklab } from '@/color/oklab'
 import { CenterIndex, generatePalette, histogram } from './generate'
-import { mergeGenerated, normalizeHex, snapHexTo15bit, sortColors } from './palette'
+import { applyPick, mergeGenerated, normalizeHex, snapHexTo15bit, sortColors } from './palette'
 
 /** RGBA8 image made of equal-sized runs of the given colors. */
 function image(colors: [number, number, number, number][], each = 50): Uint8Array {
@@ -40,7 +40,7 @@ describe('generatePalette', () => {
     [20, 20, 20, 255]
   ])
 
-  for (const method of ['median-cut', 'kmeans'] as const) {
+  for (const method of ['median-cut', 'wu', 'octree', 'kmeans'] as const) {
     it(`${method} recovers the exact colors of a 4-color image`, () => {
       const out = generatePalette(four, { method, count: 4, quality: 8, lumaWeight: 1, chromaWeight: 1, locked: [] })
       expect(new Set(out)).toEqual(new Set(['#ff0000', '#00ff00', '#0000ff', '#141414']))
@@ -97,6 +97,20 @@ describe('palette helpers', () => {
     ])
   })
 
+  it('applies eyedropper picks', () => {
+    const colors = [{ hex: '#000000' }, { hex: '#ff0000', locked: true }]
+    // Replace the selected color; a locked slot stays locked.
+    expect(applyPick(colors, '#123456', 0, false)).toEqual({ colors: [{ hex: '#123456' }, colors[1]], index: 0 })
+    expect(applyPick(colors, '#123456', 1, false)!.colors[1]).toEqual({ hex: '#123456', locked: true })
+    // No selection: append, or select an identical color instead of duplicating it.
+    expect(applyPick(colors, '#00ff00', null, false)).toEqual({ colors: [...colors, { hex: '#00ff00' }], index: 2 })
+    expect(applyPick(colors, '#000000', null, false)).toEqual({ colors, index: 0 })
+    // Generated palettes lock picks so regeneration keeps them.
+    expect(applyPick(colors, '#000000', null, true)!.colors[0]).toEqual({ hex: '#000000', locked: true })
+    expect(applyPick(colors, '#00ff00', 9, true)).toEqual({ colors: [...colors, { hex: '#00ff00', locked: true }], index: 2 })
+    expect(applyPick(Array.from({ length: 8192 }, () => ({ hex: '#000000' })), '#ffffff', null, false)).toBeNull()
+  })
+
   it('sorts by lightness', () => {
     const sorted = sortColors([{ hex: '#ffffff' }, { hex: '#000000' }, { hex: '#808080' }], 'lightness')
     expect(sorted.map((c) => c.hex)).toEqual(['#000000', '#808080', '#ffffff'])
@@ -137,6 +151,37 @@ describe('large palettes', () => {
       expect(index.nearest(p)).toBe(best)
     }
   })
+
+  for (const method of ['median-cut', 'wu', 'octree'] as const) {
+    it(`${method} fills (nearly) every slot with distinct colors`, () => {
+      const out = generatePalette(noiseImage(128, 128), { method, count: 64, quality: 0, lumaWeight: 1, chromaWeight: 1, locked: [] })
+      expect(out.length).toBeLessThanOrEqual(64)
+      expect(out.length).toBeGreaterThan(56)
+      expect(new Set(out).size).toBe(out.length)
+    })
+  }
+
+  it('every method reaches the requested count on a dense gradient', () => {
+    // A red × green plane: 1024 histogram bins packed tightly, which used to leave octree and Wu short.
+    const rgba = new Uint8Array(256 * 256 * 4)
+    for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) rgba.set([x, y, 64, 255], (y * 256 + x) * 4)
+    for (const method of ['median-cut', 'wu', 'octree'] as const) {
+      for (const count of [16, 1024]) {
+        const out = generatePalette(rgba, { method, count, quality: 0, lumaWeight: 1, chromaWeight: 1, locked: [] })
+        expect(out.length, `${method} ${count}`).toBe(count)
+      }
+    }
+  })
+
+  it('wu and octree generate thousands of colors in reasonable time', () => {
+    const rgba = noiseImage(512, 512)
+    for (const method of ['wu', 'octree'] as const) {
+      const t = performance.now()
+      const out = generatePalette(rgba, { method, count: 4096, quality: 0, lumaWeight: 1, chromaWeight: 1, locked: [] })
+      expect(out.length).toBeGreaterThan(3000)
+      expect(performance.now() - t).toBeLessThan(10_000)
+    }
+  }, 30_000)
 
   it('generates thousands of colors in reasonable time', () => {
     const rgba = noiseImage(512, 512)

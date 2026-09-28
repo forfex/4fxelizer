@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-4FXELIZER is an Electron desktop app that turns high-res textures into PSX-style low-res, palettized, dithered textures. Target users are artists, not programmers. `docs/PLAN.md` holds the full design, visual-style rules and roadmap. The project is at Phase 1 (2D core): Adjust, Downscale, Upscale, Quantize and Dither stages, project palettes (generate / edit / import / export) plus per-stage generated palettes (up to 8192 colors), presets, undo, and PNG + indexed PNG export. Phase 1 has been verified on Windows only; keep macOS/Linux supported (no platform-specific code paths beyond `src/main/gpuFlags.ts`, menu accelerators and the window icon format (`.ico` on Windows)).
+4FXELIZER is an Electron desktop app that turns high-res textures into PSX-style low-res, palettized, dithered textures. Target users are artists, not programmers. `docs/PLAN.md` holds the full design, visual-style rules and roadmap. The app currently covers the 2D workflow: Adjust, Downscale, Upscale, Quantize and Dither stages, project palettes (generate / edit / import / export) plus per-stage generated palettes (up to 8192 colors), presets, undo, a palette eyedropper, and PNG / TGA / BMP export (full color or indexed). It has been verified on Windows only; keep macOS/Linux supported (no platform-specific code paths beyond `src/main/gpuFlags.ts`, menu accelerators, the window icon format (`.ico` on Windows) and the title bar (see below)).
 
 ## Commands
 
@@ -23,6 +23,8 @@ WebGPU check on a machine: `npm run build`, then `npx electron . --gpu-report`. 
 Three Electron processes share one IPC contract:
 
 - `src/shared/api.ts`: the `FxApi` interface (exposed as `window.fx`), the `IPC` channel names and `MenuCommand`. Change the contract here first, then update main (`ipcMain.handle`) and preload.
+- `src/shared/menu.ts` defines the app menu once (`appMenu`). Main builds the native menu from it (keyboard shortcuts everywhere, the real menu bar on macOS); the renderer draws it in the custom title bar (`components/TitleBar.tsx`) on Windows/Linux. Add menu items there, never in only one place. Command items send a `MenuCommand`; role items (clipboard, full screen, quit) are performed by main (`runMenuRole`).
+- Title bar: the window uses `titleBarStyle: 'hidden'`. Windows/Linux keep the native window buttons as a `titleBarOverlay`, which the renderer colors from `--fx-titlebar-*` tokens at startup (`setTitleBarOverlay`); the title bar keeps clear of them with the `env(titlebar-area-*)` CSS variables. macOS keeps its traffic lights. Only the title bar's empty parts (icon, area around the title) are drag regions (`-webkit-app-region: drag`). Never layer a drag region over something clickable, not even a `pointer-events: none` overlay: Windows hit-tests drag regions before the page gets the click, so the control silently stops working with a real mouse (automated clicks don't go through that hit test and still pass).
 - `src/main/`: window, native menu (menu items send `MenuCommand`s to the renderer), file dialogs, GPU flags, `--gpu-report` mode. The window uses `sandbox: true` + `contextIsolation`, so the preload **must build as CommonJS** (`.cjs`, configured in `electron.vite.config.ts`).
 - `src/renderer/src/`: React UI plus all image processing, done on the GPU.
 
@@ -38,6 +40,7 @@ Path aliases: `@shared` → `src/shared`, `@` → `src/renderer/src`. They are d
 - `stack/analyze.ts` (pure, tested) computes per-stage sizes and the order warnings shown on stage cards.
 - Presets (`stack/preset.ts`, tested) serialize the document as `.4fxpreset` JSON. Parsing validates, fills defaults, drops unknown stages and remaps every stage/palette id and reference. User presets are files in `<userData>/presets` handled by `src/main/presets.ts` (file names validated there); built-ins are in `stack/builtinPresets.ts`. Keep old presets loading when params change: add defaults, never repurpose a field.
 - User settings (`UserSettings` / `normalizeSettings` in `@shared/api`, tested) live in `<userData>/settings.json`, owned by `src/main/settings.ts` (also window placement). The preload reads them synchronously (`window.fx.settings`) so the first render uses them; `renderer/src/settings.ts` applies them to the store and saves changes. Add a field with a default in `normalizeSettings`; old files keep working.
+- The panel layout is dockview (`dockview-react`), set up in `components/Workspace.tsx` and `workspace/workspace.ts`: the viewer plus tool panels (`PANELS`) that dock, tab, float and resize. Built-in workspaces are built through the dockview API (not stored JSON). The current layout, the active workspace and the user's saved workspaces live in `UserSettings` (`layout`, `workspace`, `workspaces`); a layout that fails to load falls back to a built-in workspace. The dock theme (`styles/dock.css`) maps dockview's `--dv-*` variables onto `--fx-*` tokens, and the dock sits in an `isolate` container so its high z-indexes stay below menus and dialogs. Adding a panel: a component rendering `PanelBody`, an entry in `PANELS` and in `COMPONENTS`, and a place in the built-in workspaces.
 - Dev builds expose `window.__fx = { useApp, getEngine }` for DevTools and automation.
 
 ### GPU pipeline (`src/renderer/src/gpu/`)
@@ -72,3 +75,4 @@ Path aliases: `@shared` → `src/shared`, `@` → `src/renderer/src`. They are d
 ## Conventions
 
 - Commits use Conventional Commits (`feat:`, `fix:`, `chore:`, …).
+- Never mention roadmap phases ("Phase 1", "Phase 2", …) in code, comments, commit messages, branch names or user-facing docs. Phases exist only in the roadmap in `docs/PLAN.md`; describe the feature itself instead.

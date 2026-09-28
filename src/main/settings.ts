@@ -61,6 +61,14 @@ function saveSoon(): void {
   timer = setTimeout(writeNow, SAVE_DELAY_MS)
 }
 
+/** Writes a pending change now (on quit: the renderer's last changes arrive after the window's close event). */
+export function flushSettings(): void {
+  if (timer === undefined) return
+  clearTimeout(timer)
+  timer = undefined
+  writeNow()
+}
+
 export function getSettings(): UserSettings {
   return load().ui
 }

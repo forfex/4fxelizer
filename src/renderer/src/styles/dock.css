@@ -1,0 +1,100 @@
+/*
+ * dockview theme for the panel layout. Every color and size comes from tokens.css, so restyling
+ * the tokens restyles the dock too. Panels read as beveled boxes on the app background; tabs are
+ * small raised buttons, the active one merging into its panel.
+ */
+.dockview-theme-fx {
+  --dv-group-view-background-color: var(--fx-panel);
+  --dv-tabs-and-actions-container-background-color: var(--fx-bg);
+  --dv-tabs-and-actions-container-height: var(--fx-dock-tab-height);
+  --dv-tabs-and-actions-container-font-size: var(--fx-font-size-small);
+  --dv-tab-font-size: var(--fx-font-size-small);
+  --dv-tab-margin: 0;
+  --dv-tab-divider-color: transparent;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--fx-panel);
+  --dv-activegroup-visiblepanel-tab-color: var(--fx-text);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--fx-bg);
+  --dv-activegroup-hiddenpanel-tab-color: var(--fx-text-dim);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--fx-panel);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--fx-text-dim);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--fx-bg);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--fx-text-dim);
+  --dv-separator-border: transparent;
+  --dv-paneview-header-border-color: var(--fx-bevel-dark);
+  --dv-paneview-active-outline-color: var(--fx-accent);
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--fx-accent);
+  --dv-active-sash-transition-duration: 0.05s;
+  --dv-active-sash-transition-delay: 0.25s;
+  --dv-drag-over-background-color: color-mix(in srgb, var(--fx-accent) 18%, transparent);
+  --dv-drag-over-border-color: var(--fx-accent);
+  --dv-drag-over-border: calc(2 * var(--px)) solid var(--fx-accent);
+  --dv-edge-dock-indicator-color: var(--fx-accent);
+  --dv-dnd-compass-color: var(--fx-accent);
+  --dv-dnd-compass-cell-color: var(--fx-panel-hi);
+  --dv-dnd-compass-active-cell-color: var(--fx-accent);
+  --dv-dnd-compass-edge-cell-color: var(--fx-panel);
+  --dv-floating-box-shadow: var(--fx-dock-float-shadow);
+  --dv-floating-group-border: var(--px) solid var(--fx-edge);
+  --dv-floating-border: var(--px) solid var(--fx-edge);
+  --dv-floating-titlebar-background-color: var(--fx-panel-hi);
+  --dv-floating-titlebar-border-bottom: var(--px) solid var(--fx-bevel-dark);
+  --dv-floating-titlebar-height: var(--fx-dock-float-grip-height);
+  --dv-icon-hover-background-color: var(--fx-panel-hi);
+  --dv-context-menu-background-color: var(--fx-panel);
+  --dv-context-menu-color: var(--fx-text);
+  --dv-scrollbar-background-color: var(--fx-scrollbar-thumb);
+  --dv-tabs-container-scrollbar-color: var(--fx-scrollbar-thumb);
+  --dv-border-radius: var(--fx-radius);
+  --dv-tab-border-radius: var(--fx-radius) var(--fx-radius) 0 0;
+
+  background: var(--fx-bg);
+  color: var(--fx-text);
+  font-family: var(--fx-font-ui);
+}
+
+/* Each group is a raised panel. */
+.dockview-theme-fx .dv-groupview {
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--fx-bevel-light),
+    inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--fx-bevel-dark);
+}
+
+/* Tabs: small raised buttons; the visible one merges into its panel. */
+.dockview-theme-fx .dv-tab {
+  padding: 0 var(--fx-dock-tab-padding);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--fx-bevel-light),
+    inset calc(-1 * var(--px)) 0 0 var(--fx-bevel-dark);
+}
+.dockview-theme-fx .dv-tab.dv-inactive-tab {
+  box-shadow: inset calc(-1 * var(--px)) 0 0 var(--fx-bevel-dark);
+}
+.dockview-theme-fx .dv-tab.dv-active-tab {
+  /* A thin accent line marks the tab of the focused group. */
+  box-shadow:
+    inset 0 calc(2 * var(--px)) 0 var(--fx-accent),
+    inset var(--px) 0 0 var(--fx-bevel-light),
+    inset calc(-1 * var(--px)) 0 0 var(--fx-bevel-dark);
+}
+.dockview-theme-fx .dv-groupview.dv-inactive-group .dv-tab.dv-active-tab {
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--fx-bevel-light),
+    inset calc(-1 * var(--px)) 0 0 var(--fx-bevel-dark);
+}
+.dockview-theme-fx .dv-tab:hover {
+  color: var(--fx-text);
+}
+
+/* Sashes: invisible until hovered/dragged, then an accent line. */
+.dockview-theme-fx .dv-sash {
+  transition: background-color 0.05s;
+}
+
+/* Floating groups keep the small corners. */
+.dockview-theme-fx .dv-resize-container {
+  border-radius: var(--fx-radius);
+}

@@ -14,9 +14,20 @@ export function GroupBox({ title, className, children, ...props }: ComponentProp
       )}
       {...props}
     >
-      <legend className="px-1 text-small font-semibold tracking-wide text-dim uppercase">{title}</legend>
+      {/* The legend only interrupts the border, not the bevel shadow: its background hides the shadow behind the title. */}
+      <legend className="bg-panel px-1 text-small font-semibold tracking-wide text-dim uppercase">{title}</legend>
       {children}
     </fieldset>
+  )
+}
+
+/** Scrollable content of a dockable panel (fills the panel, scrolls vertically). */
+export function PanelBody({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      className={cn('flex h-full min-h-0 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-panel p-3', className)}
+      {...props}
+    />
   )
 }
 

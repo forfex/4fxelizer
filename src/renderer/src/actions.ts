@@ -1,10 +1,12 @@
-import type { FileFilter, MenuCommand } from '@shared/api'
+import type { ExportFileType, ExportFormat, FileFilter, MenuCommand } from '@shared/api'
 import { getEngine } from '@/engine'
 import { decodeImage } from '@/image/decode'
-import { countColors, hasTransparency, toIndexed } from '@/image/indexed'
-import { encodeIndexedPng, encodePng, indexedBitDepth } from '@/image/png'
+import { bmpBitDepth, encodeBmp, encodeIndexedBmp } from '@/image/bmp'
+import { countColors, hasTranslucency, hasTransparency, toIndexed } from '@/image/indexed'
+import { encodeIndexedPng, encodePng, indexedBitDepth, type IndexedImage, type RgbaImage } from '@/image/png'
+import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
-import { MAX_PALETTE, rgb8ToHex } from '@/palette/palette'
+import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
 import { parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
 import { useApp } from '@/store'
@@ -42,12 +44,34 @@ export async function openDroppedFile(name: string, bytes: Uint8Array): Promise<
   else await loadImageFile(name, bytes)
 }
 
-export type ExportFormat = 'png-rgba' | 'png-indexed'
+export type { ExportFormat }
 
 export interface ExportOptions {
   format: ExportFormat
-  /** Indexed only: palette whose order and colors become the PNG palette; null = the image's colors. */
+  /** Indexed only: palette whose order and colors become the file's palette; null = the image's colors. */
   paletteId: string | null
+}
+
+interface Encoder {
+  label: string
+  filter: FileFilter
+  rgba(image: RgbaImage): Uint8Array | Promise<Uint8Array>
+  indexed(image: IndexedImage): Uint8Array | Promise<Uint8Array>
+  /** Bits per pixel for an indexed image with `count` palette entries. */
+  indexedDepth(count: number): number
+  /** Whether an indexed file's palette stores alpha. */
+  indexedAlpha: boolean
+}
+
+export const ENCODERS: Record<ExportFileType, Encoder> = {
+  png: { label: 'PNG', filter: { name: 'PNG image', extensions: ['png'] }, rgba: encodePng, indexed: encodeIndexedPng, indexedDepth: indexedBitDepth, indexedAlpha: true },
+  tga: { label: 'TGA', filter: { name: 'TGA image', extensions: ['tga'] }, rgba: encodeTga, indexed: encodeIndexedTga, indexedDepth: () => 8, indexedAlpha: true },
+  bmp: { label: 'BMP', filter: { name: 'BMP image', extensions: ['bmp'] }, rgba: encodeBmp, indexed: encodeIndexedBmp, indexedDepth: bmpBitDepth, indexedAlpha: false }
+}
+
+export function parseExportFormat(format: ExportFormat): { type: ExportFileType; indexed: boolean } {
+  const [type, mode] = format.split('-') as [ExportFileType, string]
+  return { type, indexed: mode === 'indexed' }
 }
 
 const baseName = (): string => useApp.getState().image?.name.replace(/\.[^.]+$/, '') ?? 'texture'
@@ -58,14 +82,25 @@ export interface OutputSummary {
   height: number
   /** Distinct colors (all fully transparent pixels count as one); stops counting at 257. */
   colors: number
+  /** Like `colors`, but colors that differ only in alpha count once (for palettes without alpha). */
+  opaqueColors: number
   transparent: boolean
+  /** Some pixels are semi-transparent. */
+  translucent: boolean
 }
 
 export async function describeOutput(): Promise<OutputSummary | null> {
   const engine = getEngine()
   if (!engine || !useApp.getState().image) return null
   const image = await engine.readOutput()
-  return { width: image.width, height: image.height, colors: countColors(image), transparent: hasTransparency(image) }
+  return {
+    width: image.width,
+    height: image.height,
+    colors: countColors(image),
+    opaqueColors: countColors(image, 257, false),
+    transparent: hasTransparency(image),
+    translucent: hasTranslucency(image)
+  }
 }
 
 /** Returns true when the file was written. */
@@ -75,18 +110,20 @@ export async function exportImage(options: ExportOptions): Promise<boolean> {
   if (!engine || !image) return false
   try {
     const rgba = await engine.readOutput()
+    const { type, indexed } = parseExportFormat(options.format)
+    const encoder = ENCODERS[type]
     let bytes: Uint8Array
     let detail: string
-    if (options.format === 'png-indexed') {
+    if (indexed) {
       const palette = options.paletteId ? palettes.find((p) => p.id === options.paletteId) : undefined
-      const indexed = toIndexed(rgba, palette?.colors.map((c) => c.hex))
-      bytes = await encodeIndexedPng(indexed)
-      detail = `${indexed.palette.length} colors, ${indexedBitDepth(indexed.palette.length)}-bit indexed`
+      const image = toIndexed(rgba, palette?.colors.map((c) => c.hex), { alpha: encoder.indexedAlpha })
+      bytes = await encoder.indexed(image)
+      detail = `${image.palette.length} colors, ${encoder.indexedDepth(image.palette.length)}-bit indexed`
     } else {
-      bytes = await encodePng(rgba)
+      bytes = await encoder.rgba(rgba)
       detail = 'RGBA'
     }
-    const path = await window.fx.saveFile(`${baseName()}_4fx.png`, bytes, [{ name: 'PNG image', extensions: ['png'] }])
+    const path = await window.fx.saveFile(`${baseName()}_4fx.${encoder.filter.extensions[0]}`, bytes, [encoder.filter])
     if (!path) return false
     setMessage({ kind: 'info', text: `Saved ${path} (${rgba.width}×${rgba.height}, ${detail})` })
     return true
@@ -141,6 +178,61 @@ export async function extractPaletteFromOutput(id: string): Promise<void> {
     setMessage({ kind: 'info', text: `Extracted ${seen.size} colors from the output` })
   } catch (e) {
     setMessage({ kind: 'error', text: errorText(e) })
+  }
+}
+
+/** The palette shown in the palette panel (the selected one, else the first). */
+export function shownPalette(): Palette | undefined {
+  const { palettes, selectedPaletteId } = useApp.getState()
+  return palettes.find((p) => p.id === selectedPaletteId) ?? palettes[0]
+}
+
+/**
+ * Eyedropper: picks the color the viewer shows at `uv` (0–1 across the image) on one side of the
+ * split into the shown palette. Replaces the selected color (which stays selected), or else adds a
+ * new one without selecting it, so repeated picks keep adding colors.
+ */
+export async function pickColor(side: 'before' | 'after', uv: { u: number; v: number }): Promise<void> {
+  const engine = getEngine()
+  const { setMessage } = useApp.getState()
+  if (!engine || !useApp.getState().image) return
+  if (side === 'after' && useApp.getState().maskUid) {
+    setMessage({ kind: 'error', text: 'The viewer shows a stage mask; turn the mask view off to pick colors.' })
+    return
+  }
+  try {
+    const [r, g, b, a] = await engine.readShownPixel(side, uv)
+    if (a === 0) {
+      setMessage({ kind: 'error', text: 'That pixel is fully transparent; pick a visible one.' })
+      return
+    }
+    const palette = shownPalette()
+    if (!palette) {
+      setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
+      return
+    }
+    const hex = rgb8ToHex(r, g, b)
+    const { selectedColor, updatePalette, selectColor } = useApp.getState()
+    // An undo can leave the selection past the end of the palette; then the pick adds a color.
+    const index = selectedColor?.paletteId === palette.id && selectedColor.index < palette.colors.length ? selectedColor.index : null
+    const result = applyPick(palette.colors, hex, index, !!palette.generator)
+    if (!result) {
+      setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
+      return
+    }
+    if (result.colors !== palette.colors) updatePalette(palette.id, { colors: result.colors }, { coalesce: undefined })
+    if (index !== null) selectColor({ paletteId: palette.id, index })
+    const text =
+      index !== null
+        ? `Replaced color ${index} with ${hex}`
+        : result.index < palette.colors.length
+          ? `${hex} is already color ${result.index}${result.colors !== palette.colors ? ' (now locked)' : ''}`
+          : palette.generator
+            ? `Added ${hex} as a locked color (regenerating fills the rest)`
+            : `Added ${hex} as color ${result.index}`
+    setMessage({ kind: 'info', text: `${text} in "${palette.name}"` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't pick a color: ${errorText(e)}` })
   }
 }
 

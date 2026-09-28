@@ -31,6 +31,27 @@
   --fx-lcd-bg: #121810;
   --fx-lcd-text: #9fdc7c;
 
+  /* Title bar (the native window buttons on Windows/Linux are sized to match) */
+  --fx-titlebar-height: 32px;
+  --fx-titlebar-bg: var(--fx-bg);
+  --fx-titlebar-text: var(--fx-text-dim);
+  --fx-titlebar-symbol: var(--fx-text);
+  /* macOS: room for the traffic lights at the title bar's left */
+  --fx-titlebar-mac-inset: 80px;
+
+  /* Dockable panels */
+  --fx-dock-gap: 4px;
+  --fx-dock-tab-height: 24px;
+  --fx-dock-tab-padding: 10px;
+  --fx-dock-float-grip-height: 10px;
+  --fx-dock-float-shadow: 0 4px 14px rgb(0 0 0 / 45%);
+
+  /* Scrollbars: sunken track, raised bevel thumb */
+  --fx-scrollbar-size: 12px;
+  --fx-scrollbar-track: var(--fx-well);
+  --fx-scrollbar-thumb: var(--fx-panel-hi);
+  --fx-scrollbar-thumb-hover: #45423a;
+
   /* Shape & type */
   --fx-radius: 2px;
   --fx-font-ui: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Ubuntu, 'Noto Sans', sans-serif;

@@ -1,4 +1,4 @@
-// RGBA → indexed conversion for indexed PNG export.
+// RGBA → indexed conversion for indexed export (PNG, TGA, BMP).
 
 import { rgbToOklab } from '@/color/oklab'
 import { hexToRgb8 } from '@/palette/palette'
@@ -10,11 +10,14 @@ type Entry = [number, number, number, number]
 
 const TRANSPARENT = -1
 
-/** Packed RGBA key of pixel i; every fully transparent pixel maps to TRANSPARENT. */
-function keyAt(data: Uint8Array, i: number): number {
+/**
+ * Packed RGBA key of pixel i; every fully transparent pixel maps to TRANSPARENT. Without `alpha`
+ * (formats whose palette has no alpha) every other pixel counts as opaque.
+ */
+function keyAt(data: Uint8Array, i: number, alpha = true): number {
   const o = i * 4
   if (data[o + 3] === 0) return TRANSPARENT
-  return ((data[o]! << 24) | (data[o + 1]! << 16) | (data[o + 2]! << 8) | data[o + 3]!) >>> 0
+  return ((data[o]! << 24) | (data[o + 1]! << 16) | (data[o + 2]! << 8) | (alpha ? data[o + 3]! : 255)) >>> 0
 }
 
 const unpack = (k: number): Entry => [k >>> 24, (k >>> 16) & 255, (k >>> 8) & 255, k & 255]
@@ -24,15 +27,17 @@ const lightness = (k: number): number => rgbToOklab([(k >>> 24) / 255, ((k >>> 1
  * Converts straight RGBA8 to indices + palette. All fully transparent pixels share one entry at
  * index 0 (like a PSX CLUT). With `palette`, its colors keep their order (unused ones too) and every
  * opaque pixel must match one of them exactly; otherwise the image's own colors are used, dark → light.
+ * With `alpha: false` (the file's palette can't store alpha) semi-transparent pixels are indexed as
+ * opaque, so they don't take extra entries.
  */
-export function toIndexed(image: RgbaImage, palette?: string[]): IndexedImage {
+export function toIndexed(image: RgbaImage, palette?: string[], { alpha = true } = {}): IndexedImage {
   const { width, height, data } = image
   const pixels = width * height
 
   const unique = new Set<number>()
   let hasTransparent = false
   for (let i = 0; i < pixels; i++) {
-    const k = keyAt(data, i)
+    const k = keyAt(data, i, alpha)
     if (k === TRANSPARENT) hasTransparent = true
     else unique.add(k)
   }
@@ -65,7 +70,7 @@ export function toIndexed(image: RgbaImage, palette?: string[]): IndexedImage {
 
   if (entries.length > 256) {
     throw new IndexedExportError(
-      `The image has ${entries.length} colors; indexed PNG allows 256. ` +
+      `The image has ${entries.length} colors; indexed images allow 256. ` +
         'Add a Quantize or Dither stage, or turn on the output palette lock.'
     )
   }
@@ -73,7 +78,7 @@ export function toIndexed(image: RgbaImage, palette?: string[]): IndexedImage {
 
   const indices = new Uint8Array(pixels)
   for (let i = 0; i < pixels; i++) {
-    const k = keyAt(data, i)
+    const k = keyAt(data, i, alpha)
     indices[i] = k === TRANSPARENT ? 0 : indexOf.get(k)!
   }
   return { width, height, indices, palette: entries }
@@ -84,9 +89,18 @@ export function hasTransparency(image: RgbaImage): boolean {
   return false
 }
 
-/** Distinct colors in the image (fully transparent pixels count as one), counting stops at `limit`. */
-export function countColors(image: RgbaImage, limit = 257): number {
+/** True when some pixel is neither fully transparent nor fully opaque. */
+export function hasTranslucency(image: RgbaImage): boolean {
+  for (let i = 3; i < image.data.length; i += 4) if (image.data[i] !== 0 && image.data[i] !== 255) return true
+  return false
+}
+
+/**
+ * Distinct colors in the image (fully transparent pixels count as one), counting stops at `limit`.
+ * Without `alpha`, colors that differ only in (non-zero) alpha count once.
+ */
+export function countColors(image: RgbaImage, limit = 257, alpha = true): number {
   const seen = new Set<number>()
-  for (let i = 0; i < image.width * image.height && seen.size < limit; i++) seen.add(keyAt(image.data, i))
+  for (let i = 0; i < image.width * image.height && seen.size < limit; i++) seen.add(keyAt(image.data, i, alpha))
   return seen.size
 }

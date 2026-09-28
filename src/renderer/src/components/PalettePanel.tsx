@@ -8,6 +8,7 @@ import { generatePaletteNow } from '@/palette/controller'
 import type { PaletteExportFormat } from '@/palette/formats'
 import {
   DEFAULT_GENERATOR,
+  GENERATE_METHODS,
   MAX_INDEXED,
   MAX_PALETTE,
   normalizeHex,
@@ -19,9 +20,9 @@ import {
 } from '@/palette/palette'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
-import { Checkbox, Field, ParamSlider, Segmented } from './ui/controls'
+import { Checkbox, Field, ParamSlider } from './ui/controls'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
-import { GroupBox, Led } from './ui/retro'
+import { GroupBox, Led, PanelBody } from './ui/retro'
 import { Select } from './ui/select'
 
 export function PalettePanel() {
@@ -30,7 +31,7 @@ export function PalettePanel() {
   const palette = palettes.find((p) => p.id === selectedId) ?? palettes[0]
 
   return (
-    <aside className="bevel-raised flex w-72 shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-panel p-3">
+    <PanelBody>
       <GroupBox title="Palettes">
         <div className="flex gap-1">
           <Select
@@ -45,9 +46,14 @@ export function PalettePanel() {
         {palette && <NameField key={palette.id} palette={palette} />}
       </GroupBox>
       {palette && <PaletteEditor key={palette.id} palette={palette} />}
-      {palette && <GeneratorBox palette={palette} />}
-    </aside>
+    </PanelBody>
   )
+}
+
+/** Generator settings of the palette shown in the palette panel. */
+export function GeneratePanel() {
+  const palette = useApp((s) => s.palettes.find((p) => p.id === s.selectedPaletteId) ?? s.palettes[0])
+  return <PanelBody>{palette ? <GeneratorBox palette={palette} /> : <p className="text-dim">No palette selected.</p>}</PanelBody>
 }
 
 function PaletteMenu({ palette }: { palette: Palette | undefined }) {
@@ -135,8 +141,12 @@ function NameField({ palette }: { palette: Palette }) {
 }
 
 function PaletteEditor({ palette }: { palette: Palette }) {
-  const [selected, setSelected] = useState<number | null>(null)
+  const selection = useApp((s) => s.selectedColor)
+  const selected = selection?.paletteId === palette.id && selection.index < palette.colors.length ? selection.index : null
+  const setSelected = (index: number | null): void =>
+    useApp.getState().selectColor(index === null ? null : { paletteId: palette.id, index })
   const hasImage = useApp((s) => s.image !== null)
+  const picking = useApp((s) => s.picking)
   const current = selected !== null ? palette.colors[selected] : undefined
   const setColors = (colors: PaletteColor[], coalesce?: string): void =>
     useApp.getState().updatePalette(palette.id, { colors }, coalesce ? { coalesce } : undefined)
@@ -216,6 +226,19 @@ function PaletteEditor({ palette }: { palette: Palette }) {
             onClick={() => setColors(palette.colors.map((c) => ({ ...c, hex: snapHexTo15bit(c.hex) })))}
           >
             15-bit
+          </Button>
+          <Button
+            size="sm"
+            disabled={!hasImage}
+            aria-pressed={picking}
+            title={
+              'Eyedropper: click the image to pick a color. Replaces the selected color, or adds one. ' +
+              'Shift+click keeps picking, Esc stops. Alt+click in the image picks any time.' +
+              (palette.generator ? ' Picked colors are locked, so regenerating keeps them.' : '')
+            }
+            onClick={() => useApp.getState().setPicking(!picking)}
+          >
+            Pick
           </Button>
           <Button
             size="sm"
@@ -364,7 +387,7 @@ function GeneratorBox({ palette }: { palette: Palette }) {
   if (!gen) {
     return (
       <GroupBox title="Generate">
-        <p className="mb-2 text-small text-dim">Build this palette from the image with median cut or k-means.</p>
+        <p className="mb-2 text-small text-dim">Build this palette from the image.</p>
         <Button
           size="sm"
           onClick={() =>
@@ -405,15 +428,12 @@ function GeneratorBox({ palette }: { palette: Palette }) {
             />
           </Field>
         )}
-        <Field label="Method">
-          <Segmented
+        <Field label="Method" hint={GENERATE_METHODS.find((m) => m.id === gen.method)?.hint}>
+          <Select
             className="flex-1"
             value={gen.method}
-            onChange={(method) => set({ method })}
-            options={[
-              { value: 'median-cut', label: 'Median cut', hint: 'Fast, splits the color space evenly.' },
-              { value: 'kmeans', label: 'K-means', hint: 'Refines median cut; closer to the image, slower.' }
-            ]}
+            onValueChange={(method) => set({ method })}
+            options={GENERATE_METHODS.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
           />
         </Field>
         <ParamSlider label="Colors" scale="log" value={gen.count} min={2} max={MAX_PALETTE} onChange={(count) => set({ count })} />

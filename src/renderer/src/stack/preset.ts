@@ -5,7 +5,7 @@
 import { BLEND_MODES, DEFAULT_BLEND, type StageBlend } from '@/gpu/pass'
 import { STAGE_TYPES } from '@/gpu/passes'
 import type { StageSpec } from '@/gpu/plan'
-import { DEFAULT_GENERATOR, MAX_PALETTE, normalizeHex, type GeneratorSettings, type Palette, type PaletteColor } from '@/palette/palette'
+import { DEFAULT_GENERATOR, GENERATE_METHODS, MAX_PALETTE, normalizeHex, type GeneratorSettings, type Palette, type PaletteColor } from '@/palette/palette'
 import { newId, type Doc, type PaletteParams } from './doc'
 
 export const PRESET_FORMAT = '4fxelizer-preset'
@@ -68,7 +68,7 @@ function cleanGenerator(raw: unknown): GeneratorSettings | undefined {
     ? { kind: 'stage' as const, uid: raw.from.uid as string }
     : { kind: 'source' as const }
   return {
-    method: raw.method === 'median-cut' ? 'median-cut' : 'kmeans',
+    method: GENERATE_METHODS.find((m) => m.id === raw.method)?.id ?? 'kmeans',
     count: Math.round(Math.min(Math.max(num(raw.count, DEFAULT_GENERATOR.count), 2), MAX_PALETTE)),
     quality: Math.round(Math.min(Math.max(num(raw.quality, DEFAULT_GENERATOR.quality), 1), 64)),
     lumaWeight: num(raw.lumaWeight, 1),
