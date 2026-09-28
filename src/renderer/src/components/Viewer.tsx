@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { openImage } from '@/actions'
+import { openImage, pickColor } from '@/actions'
 import { getEngine } from '@/engine'
 import { cssColor } from '@/lib/pixelSnap'
 import { stageLabel } from '@/gpu/passes'
@@ -20,6 +20,7 @@ export function Viewer() {
   // Divider x in canvas device pixels; it's anchored to the image, so it follows pans and zooms.
   const splitX = useApp((s) => (s.split && s.image ? splitScreenX(s.view, s.image, s.splitPos) : null))
   const canvasWidth = useApp((s) => s.canvasSize.width)
+  const picking = useApp((s) => s.picking && s.image !== null)
   const previewLabel = useApp((s) => {
     const m = s.stages.findIndex((st) => st.uid === s.maskUid)
     if (m >= 0) return `Mask of ${m + 1}. ${stageLabel(s.stages[m]!.passId)}`
@@ -121,10 +122,43 @@ export function Viewer() {
     return () => canvas.removeEventListener('wheel', onWheel)
   }, [])
 
+  // Esc disarms the eyedropper.
+  useEffect(() => {
+    if (!picking) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') useApp.getState().setPicking(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [picking])
+
   const drag = useRef<{ x: number; y: number } | null>(null)
+
+  /** Eyedropper click: picks the texel shown under the pointer, from whichever side of the split it's on. */
+  const pickAt = (e: React.PointerEvent<HTMLCanvasElement>): void => {
+    const canvas = e.currentTarget
+    const s = useApp.getState()
+    if (!s.image) return
+    const scale = canvas.width / canvas.clientWidth
+    const rect = canvas.getBoundingClientRect()
+    const point = { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale }
+    const pixel = pixelAt(s.view, s.image, point)
+    if (!pixel) return
+    const splitX = s.split ? splitScreenX(s.view, s.image, s.splitPos) : null
+    const side = splitX !== null && Math.floor(point.x) + 0.5 < splitX ? 'before' : 'after'
+    const uv = { u: (point.x - s.view.x) / s.view.zoom / s.image.width, v: (point.y - s.view.y) / s.view.zoom / s.image.height }
+    // Shift keeps the eyedropper armed for more picks.
+    if (!e.shiftKey) s.setPicking(false)
+    void pickColor(side, uv)
+  }
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>): void => {
     if (e.button !== 0 && e.button !== 1) return
+    // Alt+click picks without arming the eyedropper (like paint programs).
+    if (e.button === 0 && (useApp.getState().picking || e.altKey)) {
+      pickAt(e)
+      return
+    }
     e.currentTarget.setPointerCapture(e.pointerId)
     drag.current = { x: e.clientX, y: e.clientY }
   }
@@ -155,7 +189,7 @@ export function Viewer() {
     <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
       <canvas
         ref={canvasRef}
-        className="block size-full cursor-grab active:cursor-grabbing"
+        className={cn('block size-full', picking ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}

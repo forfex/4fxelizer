@@ -9,7 +9,7 @@ import { DEFAULT_DOWNSCALE, downscale, type DownscaleParams } from '@/gpu/passes
 import { DEFAULT_QUANTIZE, type QuantizeParams } from '@/gpu/passes/quantize'
 import type { ChainPlan, StageSpec } from '@/gpu/plan'
 import { GpuResources } from '@/gpu/resources'
-import { readTextureRgba8, uploadBitmap } from '@/gpu/textureIO'
+import { readTexelRgba8, readTextureRgba8, uploadBitmap } from '@/gpu/textureIO'
 import { ViewerRenderer, type ViewerFrame } from '@/gpu/viewer'
 import type { RgbaImage } from '@/image/png'
 import type { Palette } from '@/palette/palette'
@@ -152,6 +152,18 @@ export class Engine {
 
   draw(frame: ViewerFrame): void {
     this.viewer?.draw(frame)
+  }
+
+  /**
+   * The texel the viewer shows at `uv` (0–1 across the image) on one side of the split: the
+   * source ('before') or what's shown on the right ('after'). Exact, never filtered.
+   */
+  async readShownPixel(side: 'before' | 'after', uv: { u: number; v: number }): Promise<[number, number, number, number]> {
+    const texture = side === 'before' ? this.source?.texture : this.shown
+    if (!texture) throw new Error('No image loaded.')
+    const x = Math.min(Math.max(Math.floor(uv.u * texture.width), 0), texture.width - 1)
+    const y = Math.min(Math.max(Math.floor(uv.v * texture.height), 0), texture.height - 1)
+    return readTexelRgba8(this.gpu.device, texture, x, y)
   }
 
   /** Final output (including the output palette lock) as straight RGBA8. */

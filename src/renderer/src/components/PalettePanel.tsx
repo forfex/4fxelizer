@@ -136,8 +136,12 @@ function NameField({ palette }: { palette: Palette }) {
 }
 
 function PaletteEditor({ palette }: { palette: Palette }) {
-  const [selected, setSelected] = useState<number | null>(null)
+  const selection = useApp((s) => s.selectedColor)
+  const selected = selection?.paletteId === palette.id && selection.index < palette.colors.length ? selection.index : null
+  const setSelected = (index: number | null): void =>
+    useApp.getState().selectColor(index === null ? null : { paletteId: palette.id, index })
   const hasImage = useApp((s) => s.image !== null)
+  const picking = useApp((s) => s.picking)
   const current = selected !== null ? palette.colors[selected] : undefined
   const setColors = (colors: PaletteColor[], coalesce?: string): void =>
     useApp.getState().updatePalette(palette.id, { colors }, coalesce ? { coalesce } : undefined)
@@ -217,6 +221,19 @@ function PaletteEditor({ palette }: { palette: Palette }) {
             onClick={() => setColors(palette.colors.map((c) => ({ ...c, hex: snapHexTo15bit(c.hex) })))}
           >
             15-bit
+          </Button>
+          <Button
+            size="sm"
+            disabled={!hasImage}
+            aria-pressed={picking}
+            title={
+              'Eyedropper: click the image to pick a color. Replaces the selected color, or adds one. ' +
+              'Shift+click keeps picking, Esc stops. Alt+click in the image picks any time.' +
+              (palette.generator ? ' Picked colors are locked, so regenerating keeps them.' : '')
+            }
+            onClick={() => useApp.getState().setPicking(!picking)}
+          >
+            Pick
           </Button>
           <Button
             size="sm"

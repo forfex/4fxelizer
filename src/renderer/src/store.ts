@@ -65,6 +65,10 @@ interface AppState extends Doc {
   /** Stage whose dither mask the viewer shows (null = none). */
   maskUid: string | null
   selectedPaletteId: string | null
+  /** Color selected in the palette editor (index into that palette's colors). */
+  selectedColor: { paletteId: string; index: number } | null
+  /** Eyedropper armed: the next click in the viewer picks a color into the shown palette. */
+  picking: boolean
   /** Auto/manual palette generation status by palette id (absent = idle). */
   paletteJobs: Record<string, PaletteJob>
 
@@ -94,6 +98,8 @@ interface AppState extends Doc {
   setPreview(uid: string | null): void
   setMaskView(uid: string | null): void
   selectPalette(id: string | null): void
+  selectColor(selection: { paletteId: string; index: number } | null): void
+  setPicking(picking: boolean): void
   setPaletteJob(id: string, job: PaletteJob | null): void
 
   /**
@@ -143,6 +149,8 @@ export const useApp = create<AppState>()((set, get) => ({
   previewUid: null,
   maskUid: null,
   selectedPaletteId: doc0.palettes[0]!.id,
+  selectedColor: null,
+  picking: false,
   paletteJobs: {},
   past: [],
   future: [],
@@ -204,6 +212,8 @@ export const useApp = create<AppState>()((set, get) => ({
   setPreview: (previewUid) => set({ previewUid, maskUid: null }),
   setMaskView: (maskUid) => set({ maskUid }),
   selectPalette: (selectedPaletteId) => set({ selectedPaletteId }),
+  selectColor: (selectedColor) => set({ selectedColor }),
+  setPicking: (picking) => set({ picking }),
   setPaletteJob: (id, job) => {
     const jobs = { ...get().paletteJobs }
     if (job) jobs[id] = job

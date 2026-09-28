@@ -137,6 +137,31 @@ function hashColors(colors: PaletteColor[]): string {
 }
 
 /**
+ * Puts an eyedropper color into a palette: replaces the color at `index`, or else adds it at the
+ * end (an existing identical color is selected instead). `lock` marks it locked, so a generated
+ * palette keeps it when it regenerates. Returns the new colors and the index of the picked color;
+ * null when the palette is full.
+ */
+export function applyPick(
+  colors: PaletteColor[],
+  hex: string,
+  index: number | null,
+  lock: boolean
+): { colors: PaletteColor[]; index: number } | null {
+  const picked = (c?: PaletteColor): PaletteColor => (lock || c?.locked ? { hex, locked: true } : { hex })
+  if (index !== null && index >= 0 && index < colors.length) {
+    return { colors: colors.map((c, i) => (i === index ? picked(c) : c)), index }
+  }
+  const existing = colors.findIndex((c) => c.hex === hex)
+  if (existing >= 0) {
+    if (!lock || colors[existing]!.locked) return { colors, index: existing }
+    return { colors: colors.map((c, i) => (i === existing ? picked(c) : c)), index: existing }
+  }
+  if (colors.length >= MAX_PALETTE) return null
+  return { colors: [...colors, picked()], index: colors.length }
+}
+
+/**
  * Merges freshly generated colors into an existing palette: locked colors keep their slots,
  * unlocked slots are refilled in order, extra colors are appended, surplus unlocked slots dropped.
  */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { oklabToRgb, rgbToOklab } from '@/color/oklab'
 import { CenterIndex, generatePalette, histogram } from './generate'
-import { mergeGenerated, normalizeHex, snapHexTo15bit, sortColors } from './palette'
+import { applyPick, mergeGenerated, normalizeHex, snapHexTo15bit, sortColors } from './palette'
 
 /** RGBA8 image made of equal-sized runs of the given colors. */
 function image(colors: [number, number, number, number][], each = 50): Uint8Array {
@@ -95,6 +95,20 @@ describe('palette helpers', () => {
     expect(mergeGenerated([{ hex: '#000000' }, { hex: '#ff0000', locked: true }], ['#111111'], 1)).toEqual([
       { hex: '#ff0000', locked: true }
     ])
+  })
+
+  it('applies eyedropper picks', () => {
+    const colors = [{ hex: '#000000' }, { hex: '#ff0000', locked: true }]
+    // Replace the selected color; a locked slot stays locked.
+    expect(applyPick(colors, '#123456', 0, false)).toEqual({ colors: [{ hex: '#123456' }, colors[1]], index: 0 })
+    expect(applyPick(colors, '#123456', 1, false)!.colors[1]).toEqual({ hex: '#123456', locked: true })
+    // No selection: append, or select an identical color instead of duplicating it.
+    expect(applyPick(colors, '#00ff00', null, false)).toEqual({ colors: [...colors, { hex: '#00ff00' }], index: 2 })
+    expect(applyPick(colors, '#000000', null, false)).toEqual({ colors, index: 0 })
+    // Generated palettes lock picks so regeneration keeps them.
+    expect(applyPick(colors, '#000000', null, true)!.colors[0]).toEqual({ hex: '#000000', locked: true })
+    expect(applyPick(colors, '#00ff00', 9, true)).toEqual({ colors: [...colors, { hex: '#00ff00', locked: true }], index: 2 })
+    expect(applyPick(Array.from({ length: 8192 }, () => ({ hex: '#000000' })), '#ffffff', null, false)).toBeNull()
   })
 
   it('sorts by lightness', () => {

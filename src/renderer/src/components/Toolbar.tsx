@@ -27,7 +27,7 @@ export function Toolbar() {
       <Button onClick={openImage} disabled={gpu.status !== 'ready'} title={`Open image (${mod}O)`}>
         Open…
       </Button>
-      <Button onClick={() => setExportOpen(true)} disabled={!hasImage} title={`Export PNG (${mod}E)`}>
+      <Button onClick={() => setExportOpen(true)} disabled={!hasImage} title={`Export PNG, TGA or BMP (${mod}E)`}>
         Export…
       </Button>
       <PresetsMenu />

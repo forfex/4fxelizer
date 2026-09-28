@@ -26,6 +26,23 @@ export function uploadBitmap(device: GPUDevice, bitmap: ImageBitmap, label = 'so
   return texture
 }
 
+/** Reads one texel of a working-format texture as straight 8-bit RGBA. */
+export async function readTexelRgba8(device: GPUDevice, texture: GPUTexture, x: number, y: number): Promise<[number, number, number, number]> {
+  if (texture.format !== WORK_FORMAT) throw new Error(`readTexelRgba8: expected ${WORK_FORMAT}`)
+  const buffer = device.createBuffer({ label: 'texel readback', size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ })
+  const encoder = device.createCommandEncoder({ label: 'texel readback' })
+  encoder.copyTextureToBuffer({ texture, origin: [x, y] }, { buffer, bytesPerRow: 256 }, [1, 1])
+  device.queue.submit([encoder.finish()])
+  await buffer.mapAsync(GPUMapMode.READ)
+  try {
+    const [r, g, b, a] = rgba16fRowsToRgba8(new Uint16Array(buffer.getMappedRange()), 1, 1, 8)
+    return [r!, g!, b!, a!]
+  } finally {
+    buffer.unmap()
+    buffer.destroy()
+  }
+}
+
 /** Reads a working-format texture back as straight 8-bit RGBA. */
 export async function readTextureRgba8(device: GPUDevice, texture: GPUTexture): Promise<RgbaImage> {
   if (texture.format !== WORK_FORMAT) throw new Error(`readTextureRgba8: expected ${WORK_FORMAT}`)

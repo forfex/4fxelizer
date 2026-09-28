@@ -6,7 +6,7 @@ import { countColors, hasTransparency, toIndexed } from '@/image/indexed'
 import { encodeIndexedPng, encodePng, indexedBitDepth, type IndexedImage, type RgbaImage } from '@/image/png'
 import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
-import { MAX_PALETTE, rgb8ToHex } from '@/palette/palette'
+import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
 import { parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
 import { useApp } from '@/store'
@@ -165,6 +165,56 @@ export async function extractPaletteFromOutput(id: string): Promise<void> {
     setMessage({ kind: 'info', text: `Extracted ${seen.size} colors from the output` })
   } catch (e) {
     setMessage({ kind: 'error', text: errorText(e) })
+  }
+}
+
+/** The palette shown in the palette panel (the selected one, else the first). */
+export function shownPalette(): Palette | undefined {
+  const { palettes, selectedPaletteId } = useApp.getState()
+  return palettes.find((p) => p.id === selectedPaletteId) ?? palettes[0]
+}
+
+/**
+ * Eyedropper: picks the color the viewer shows at `uv` (0–1 across the image) on one side of the
+ * split into the shown palette. Replaces the selected color (which stays selected), or else adds a
+ * new one without selecting it, so repeated picks keep adding colors.
+ */
+export async function pickColor(side: 'before' | 'after', uv: { u: number; v: number }): Promise<void> {
+  const engine = getEngine()
+  const { setMessage } = useApp.getState()
+  if (!engine || !useApp.getState().image) return
+  try {
+    const [r, g, b, a] = await engine.readShownPixel(side, uv)
+    if (a === 0) {
+      setMessage({ kind: 'error', text: 'That pixel is fully transparent; pick a visible one.' })
+      return
+    }
+    const palette = shownPalette()
+    if (!palette) {
+      setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
+      return
+    }
+    const hex = rgb8ToHex(r, g, b)
+    const { selectedColor, updatePalette, selectColor } = useApp.getState()
+    const index = selectedColor?.paletteId === palette.id ? selectedColor.index : null
+    const result = applyPick(palette.colors, hex, index, !!palette.generator)
+    if (!result) {
+      setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
+      return
+    }
+    if (result.colors !== palette.colors) updatePalette(palette.id, { colors: result.colors }, { coalesce: undefined })
+    if (index !== null) selectColor({ paletteId: palette.id, index })
+    const text =
+      index !== null
+        ? `Replaced color ${index} with ${hex}`
+        : result.index < palette.colors.length
+          ? `${hex} is already color ${result.index}${result.colors !== palette.colors ? ' (now locked)' : ''}`
+          : palette.generator
+            ? `Added ${hex} as a locked color (regenerating fills the rest)`
+            : `Added ${hex} as color ${result.index}`
+    setMessage({ kind: 'info', text: `${text} in "${palette.name}"` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't pick a color: ${errorText(e)}` })
   }
 }
 
