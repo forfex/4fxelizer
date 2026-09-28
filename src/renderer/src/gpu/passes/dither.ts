@@ -28,7 +28,8 @@ export const DITHER_PATTERNS = [
   { id: 'burkes', label: 'Burkes', kind: 'diffusion', period: 0 },
   { id: 'sierra', label: 'Sierra', kind: 'diffusion', period: 0 },
   { id: 'sierra2', label: 'Sierra two-row', kind: 'diffusion', period: 0 },
-  { id: 'sierra-lite', label: 'Sierra Lite', kind: 'diffusion', period: 0 }
+  { id: 'sierra-lite', label: 'Sierra Lite', kind: 'diffusion', period: 0 },
+  { id: 'n64-magic', label: 'N64 magic square', kind: 'ordered', period: 4 }
 ] as const
 
 export type DitherPattern = (typeof DITHER_PATTERNS)[number]['id']
@@ -176,6 +177,8 @@ const TAU = 6.283185307;
 
 // Classic 4×4 clustered-dot matrix (dots grow from the center of each cell).
 var<private> CLUSTER4: array<u32, 16> = array<u32, 16>(12u, 5u, 6u, 13u, 4u, 0u, 1u, 7u, 11u, 3u, 2u, 8u, 15u, 10u, 9u, 14u);
+// Nintendo 64 RDP "magic square" dither matrix (values 0..7).
+var<private> MAGIC4: array<u32, 16> = array<u32, 16>(0u, 6u, 1u, 7u, 4u, 2u, 5u, 3u, 3u, 5u, 2u, 4u, 7u, 1u, 6u, 0u);
 // Line screen: the two middle rows of each 4-row cell fill first.
 var<private> LINE4: array<f32, 4> = array<f32, 4>(2.0, 0.0, 1.0, 3.0);
 
@@ -230,6 +233,7 @@ fn threshold(p: vec2u) -> f32 {
     case 10u: { return (LINE4[q.y % 4u] + 0.5) / 4.0; }
     case 11u: { return (LINE4[q.x % 4u] + 0.5) / 4.0; }
     case 12u: { return (LINE4[(q.x + q.y) % 4u] + 0.5) / 4.0; }
+    case 21u: { return (f32(MAGIC4[(q.y % 4u) * 4u + q.x % 4u]) + 0.5) / 8.0; }
     default: { return blueNoise(p); }
   }
 }

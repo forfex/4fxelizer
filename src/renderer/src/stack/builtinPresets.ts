@@ -86,6 +86,21 @@ export const BUILTIN_PRESETS: BuiltinPreset[] = [
       })
   },
   {
+    name: 'N64',
+    hint:
+      '64 px texture in 16-bit color (RGBA 5551), blurred ×4 by the N64 3-point filter, then the 16-bit ' +
+      'framebuffer dither (magic square). For the in-game texture, preview/export at the Quantize stage.',
+    build: () =>
+      build({
+        stages: [
+          ['downscale', { longest: 64, pot: true, method: 'box' }],
+          ['quantize', { mode: 'levels', levels: 32, alpha: 'binary' }],
+          ['upscale', { method: 'n64', sizeMode: 'factor', factor: 4, wrap: true }],
+          ['dither', { mode: 'levels', levels: 32, pattern: 'n64-magic', strength: 1 }]
+        ]
+      })
+  },
+  {
     name: 'NES-ish',
     hint: '64 px, NES palette, two-color Bayer mixing.',
     build: () =>
