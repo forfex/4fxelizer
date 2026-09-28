@@ -31,6 +31,32 @@ describe('presets', () => {
     expect(loaded.outputLock).toEqual({ enabled: true, paletteId: mine.id })
   })
 
+  it('keeps mask, tiling and custom pattern settings, and fills them in for older presets', () => {
+    const doc = initialDoc()
+    const settings: Partial<DitherParams> = {
+      pattern: 'custom',
+      customPattern: '2x1:AP8=',
+      customPatternName: 'dots.png',
+      mask: 'map-ao',
+      maskInvert: true,
+      mask2: 'edges',
+      maskCombine: 'max',
+      maskBlur: 2.5,
+      outsidePattern: 'atkinson',
+      outsideStrength: 0.3,
+      serpentine: true,
+      wrap: true
+    }
+    doc.stages[2]!.params = { ...(doc.stages[2]!.params as object), ...settings }
+    const loaded = parsePreset(serializePreset(doc, 'x')).doc.stages[2]!.params as DitherParams
+    expect(loaded).toMatchObject(settings)
+
+    const old = JSON.parse(serializePreset(initialDoc(), 'old'))
+    for (const key of Object.keys(settings)) delete old.stages[2].params[key]
+    const filled = parsePreset(JSON.stringify(old)).doc.stages[2]!.params as DitherParams
+    expect(filled).toMatchObject({ mask2: 'none', maskBlur: 0, outsidePattern: 'none', wrap: false, customPattern: '' })
+  })
+
   it('saves auto-generated palettes without their colors, except locked ones', () => {
     const doc = initialDoc()
     const owned = doc.palettes[0]!
