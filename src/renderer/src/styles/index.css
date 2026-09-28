@@ -72,6 +72,16 @@
     /* Dark native scrollbars and form widgets. */
     color-scheme: dark;
   }
+  /*
+   * Popups and dialogs can reach up over the title bar's drag region. Windows hit-tests drag
+   * regions before the page sees a click, so without this their controls there would move the
+   * window instead of responding.
+   */
+  [data-radix-popper-content-wrapper],
+  [role='dialog'],
+  [role='alertdialog'] {
+    -webkit-app-region: no-drag;
+  }
   body {
     margin: 0;
     background: var(--fx-bg);
