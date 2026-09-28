@@ -50,18 +50,27 @@ export interface SavedWorkspace {
 
 /**
  * Interface themes (`data-theme` on <html>, values in styles/tokens.css). Dark is the plum desktop
- * with purple and magenta accents; Night is neutral greyscale for dim rooms and color judging.
+ * with purple and magenta accents; Night is neutral greyscale for dim rooms and color judging;
+ * Light is its daylight counterpart; Matrix is green phosphor on black; Retro is the classic
+ * silver-grey desktop with navy title bars and square corners.
  */
-export const THEMES = ['dark', 'night'] as const
+export const THEMES = ['dark', 'night', 'light', 'matrix', 'retro'] as const
 export type Theme = (typeof THEMES)[number]
 
+/** Names shown in the theme pickers (menu and toolbar), in THEMES order. */
+export const THEME_NAMES: Record<Theme, string> = { dark: 'Dark', night: 'Night', light: 'Light', matrix: 'Matrix', retro: 'Retro' }
+
 /**
- * Window background and title-bar symbol color per theme, for main to paint the window before the
- * renderer has loaded its tokens. Keep in sync with --fx-bg / --fx-text in styles/tokens.css.
+ * Title-bar ground (also the window background before the renderer has loaded its tokens) and the
+ * window-button symbol color per theme. Keep in sync with --fx-titlebar-bg / --fx-titlebar-symbol
+ * in styles/tokens.css.
  */
 export const THEME_WINDOW_COLORS: Record<Theme, { background: string; symbol: string }> = {
   dark: { background: '#16121e', symbol: '#f1e9dc' },
-  night: { background: '#090909', symbol: '#e3e3e3' }
+  night: { background: '#090909', symbol: '#e3e3e3' },
+  light: { background: '#e6e0ee', symbol: '#1e1829' },
+  matrix: { background: '#010603', symbol: '#9dffb0' },
+  retro: { background: '#000080', symbol: '#ffffff' }
 }
 
 /** Most saved workspaces kept (oldest dropped first). */
@@ -151,8 +160,7 @@ export type MenuCommand =
   | 'toggle-grid'
   | 'toggle-split'
   | 'toggle-tile'
-  | 'theme-dark'
-  | 'theme-night'
+  | `theme-${Theme}`
   | 'gpu-diagnostics'
 
 export interface FxApi {

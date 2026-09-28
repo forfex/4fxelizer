@@ -72,11 +72,3 @@ export const MinusIcon = ({ className }: P) => (
     <path d="M2.5 7h9" />
   </Icon>
 )
-
-/** Theme: a half-lit square. */
-export const ThemeIcon = ({ className }: P) => (
-  <Icon className={className}>
-    <rect x="2" y="2" width="10" height="10" />
-    <path d="M7 2v10h5V2z" fill="currentColor" stroke="none" />
-  </Icon>
-)

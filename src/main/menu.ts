@@ -27,6 +27,7 @@ export function buildMenu(win: BrowserWindow, isDev: boolean): Menu {
   const isMac = process.platform === 'darwin'
   const item = (entry: MenuEntry): MenuItemConstructorOptions => {
     if (entry.kind === 'separator') return { type: 'separator' }
+    if (entry.kind === 'submenu') return { label: entry.label, submenu: entry.items.map(item) }
     if (entry.kind === 'role') return { role: entry.role, label: entry.label, accelerator: entry.accelerator }
     return { label: entry.label, accelerator: entry.accelerator, click: send(entry.command) }
   }

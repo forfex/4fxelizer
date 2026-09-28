@@ -8,6 +8,7 @@ import iconUrl from '@/assets/icon.svg'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
+import { CaretIcon } from './ui/icons'
 import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_MARK_CLASS, MENU_SEPARATOR_CLASS } from './ui/menu'
 
 const platform = window.fx.platform
@@ -84,8 +85,7 @@ function AppMenuBar() {
       'toggle-grid': s.grid,
       'toggle-split': s.split,
       'toggle-tile': s.tile,
-      'theme-dark': s.theme === 'dark',
-      'theme-night': s.theme === 'night'
+      [`theme-${s.theme}`]: true
     }))
   )
   // Clipboard actions must reach the field that was focused before the menu took focus. Recorded
@@ -144,6 +144,34 @@ function AppMenuBar() {
       window.fx.runMenuRole(entry.role)
     }
   }
+  const renderEntry = (entry: MenuEntry, i: number): React.ReactNode => {
+    if (entry.kind === 'separator') return <Menubar.Separator key={i} className={MENU_SEPARATOR_CLASS} />
+    if (entry.kind === 'submenu') {
+      return (
+        <Menubar.Sub key={entry.label}>
+          <Menubar.SubTrigger className={cn(MENU_ITEM_CLASS, 'data-[state=open]:bg-accent-soft')}>
+            {entry.label}
+            <CaretIcon open={false} className="ml-auto text-dim" />
+          </Menubar.SubTrigger>
+          <Menubar.Portal>
+            <Menubar.SubContent sideOffset={4} className={cn(MENU_CONTENT_CLASS, 'min-w-40')}>
+              {entry.items.map(renderEntry)}
+            </Menubar.SubContent>
+          </Menubar.Portal>
+        </Menubar.Sub>
+      )
+    }
+    return (
+      <Menubar.Item key={entry.label} className={MENU_ITEM_CLASS} onSelect={() => run(entry)}>
+        {entry.kind === 'command' && checked[entry.command] && <span className={MENU_MARK_CLASS} />}
+        {entry.label}
+        {entry.accelerator && (
+          <kbd className="ml-auto pl-6 font-mono text-[10px] leading-3.5 text-dim">{formatAccelerator(entry.accelerator, platform)}</kbd>
+        )}
+      </Menubar.Item>
+    )
+  }
+
   return (
     <Menubar.Root
       ref={root}
@@ -163,8 +191,9 @@ function AppMenuBar() {
         <Menubar.Menu key={section.label} value={section.label}>
           <Menubar.Trigger
             className={cn(
-              'flex h-6 cursor-default items-center rounded-fx px-2 outline-none select-none',
-              'hover:bg-accent-soft data-[state=open]:bg-accent-soft focus-visible:ring-focus'
+              'flex h-6 cursor-default items-center rounded-fx px-2 text-(--fx-titlebar-symbol) outline-none select-none',
+              // A tint of the title bar's own text color, so it reads on any title-bar ground.
+              'hover:bg-(--fx-titlebar-hover) data-[state=open]:bg-(--fx-titlebar-hover) focus-visible:ring-focus'
             )}
           >
             {section.label}
@@ -177,19 +206,7 @@ function AppMenuBar() {
               // Hand focus back to what had it (a text field, the viewer) instead of the menu button.
               onCloseAutoFocus={(e) => e.preventDefault()}
             >
-              {section.items.map((entry, i) =>
-                entry.kind === 'separator' ? (
-                  <Menubar.Separator key={i} className={MENU_SEPARATOR_CLASS} />
-                ) : (
-                  <Menubar.Item key={entry.label} className={MENU_ITEM_CLASS} onSelect={() => run(entry)}>
-                    {entry.kind === 'command' && checked[entry.command] && <span className={MENU_MARK_CLASS} />}
-                    {entry.label}
-                    {entry.accelerator && (
-                      <kbd className="ml-auto pl-6 font-mono text-[10px] leading-3.5 text-dim">{formatAccelerator(entry.accelerator, platform)}</kbd>
-                    )}
-                  </Menubar.Item>
-                )
-              )}
+              {section.items.map((entry, i) => renderEntry(entry, i))}
             </Menubar.Content>
           </Menubar.Portal>
         </Menubar.Menu>

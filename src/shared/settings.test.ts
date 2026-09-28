@@ -24,8 +24,8 @@ describe('settings', () => {
   })
 
   it('keeps a known theme and falls back to Dark', () => {
-    expect(normalizeSettings({ theme: 'night' }).theme).toBe('night')
-    expect(normalizeSettings({ theme: 'light' }).theme).toBe('dark')
+    for (const t of ['night', 'light', 'matrix', 'retro']) expect(normalizeSettings({ theme: t }).theme).toBe(t)
+    expect(normalizeSettings({ theme: 'sepia' }).theme).toBe('dark')
     expect(normalizeSettings({}).theme).toBe('dark')
   })
 

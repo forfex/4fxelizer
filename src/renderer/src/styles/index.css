@@ -119,8 +119,8 @@
     height: 100%;
   }
   html {
-    /* Dark native scrollbars and form widgets. */
-    color-scheme: dark;
+    /* Native scrollbars and form widgets follow the theme. */
+    color-scheme: var(--fx-color-scheme);
   }
   /*
    * Popups and dialogs can reach up over the title bar's drag region. Windows hit-tests drag

@@ -1,12 +1,22 @@
+import { THEME_NAMES, THEMES, type Theme } from '@shared/api'
 import { openImage, redo, undo } from '@/actions'
 import { useApp } from '@/store'
 import { PresetsMenu } from './Presets'
 import { Button } from './ui/button'
-import { MinusIcon, PlusIcon, RedoIcon, ThemeIcon, UndoIcon } from './ui/icons'
-import { Led, Lcd } from './ui/retro'
+import { MinusIcon, PlusIcon, RedoIcon, UndoIcon } from './ui/icons'
+import { Lcd } from './ui/retro'
+import { Select } from './ui/select'
 import { WorkspaceMenu } from './Workspace'
 
 const mod = window.fx.platform === 'darwin' ? '⌘' : 'Ctrl+'
+
+const THEME_HINTS: Record<Theme, string> = {
+  dark: 'Plum with purple and magenta accents',
+  night: 'Neutral greyscale, for dim rooms and judging colors',
+  light: 'Daylight: pale lilac surfaces, dark text',
+  matrix: 'Green phosphor on black',
+  retro: 'Classic silver-grey desktop, navy title bars, square corners'
+}
 
 function Separator() {
   return <div className="mx-1 h-5 w-(--px) shrink-0 bg-edge shadow-[var(--px)_0_0_var(--fx-bevel-light)]" />
@@ -22,7 +32,7 @@ export function Toolbar() {
   const theme = useApp((s) => s.theme)
   const canUndo = useApp((s) => s.past.length > 0)
   const canRedo = useApp((s) => s.future.length > 0)
-  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setTheme, setDiagnosticsOpen, setExportOpen } = useApp.getState()
+  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setTheme, setExportOpen } = useApp.getState()
   const redoKey = window.fx.platform === 'darwin' ? '⇧⌘Z' : 'Ctrl+Y'
 
   return (
@@ -73,22 +83,13 @@ export function Toolbar() {
 
       <div className="flex-1" />
       <WorkspaceMenu />
-      <Button
-        size="icon"
-        onClick={() => setTheme(theme === 'dark' ? 'night' : 'dark')}
-        title={theme === 'dark' ? 'Theme: Dark. Switch to Night (greyscale)' : 'Theme: Night. Switch to Dark'}
-        aria-label={theme === 'dark' ? 'Switch to the Night theme' : 'Switch to the Dark theme'}
-      >
-        <ThemeIcon />
-      </Button>
-      <Separator />
-      {/* The only item that shrinks, so the bar fits the minimum window width. */}
-      <Button variant="ghost" size="sm" className="min-w-0 shrink" onClick={() => setDiagnosticsOpen(true)} title="GPU diagnostics">
-        <Led state={gpu.status === 'ready' ? 'on' : gpu.status === 'error' ? 'error' : 'warn'} />
-        <span className="min-w-0 max-w-64 truncate text-small text-dim">
-          {gpu.status === 'ready' ? gpu.adapter : gpu.status === 'error' ? 'WebGPU unavailable' : 'Starting GPU…'}
-        </span>
-      </Button>
+      <Select
+        className="w-28"
+        title="Interface theme"
+        value={theme}
+        onValueChange={setTheme}
+        options={THEMES.map((t) => ({ value: t, label: THEME_NAMES[t], hint: THEME_HINTS[t] }))}
+      />
     </header>
   )
 }

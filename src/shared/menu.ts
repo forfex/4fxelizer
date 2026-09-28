@@ -1,7 +1,7 @@
 // The app menu, defined once. Main builds the native menu from it (keyboard shortcuts everywhere,
 // the menu bar on macOS); the renderer draws it in the custom title bar on Windows and Linux.
 
-import type { MenuCommand } from './api'
+import { THEME_NAMES, THEMES, type MenuCommand } from './api'
 
 /** Actions main performs itself (clipboard, window, dev tools). */
 export type MenuRole = 'cut' | 'copy' | 'paste' | 'selectAll' | 'togglefullscreen' | 'quit' | 'close' | 'reload' | 'toggleDevTools'
@@ -10,6 +10,7 @@ export type MenuEntry =
   | { kind: 'command'; label: string; command: MenuCommand; accelerator?: string }
   | { kind: 'role'; label: string; role: MenuRole; accelerator?: string }
   | { kind: 'separator' }
+  | { kind: 'submenu'; label: string; items: MenuEntry[] }
 
 export interface MenuSection {
   label: string
@@ -62,8 +63,7 @@ export function appMenu(platform: string, isDev: boolean): MenuSection[] {
         command('Split View', 'toggle-split', 'CmdOrCtrl+\\'),
         command('Tiling View', 'toggle-tile', 'CmdOrCtrl+T'),
         separator,
-        command('Dark Theme', 'theme-dark'),
-        command('Night Theme', 'theme-night'),
+        { kind: 'submenu', label: 'Theme', items: THEMES.map((t) => command(THEME_NAMES[t], `theme-${t}`)) },
         separator,
         role('Toggle Full Screen', 'togglefullscreen', isMac ? 'Ctrl+Cmd+F' : 'F11'),
         ...(isDev ? [separator, role('Reload', 'reload', 'CmdOrCtrl+R'), role('Toggle Developer Tools', 'toggleDevTools', isMac ? 'Alt+Cmd+I' : 'Ctrl+Shift+I')] : [])

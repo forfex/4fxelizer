@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { appMenu, formatAccelerator } from './menu'
+import { appMenu, formatAccelerator, type MenuEntry } from './menu'
+
+/** Every entry, submenus included. */
+const flat = (items: MenuEntry[]): MenuEntry[] => items.flatMap((i) => (i.kind === 'submenu' ? [i, ...flat(i.items)] : [i]))
 
 describe('app menu', () => {
   it('has the same sections on every platform, dev items only in dev', () => {
@@ -7,16 +10,28 @@ describe('app menu', () => {
       expect(appMenu(platform, false).map((s) => s.label)).toEqual(['File', 'Edit', 'View', 'Help'])
     }
     const labels = (dev: boolean): string[] =>
-      appMenu('win32', dev).flatMap((s) => s.items.flatMap((i) => (i.kind === 'separator' ? [] : [i.label])))
+      appMenu('win32', dev).flatMap((s) => flat(s.items).flatMap((i) => (i.kind === 'separator' ? [] : [i.label])))
     expect(labels(false)).not.toContain('Toggle Developer Tools')
     expect(labels(true)).toContain('Toggle Developer Tools')
   })
 
   it('never binds one shortcut twice', () => {
     for (const platform of ['win32', 'darwin']) {
-      const keys = appMenu(platform, true).flatMap((s) => s.items.flatMap((i) => ('accelerator' in i && i.accelerator ? [i.accelerator] : [])))
+      const keys = appMenu(platform, true).flatMap((s) => flat(s.items).flatMap((i) => ('accelerator' in i && i.accelerator ? [i.accelerator] : [])))
       expect(new Set(keys).size).toBe(keys.length)
     }
+  })
+
+  it('lists every theme in View › Theme', () => {
+    const view = appMenu('win32', false).find((s) => s.label === 'View')!
+    const theme = view.items.find((i) => i.kind === 'submenu' && i.label === 'Theme')
+    expect(theme?.kind === 'submenu' && theme.items.map((i) => (i.kind === 'command' ? i.command : null))).toEqual([
+      'theme-dark',
+      'theme-night',
+      'theme-light',
+      'theme-matrix',
+      'theme-retro'
+    ])
   })
 
   it('formats shortcuts per platform', () => {

@@ -34,11 +34,11 @@ export function PanelBody({ className, ...props }: ComponentProps<'div'>) {
   )
 }
 
-/** Classes of the sunken LCD well (readouts and numeric fields): phosphor digits with a faint glow. */
+/** Classes of the sunken LCD well (readouts and numeric fields): phosphor digits with the theme's glow. */
 export const LCD_CLASS = cn(
   'bevel-sunken inline-flex h-control min-w-12 items-center rounded-fx border-px border-edge bg-lcd px-1.5',
   'font-mono text-lcd text-lcd-text tabular-nums',
-  '[text-shadow:0_0_6px_color-mix(in_srgb,var(--fx-lcd-text)_55%,transparent)]'
+  '[text-shadow:var(--fx-lcd-glow)]'
 )
 
 /** Monospace value readout in an inset LCD box. */
