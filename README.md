@@ -9,8 +9,10 @@ Load a texture (drag and drop, or **File › Open**), then shape it with a reord
 - **Adjust**: brightness, contrast, gamma, saturation, hue, levels, sharpen.
 - **Downscale**: nearest, bilinear, bicubic, box, Lanczos, dominant color, median, edge-preserving,
   contrast-aware; longest side / exact size / scale, optional power-of-two.
+- **Upscale**: enlarge ×2–×16 or back to the original size with the N64 3-point filter, bilinear, bicubic
+  or nearest (optional edge wrap for tiling textures). Downscale → Dither → Upscale gives the N64 blur.
 - **Quantize**: snap to a palette (perceptual OKLab or RGB matching) or to N levels per channel (32 = PSX 15-bit).
-- **Dither**: ordered (Bayer 2×2–16×16, blue noise, white noise, IGN, clustered dots, halftone, lines) or
+- **Dither**: ordered (Bayer 2×2–16×16, blue noise, white noise, IGN, clustered dots, halftone, lines, N64 magic square) or
   error diffusion (Floyd–Steinberg, Atkinson, Jarvis–Judice–Ninke, Stucki, Burkes, Sierra ×3); to palette,
   to levels, or pattern only. Palette mixing: offset, two nearest or Knoll. Saturation, and a mask
   (edges, flats, shadows, midtones, highlights, saturated, grays) with strength, gamma and a mask view.
@@ -21,7 +23,7 @@ automatically from the stage's input). Palettes are shared resources: generate t
 (median cut / k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
 `.hex/.gpl/.pal/.act/.ase`, edit and lock colors.
 **Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
-PSX 15-bit, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
+PSX 15-bit, N64, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
 **File › Export** writes PNG (RGBA) or indexed PNG (1/2/4/8-bit, palette order kept, transparency at index 0).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
 
@@ -86,7 +88,7 @@ src/renderer/src/
   gpu/chain.ts       runs the stage stack on the GPU with per-stage caching
   gpu/resources.ts   GPU copies of palettes and the blue-noise texture
   gpu/viewer.*       2D viewer renderer: zoom, split view, pixel grid, alpha checker
-  gpu/passes/        stages: adjust, downscale, quantize, dither
+  gpu/passes/        stages: adjust, downscale, upscale, quantize, dither
   color/             OKLab conversion
   palette/           palette model, generation (worker), file formats, built-ins, auto-regeneration
   dither/            blue-noise generator (void-and-cluster)
