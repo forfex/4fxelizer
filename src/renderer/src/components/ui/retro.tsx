@@ -14,7 +14,8 @@ export function GroupBox({ title, className, children, ...props }: ComponentProp
       )}
       {...props}
     >
-      <legend className="px-1 text-small font-semibold tracking-wide text-dim uppercase">{title}</legend>
+      {/* The legend only interrupts the border, not the bevel shadow: its background hides the shadow behind the title. */}
+      <legend className="bg-panel px-1 text-small font-semibold tracking-wide text-dim uppercase">{title}</legend>
       {children}
     </fieldset>
   )
