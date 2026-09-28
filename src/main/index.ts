@@ -131,6 +131,7 @@ function createWindow(): void {
     minHeight: MIN_WINDOW.height,
     show: false,
     title: '4FXELIZER',
+    icon: join(app.getAppPath(), 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     backgroundColor: '#1d1c1a',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
