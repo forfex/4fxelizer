@@ -11,6 +11,7 @@ describe('settings', () => {
     expect(normalizeSettings({ grid: true, split: 'yes', exportFormat: 'png-rgba', extra: 1 })).toEqual({
       grid: true,
       split: true,
+      tile: false,
       exportFormat: 'png-rgba',
       layout: null,
       workspace: 'essentials',

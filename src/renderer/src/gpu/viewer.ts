@@ -10,6 +10,8 @@ export interface ViewerFrame {
   /** Split position in canvas device pixels, or null for "after" only. */
   splitX: number | null
   grid: boolean
+  /** Copies of the image per side (1, or 3 for the tiling view). */
+  tiles: number
   background: Rgba
   checkerA: Rgba
   checkerB: Rgba
@@ -83,7 +85,7 @@ export class ViewerRenderer {
     const d = this.data
     d.set([width, height, frame.image?.width ?? 1, frame.image?.height ?? 1])
     d.set([frame.view.x, frame.view.y, frame.view.zoom, frame.splitX ?? -1], 4)
-    d.set([frame.grid ? GRID_MIN_TEXEL : 0, CHECKER_SIZE, frame.image ? 1 : 0, 0], 8)
+    d.set([frame.grid ? GRID_MIN_TEXEL : 0, CHECKER_SIZE, frame.image ? 1 : 0, frame.tiles], 8)
     d.set(frame.background, 12)
     d.set(frame.checkerA, 16)
     d.set(frame.checkerB, 20)

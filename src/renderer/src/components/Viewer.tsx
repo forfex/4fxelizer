@@ -4,8 +4,8 @@ import { getEngine } from '@/engine'
 import { cssColor } from '@/lib/pixelSnap'
 import { stageLabel } from '@/gpu/passes'
 import { cn } from '@/lib/utils'
-import { useApp } from '@/store'
-import { pan, pixelAt, splitPosAt, splitScreenX, stepZoom, zoomAt } from '@/viewer/viewport'
+import { tilesOf, useApp } from '@/store'
+import { pan, pixelAt, splitPosAt, splitScreenX, stepZoom, uvAt, zoomAt } from '@/viewer/viewport'
 import { Button } from './ui/button'
 
 const isMac = window.fx.platform === 'darwin'
@@ -65,6 +65,7 @@ export function Viewer() {
         image: s.image,
         splitX: s.split && s.image ? splitScreenX(s.view, s.image, s.splitPos) : null,
         grid: s.grid,
+        tiles: tilesOf(s),
         ...colors
       })
     }
@@ -142,11 +143,11 @@ export function Viewer() {
     const scale = canvas.width / canvas.clientWidth
     const rect = canvas.getBoundingClientRect()
     const point = { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale }
-    const pixel = pixelAt(s.view, s.image, point)
+    const pixel = pixelAt(s.view, s.image, point, tilesOf(s))
     if (!pixel) return
     const splitX = s.split ? splitScreenX(s.view, s.image, s.splitPos) : null
     const side = splitX !== null && Math.floor(point.x) + 0.5 < splitX ? 'before' : 'after'
-    const uv = { u: (point.x - s.view.x) / s.view.zoom / s.image.width, v: (point.y - s.view.y) / s.view.zoom / s.image.height }
+    const uv = uvAt(s.view, s.image, point)
     // Shift keeps the eyedropper armed for more picks.
     if (!e.shiftKey) s.setPicking(false)
     void pickColor(side, uv)
@@ -176,7 +177,7 @@ export function Viewer() {
     if (s.image) {
       const rect = canvas.getBoundingClientRect()
       const point = { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale }
-      s.setCursor(pixelAt(s.view, s.image, point))
+      s.setCursor(pixelAt(s.view, s.image, point, tilesOf(s)))
     }
   }
 
@@ -229,7 +230,7 @@ function SplitHandle({ x, visible, canvas, afterLabel }: SplitHandleProps) {
     const s = useApp.getState()
     if (!e.currentTarget.hasPointerCapture(e.pointerId) || !canvas.current || !s.image) return
     const rect = canvas.current.getBoundingClientRect()
-    s.setSplitPos(splitPosAt(s.view, s.image, (e.clientX - rect.left) * scale))
+    s.setSplitPos(splitPosAt(s.view, s.image, (e.clientX - rect.left) * scale, tilesOf(s)))
   }
   return (
     <>

@@ -26,6 +26,8 @@ export interface UserSettings {
   grid: boolean
   /** Before/after split view. */
   split: boolean
+  /** Tiling view (copies of the texture around it). */
+  tile: boolean
   /** Last format chosen in the Export dialog. */
   exportFormat: ExportFormat
   /** Panel layout as last arranged (dockview JSON); null = build the active workspace fresh. */
@@ -55,6 +57,7 @@ const EXPORT_FORMATS: readonly string[] = EXPORT_FILE_TYPES.flatMap((t) => [`${t
 export const DEFAULT_SETTINGS: UserSettings = {
   grid: false,
   split: true,
+  tile: false,
   exportFormat: 'png-indexed',
   layout: null,
   workspace: 'essentials',
@@ -79,10 +82,11 @@ function normalizeWorkspaces(raw: unknown): SavedWorkspace[] {
 /** Settings from disk with missing or invalid fields replaced by defaults (old files keep working). */
 export function normalizeSettings(raw: unknown): UserSettings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const bool = (key: 'grid' | 'split'): boolean => (typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key])
+  const bool = (key: 'grid' | 'split' | 'tile'): boolean => (typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key])
   return {
     grid: bool('grid'),
     split: bool('split'),
+    tile: bool('tile'),
     exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
     layout: isObject(r.layout) ? r.layout : null,
     workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace.trim() : DEFAULT_SETTINGS.workspace,
@@ -124,6 +128,7 @@ export type MenuCommand =
   | 'zoom-out'
   | 'toggle-grid'
   | 'toggle-split'
+  | 'toggle-tile'
   | 'gpu-diagnostics'
 
 export interface FxApi {

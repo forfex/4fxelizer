@@ -348,6 +348,7 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'zoom-out': return app.zoomStep(-1)
     case 'toggle-grid': return app.toggleGrid()
     case 'toggle-split': return app.toggleSplit()
+    case 'toggle-tile': return app.toggleTile()
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
   }
 }
