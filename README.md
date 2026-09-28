@@ -1,6 +1,6 @@
 # 4FXELIZER
 
-PSX-style texture stylizer. See [PLAN.md](PLAN.md) for the full design and roadmap.
+PSX-style texture stylizer. See [docs/PLAN.md](docs/PLAN.md) for the full design and roadmap.
 
 ## Commands
 

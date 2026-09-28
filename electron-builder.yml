@@ -19,7 +19,7 @@ nsis:
 mac:
   target: dmg
   category: public.app-category.graphics-design
-  # Signing + notarization need an Apple Developer account (see PLAN.md risks).
+  # Signing + notarization need an Apple Developer account (see docs/PLAN.md risks).
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
