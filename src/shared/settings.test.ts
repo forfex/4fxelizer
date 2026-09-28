@@ -11,10 +11,26 @@ describe('settings', () => {
     expect(normalizeSettings({ grid: true, split: 'yes', exportFormat: 'png-rgba', extra: 1 })).toEqual({
       grid: true,
       split: true,
-      exportFormat: 'png-rgba'
+      exportFormat: 'png-rgba',
+      layout: null,
+      workspace: 'essentials',
+      workspaces: []
     })
     expect(normalizeSettings({ exportFormat: 'tiff' }).exportFormat).toBe('png-indexed')
     for (const f of ['tga-indexed', 'tga-rgba', 'bmp-indexed', 'bmp-rgba']) expect(normalizeSettings({ exportFormat: f }).exportFormat).toBe(f)
     expect(normalizeSettings({ exportFormat: 'bmp-cmyk' }).exportFormat).toBe('png-indexed')
+  })
+
+  it('keeps panel layouts and saved workspaces, dropping broken entries', () => {
+    const layout = { grid: {} }
+    const s = normalizeSettings({
+      layout,
+      workspace: 'Mine',
+      workspaces: [{ name: ' Mine ', layout }, { name: '', layout }, { name: 'x', layout: 'nope' }, 7, { name: 'Mine', layout: { v: 2 } }]
+    })
+    expect(s.layout).toBe(layout)
+    expect(s.workspace).toBe('Mine')
+    expect(s.workspaces).toEqual([{ name: 'Mine', layout: { v: 2 } }])
+    expect(normalizeSettings({ layout: [1], workspace: '  ' })).toMatchObject({ layout: null, workspace: 'essentials' })
   })
 })

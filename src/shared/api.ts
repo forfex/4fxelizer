@@ -26,7 +26,22 @@ export interface UserSettings {
   split: boolean
   /** Last format chosen in the Export dialog. */
   exportFormat: ExportFormat
+  /** Panel layout as last arranged (dockview JSON); null = build the active workspace fresh. */
+  layout: object | null
+  /** Active workspace: a built-in workspace id, or the name of a saved one. */
+  workspace: string
+  /** Workspaces the user saved (Workspace › Save workspace as…). */
+  workspaces: SavedWorkspace[]
 }
+
+export interface SavedWorkspace {
+  name: string
+  /** dockview JSON. */
+  layout: object
+}
+
+/** Most saved workspaces kept (oldest dropped first). */
+export const MAX_WORKSPACES = 32
 
 export const EXPORT_FILE_TYPES = ['png', 'tga', 'bmp'] as const
 export type ExportFileType = (typeof EXPORT_FILE_TYPES)[number]
@@ -38,7 +53,25 @@ const EXPORT_FORMATS: readonly string[] = EXPORT_FILE_TYPES.flatMap((t) => [`${t
 export const DEFAULT_SETTINGS: UserSettings = {
   grid: false,
   split: true,
-  exportFormat: 'png-indexed'
+  exportFormat: 'png-indexed',
+  layout: null,
+  workspace: 'essentials',
+  workspaces: []
+}
+
+const isObject = (v: unknown): v is object => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+function normalizeWorkspaces(raw: unknown): SavedWorkspace[] {
+  if (!Array.isArray(raw)) return []
+  const byName = new Map<string, SavedWorkspace>()
+  for (const w of raw) {
+    if (!isObject(w)) continue
+    const { name, layout } = w as Record<string, unknown>
+    if (typeof name !== 'string' || !name.trim() || !isObject(layout)) continue
+    byName.delete(name.trim()) // a later entry with the same name wins
+    byName.set(name.trim(), { name: name.trim(), layout })
+  }
+  return [...byName.values()].slice(-MAX_WORKSPACES)
 }
 
 /** Settings from disk with missing or invalid fields replaced by defaults (old files keep working). */
@@ -48,7 +81,10 @@ export function normalizeSettings(raw: unknown): UserSettings {
   return {
     grid: bool('grid'),
     split: bool('split'),
-    exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat
+    exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
+    layout: isObject(r.layout) ? r.layout : null,
+    workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace : DEFAULT_SETTINGS.workspace,
+    workspaces: normalizeWorkspaces(r.workspaces)
   }
 }
 
