@@ -29,9 +29,11 @@ import { MapsPanel } from './MapsPanel'
 import { GeneratePanel, PalettePanel } from './PalettePanel'
 import { StackPanel } from './StackPanel'
 import { Button } from './ui/button'
+import { INPUT_CLASS } from './ui/controls'
 import { Dialog, DialogClose, DialogContent } from './ui/dialog'
 import { ErrorBoundary } from './ErrorBoundary'
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
+import { Menu, MENU_MARK_CLASS, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
+import { CaretIcon } from './ui/icons'
 import { Viewer } from './Viewer'
 
 /** dockview theme whose CSS variables map onto our --fx-* tokens (styles/dock.css). */
@@ -121,7 +123,8 @@ export function WorkspaceMenu() {
       <Menu>
         <MenuTrigger asChild>
           <Button title="Panel layout: switch, save or reset workspaces, show or hide panels">
-            {workspaceName(workspace)} ▾
+            {workspaceName(workspace)}
+            <CaretIcon open className="text-dim" />
           </Button>
         </MenuTrigger>
         <MenuContent align="end" className="w-64">
@@ -166,8 +169,9 @@ export function WorkspaceMenu() {
   )
 }
 
+/** The selected mark in a menu item's gutter. */
 function Check({ on }: { on: boolean }) {
-  return <span className="w-4 shrink-0 text-accent">{on ? '✓' : ''}</span>
+  return on ? <span className={MENU_MARK_CLASS} /> : null
 }
 
 function SaveWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
@@ -191,7 +195,7 @@ function SaveWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <p className="text-small text-dim">Saves where every panel is docked or floating, and its size.</p>
           <input
             autoFocus
-            className="bevel-sunken h-6 w-full rounded-fx bg-well px-1.5 outline-none"
+            className={INPUT_CLASS}
             placeholder="Workspace name"
             aria-label="Workspace name"
             value={name}

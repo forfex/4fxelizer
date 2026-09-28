@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Menubar } from 'radix-ui'
+import { useShallow } from 'zustand/react/shallow'
+import type { MenuCommand } from '@shared/api'
 import { appMenu, formatAccelerator, type MenuEntry } from '@shared/menu'
 import { runMenuCommand } from '@/actions'
 import iconUrl from '@/assets/icon.svg'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
-import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_SEPARATOR_CLASS } from './ui/menu'
+import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_MARK_CLASS, MENU_SEPARATOR_CLASS } from './ui/menu'
 
 const platform = window.fx.platform
 const isMac = platform === 'darwin'
@@ -46,21 +48,24 @@ export function TitleBar() {
   return (
     <header
       ref={header}
-      className="flex h-(--fx-titlebar-height) shrink-0 items-center bg-(--fx-titlebar-bg)"
+      className="flex h-(--fx-titlebar-height) shrink-0 items-center border-b-px border-edge bg-(--fx-titlebar-bg)"
       // Windows/Linux: clear of the native window buttons (outside the title bar area).
       style={isMac ? undefined : { paddingRight: 'calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))' }}
     >
       {isMac && <span className="h-full w-(--fx-titlebar-mac-inset) shrink-0 [-webkit-app-region:drag]" />}
       {!isMac && (
         <>
-          <span className="flex h-full shrink-0 items-center px-2 [-webkit-app-region:drag]">
+          <span className="flex h-full w-9 shrink-0 items-center justify-center [-webkit-app-region:drag]">
             <img src={iconUrl} alt="" className="size-4" draggable={false} />
           </span>
           <AppMenuBar />
         </>
       )}
       <span className="flex h-full min-w-0 flex-1 items-center justify-center px-4 [-webkit-app-region:drag]">
-        <span className="truncate text-small text-(--fx-titlebar-text)">{title}</span>
+        <span className="truncate text-[12px] leading-4 font-medium text-(--fx-titlebar-text)">
+          {imageName && `${imageName} — `}
+          <b className="font-display font-bold tracking-[0.08em] text-(--fx-titlebar-symbol)">4FXELIZER</b>
+        </span>
       </span>
     </header>
   )
@@ -73,6 +78,16 @@ export function TitleBar() {
 function AppMenuBar() {
   const root = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState('')
+  // Commands that are on/off states show the selected mark in the menu.
+  const checked = useApp(
+    useShallow((s): Partial<Record<MenuCommand, boolean>> => ({
+      'toggle-grid': s.grid,
+      'toggle-split': s.split,
+      'toggle-tile': s.tile,
+      'theme-dark': s.theme === 'dark',
+      'theme-night': s.theme === 'night'
+    }))
+  )
   // Clipboard actions must reach the field that was focused before the menu took focus. Recorded
   // before Radix moves focus (pointer down, or the keyboard shortcuts below).
   const lastFocus = useRef<HTMLElement | null>(null)
@@ -149,8 +164,7 @@ function AppMenuBar() {
           <Menubar.Trigger
             className={cn(
               'flex h-6 cursor-default items-center rounded-fx px-2 outline-none select-none',
-              'hover:bg-panel-hi data-[state=open]:bg-accent data-[state=open]:text-accent-text',
-              'focus-visible:outline-px focus-visible:outline-dotted focus-visible:outline-accent'
+              'hover:bg-accent-soft data-[state=open]:bg-accent-soft focus-visible:ring-focus'
             )}
           >
             {section.label}
@@ -168,9 +182,10 @@ function AppMenuBar() {
                   <Menubar.Separator key={i} className={MENU_SEPARATOR_CLASS} />
                 ) : (
                   <Menubar.Item key={entry.label} className={MENU_ITEM_CLASS} onSelect={() => run(entry)}>
+                    {entry.kind === 'command' && checked[entry.command] && <span className={MENU_MARK_CLASS} />}
                     {entry.label}
                     {entry.accelerator && (
-                      <span className="ml-auto pl-6 font-mono text-small opacity-70">{formatAccelerator(entry.accelerator, platform)}</span>
+                      <kbd className="ml-auto pl-6 font-mono text-[10px] leading-3.5 text-dim">{formatAccelerator(entry.accelerator, platform)}</kbd>
                     )}
                   </Menubar.Item>
                 )

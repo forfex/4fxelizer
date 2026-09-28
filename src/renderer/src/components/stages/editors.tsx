@@ -55,7 +55,7 @@ export function PaletteStrip({ palette }: { palette: Palette }) {
   return (
     <button
       type="button"
-      className="bevel-sunken flex h-2.5 w-full overflow-hidden"
+      className="bevel-sunken flex h-2.5 w-full overflow-hidden rounded-[2px] border-px border-edge"
       title="Edit this palette"
       onClick={() => useApp.getState().selectPalette(palette.id)}
     >
@@ -209,9 +209,9 @@ function DownscaleEditor({ params: p, set, info }: EditorProps<DownscaleParams>)
       {p.sizeMode === 'longest' && (
         <Field label="">
           <NumberField className="w-16 shrink-0" value={p.longest} min={1} max={8192} onChange={(longest) => set({ longest })} suffix="px" />
-          <div className="flex min-w-0 flex-1 gap-px">
+          <div className="flex min-w-32 flex-1 gap-0.5">
             {SIZE_PRESETS.map((n) => (
-              <Button key={n} size="sm" className="min-w-0 flex-1 px-0" aria-pressed={p.longest === n} onClick={() => set({ longest: n })}>
+              <Button key={n} size="sm" className="min-w-0 flex-1 px-0 font-mono text-[10px]" aria-pressed={p.longest === n} onClick={() => set({ longest: n })}>
                 {n}
               </Button>
             ))}
@@ -550,7 +550,7 @@ function MaskSourceField({
   })
   return (
     <Field label={label} hint={DITHER_MASKS.find((m) => m.id === value)?.hint ?? hint}>
-      <Select className="min-w-0 flex-1" value={value} onValueChange={onChange} options={options} />
+      <Select className="min-w-28 flex-1" value={value} onValueChange={onChange} options={options} />
       <Checkbox checked={invert} disabled={value === 'none'} onCheckedChange={onInvert} label="Inv" hint="Invert: swap white and black." />
       {children}
     </Field>

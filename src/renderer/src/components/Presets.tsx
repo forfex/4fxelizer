@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
+import { INPUT_CLASS } from './ui/controls'
 import { Dialog, DialogContent } from './ui/dialog'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/menu'
 
@@ -116,7 +117,7 @@ export function PresetsDialog() {
             <span className="text-small font-semibold tracking-wide text-dim uppercase">Save current stack as</span>
             <div className="flex gap-1.5">
               <input
-                className="bevel-sunken h-7 min-w-0 flex-1 rounded-fx bg-well px-2 outline-none"
+                className={cn(INPUT_CLASS, 'flex-1')}
                 value={name}
                 aria-label="Preset name"
                 autoFocus
