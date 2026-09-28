@@ -59,7 +59,9 @@ automatically from the stage's input). Palettes are shared resources: generate t
 (**Pick**, or Alt+click the viewer).
 **Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
 PSX 15-bit, N64, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
-Grid, split view, the export format and the window size and position are remembered between sessions.
+Panels dock, tab together, float over the viewer and resize, like in Photoshop; the toolbar's workspace menu
+switches between built-in layouts (Essentials, Wide viewer, Palette editing, Floating), saves your own and resets them.
+Grid, split view, the export format, the panel layout and the window size and position are remembered between sessions.
 **File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
 BMP has no transparency).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
