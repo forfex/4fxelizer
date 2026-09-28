@@ -17,9 +17,12 @@ export function App() {
 
   useEffect(() => {
     const { setGpu } = useApp.getState()
+    // StrictMode runs this effect twice; only the run that wasn't cleaned up may register.
+    let cancelled = false
     let stopController: (() => void) | undefined
     startEngine()
       .then((engine) => {
+        if (cancelled) return
         stopController = startPaletteController(engine)
         setGpu({ status: 'ready', adapter: adapterLabel(engine.gpu.adapter) })
         engine.gpu.device.lost.then((info) => {
@@ -27,7 +30,10 @@ export function App() {
         })
       })
       .catch((e: Error) => setGpu({ status: 'error', message: e.message }))
-    return () => stopController?.()
+    return () => {
+      cancelled = true
+      stopController?.()
+    }
   }, [])
 
   useEffect(() => window.fx.onMenuCommand(runMenuCommand), [])
