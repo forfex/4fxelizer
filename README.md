@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="site/icon.svg" alt="" width="96" height="96">
+
 # 4FXELIZER
 
 **Turn high-res textures into crunchy PSX-style low-res, palettized, dithered ones.**
