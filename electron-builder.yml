@@ -9,6 +9,8 @@ files:
   - package.json
   - build/icon.png
   - build/icon.ico
+  - LICENSE
+  - THIRD_PARTY_NOTICES.md
 # The renderer bundles all its deps; main/preload have no runtime deps.
 npmRebuild: false
 win:
