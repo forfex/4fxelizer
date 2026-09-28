@@ -4,7 +4,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const ROOTS = ['react', 'react-dom', 'radix-ui', 'zustand', 'clsx', 'class-variance-authority', 'tailwind-merge']
+const ROOTS = ['react', 'react-dom', 'radix-ui', 'dockview-react', 'zustand', 'clsx', 'class-variance-authority', 'tailwind-merge']
 
 const read = (dir, file) => (existsSync(join(dir, file)) ? readFileSync(join(dir, file), 'utf8') : null)
 const pkgDir = (name) => join('node_modules', name)
