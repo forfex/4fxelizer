@@ -36,6 +36,8 @@
   --fx-titlebar-bg: var(--fx-bg);
   --fx-titlebar-text: var(--fx-text-dim);
   --fx-titlebar-symbol: var(--fx-text);
+  /* macOS: room for the traffic lights at the title bar's left */
+  --fx-titlebar-mac-inset: 80px;
 
   /* Dockable panels */
   --fx-dock-gap: 4px;

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Menubar } from 'radix-ui'
 import { appMenu, formatAccelerator, type MenuEntry } from '@shared/menu'
 import { runMenuCommand } from '@/actions'
@@ -25,6 +25,7 @@ function tokenRgb(token: string): string {
  * menus stay in the system menu bar.
  */
 export function TitleBar() {
+  const header = useRef<HTMLElement>(null)
   const imageName = useApp((s) => s.image?.name ?? null)
   const title = imageName ? `${imageName} — 4FXELIZER` : '4FXELIZER'
 
@@ -33,7 +34,8 @@ export function TitleBar() {
   }, [title])
 
   useEffect(() => {
-    const height = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fx-titlebar-height')) || 32
+    // The rendered height, so the token may use any CSS unit.
+    const height = header.current?.getBoundingClientRect().height || 32
     window.fx.setTitleBarOverlay({ color: tokenRgb('--fx-titlebar-bg'), symbolColor: tokenRgb('--fx-titlebar-symbol'), height })
   }, [])
 
@@ -42,10 +44,12 @@ export function TitleBar() {
   // mouse clicks, because Windows hit-tests drag regions before the page sees the click.
   return (
     <header
-      className={cn('flex h-(--fx-titlebar-height) shrink-0 items-center bg-(--fx-titlebar-bg)', isMac && 'pl-20')}
+      ref={header}
+      className="flex h-(--fx-titlebar-height) shrink-0 items-center bg-(--fx-titlebar-bg)"
       // Windows/Linux: clear of the native window buttons (outside the title bar area).
       style={isMac ? undefined : { paddingRight: 'calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))' }}
     >
+      {isMac && <span className="h-full w-(--fx-titlebar-mac-inset) shrink-0 [-webkit-app-region:drag]" />}
       {!isMac && (
         <>
           <span className="flex h-full shrink-0 items-center px-2 [-webkit-app-region:drag]">
@@ -61,10 +65,62 @@ export function TitleBar() {
   )
 }
 
-/** File / Edit / View / Help, from the same definition as the native menu. */
+/**
+ * File / Edit / View / Help, from the same definition as the native menu. Keyboard access like a
+ * native menu bar: Alt or F10 focuses it, Alt+letter opens that menu.
+ */
 function AppMenuBar() {
-  // Clipboard actions must reach the field that was focused before the menu took focus.
+  const root = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState('')
+  // Clipboard actions must reach the field that was focused before the menu took focus. Recorded
+  // before Radix moves focus (pointer down, or the keyboard shortcuts below).
   const lastFocus = useRef<HTMLElement | null>(null)
+  const remember = (): void => {
+    const active = document.activeElement as HTMLElement | null
+    if (!root.current?.contains(active)) lastFocus.current = active
+  }
+
+  useEffect(() => {
+    let altAlone = false
+    const firstTrigger = (): HTMLElement | null => root.current?.querySelector('button') ?? null
+    const onKeyDown = (e: KeyboardEvent): void => {
+      altAlone = e.key === 'Alt' && !e.ctrlKey && !e.shiftKey && !e.metaKey
+      if (e.key === 'F10' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+        e.preventDefault()
+        remember()
+        firstTrigger()?.focus()
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.length === 1) {
+        const section = MENU.find((m) => m.label[0]!.toLowerCase() === e.key.toLowerCase())
+        if (section) {
+          e.preventDefault()
+          remember()
+          setOpen(section.label)
+        }
+      }
+    }
+    const onKeyUp = (e: KeyboardEvent): void => {
+      if (e.key !== 'Alt' || !altAlone) return
+      altAlone = false
+      if (root.current?.contains(document.activeElement)) return
+      remember()
+      firstTrigger()?.focus()
+    }
+    // Alt held for a click (the eyedropper) or another shortcut isn't an Alt press on its own.
+    const cancel = (): void => {
+      altAlone = false
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keyup', onKeyUp, true)
+    window.addEventListener('pointerdown', cancel, true)
+    window.addEventListener('blur', cancel)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keyup', onKeyUp, true)
+      window.removeEventListener('pointerdown', cancel, true)
+      window.removeEventListener('blur', cancel)
+    }
+  }, [])
+
   const run = (entry: MenuEntry): void => {
     if (entry.kind === 'command') runMenuCommand(entry.command)
     else if (entry.kind === 'role') {
@@ -74,14 +130,21 @@ function AppMenuBar() {
   }
   return (
     <Menubar.Root
+      ref={root}
       className="flex h-full shrink-0 items-center [-webkit-app-region:no-drag]"
-      onValueChange={(value) => {
-        if (value && !lastFocus.current) lastFocus.current = document.activeElement as HTMLElement | null
-        if (!value) lastFocus.current = null
+      value={open}
+      onValueChange={setOpen}
+      // Menu items are portalled but still bubble through here in React; only presses on the bar count.
+      onPointerDownCapture={(e) => root.current?.contains(e.target as Node) && remember()}
+      // Escape on a focused (closed) menu button hands focus back, like leaving a native menu bar.
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || open) return
+        lastFocus.current?.focus()
+        if (root.current?.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
       }}
     >
       {MENU.map((section) => (
-        <Menubar.Menu key={section.label}>
+        <Menubar.Menu key={section.label} value={section.label}>
           <Menubar.Trigger
             className={cn(
               'flex h-6 cursor-default items-center rounded-fx px-2 outline-none select-none',
