@@ -57,6 +57,22 @@ On Linux the app adds `--enable-unsafe-webgpu --enable-features=Vulkan`. Launch 
 | macOS | not yet tested |
 | Linux | not yet tested |
 
+## CI and releases
+
+`.github/workflows/ci.yml` runs on every push and pull request, on Windows, macOS and Linux: typecheck,
+unit tests, bundle, a headless launch of the app (`scripts/gpu-smoke.mjs`, which uses `--gpu-report`) and an
+unpacked package build. The launch must succeed; missing WebGPU only warns, because hosted runners have no GPU
+(each run uploads the GPU report as an artifact).
+
+`.github/workflows/release.yml` builds the installers (Windows NSIS, macOS dmg for x64 and arm64, Linux
+AppImage + deb) and publishes a GitHub release when a `v*` tag is pushed. Bump `version` in `package.json`
+first; the tag must match it:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Layout
 
 ```

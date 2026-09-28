@@ -22,7 +22,7 @@ mac:
   # Signing + notarization need an Apple Developer account (see docs/PLAN.md risks).
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   target:
     - AppImage
