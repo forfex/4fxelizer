@@ -69,6 +69,15 @@ describe('toIndexed', () => {
   it('counts colors', () => {
     expect(countColors(rgba(3, 1, [[1, 1, 1, 255], [1, 1, 1, 255], [5, 5, 5, 0]]))).toBe(2)
   })
+
+  it('indexes semi-transparent pixels as opaque when the palette has no alpha', () => {
+    const img = rgba(3, 1, [[10, 20, 30, 255], [10, 20, 30, 128], [0, 0, 0, 0]])
+    expect(toIndexed(img).palette).toHaveLength(3)
+    const out = toIndexed(img, undefined, { alpha: false })
+    expect(out.palette).toEqual([[0, 0, 0, 0], [10, 20, 30, 255]])
+    expect([...out.indices]).toEqual([1, 1, 0])
+    expect(countColors(img, 257, false)).toBe(2)
+  })
 })
 
 describe('encodeIndexedPng', () => {

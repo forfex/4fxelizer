@@ -57,7 +57,8 @@ export function ExportDialog() {
   }
   const palette = palettes.find((p) => p.id === paletteChoice)
   // Fully transparent pixels share one extra entry at index 0 when exporting against a palette.
-  const entries = output && (palette ? palette.colors.length + (output.transparent ? 1 : 0) : output.colors)
+  const entries =
+    output && (palette ? palette.colors.length + (output.transparent ? 1 : 0) : encoder.indexedAlpha ? output.colors : output.opaqueColors)
   const tooManyColors = indexed && entries !== null && entries > MAX_INDEXED
   let summary = ''
   if (!indexed) {
@@ -69,8 +70,9 @@ export function ExportDialog() {
     const depth = encoder.indexedDepth(entries)
     summary = `${entries} palette entries → ${depth}-bit indexed`
     if (output.transparent) {
-      summary += type === 'bmp' ? '. BMP has no transparency: transparent pixels use index 0 (black)' : ', transparent pixels at index 0'
+      summary += encoder.indexedAlpha ? ', transparent pixels at index 0' : `. ${encoder.label} has no transparency: transparent pixels use index 0 (black)`
     }
+    if (output.translucent && !encoder.indexedAlpha) summary += '. Semi-transparent pixels become opaque'
     if (entries === 17 && output.transparent && depth === 8 && encoder.indexedDepth(16) === 4) {
       summary += '. Use 15 colors to fit 4-bit (16 entries) with transparency'
     }

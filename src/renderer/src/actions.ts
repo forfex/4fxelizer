@@ -2,7 +2,7 @@ import type { ExportFileType, ExportFormat, FileFilter, MenuCommand } from '@sha
 import { getEngine } from '@/engine'
 import { decodeImage } from '@/image/decode'
 import { bmpBitDepth, encodeBmp, encodeIndexedBmp } from '@/image/bmp'
-import { countColors, hasTransparency, toIndexed } from '@/image/indexed'
+import { countColors, hasTranslucency, hasTransparency, toIndexed } from '@/image/indexed'
 import { encodeIndexedPng, encodePng, indexedBitDepth, type IndexedImage, type RgbaImage } from '@/image/png'
 import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
@@ -59,12 +59,14 @@ interface Encoder {
   indexed(image: IndexedImage): Uint8Array | Promise<Uint8Array>
   /** Bits per pixel for an indexed image with `count` palette entries. */
   indexedDepth(count: number): number
+  /** Whether an indexed file's palette stores alpha. */
+  indexedAlpha: boolean
 }
 
 export const ENCODERS: Record<ExportFileType, Encoder> = {
-  png: { label: 'PNG', filter: { name: 'PNG image', extensions: ['png'] }, rgba: encodePng, indexed: encodeIndexedPng, indexedDepth: indexedBitDepth },
-  tga: { label: 'TGA', filter: { name: 'TGA image', extensions: ['tga'] }, rgba: encodeTga, indexed: encodeIndexedTga, indexedDepth: () => 8 },
-  bmp: { label: 'BMP', filter: { name: 'BMP image', extensions: ['bmp'] }, rgba: encodeBmp, indexed: encodeIndexedBmp, indexedDepth: bmpBitDepth }
+  png: { label: 'PNG', filter: { name: 'PNG image', extensions: ['png'] }, rgba: encodePng, indexed: encodeIndexedPng, indexedDepth: indexedBitDepth, indexedAlpha: true },
+  tga: { label: 'TGA', filter: { name: 'TGA image', extensions: ['tga'] }, rgba: encodeTga, indexed: encodeIndexedTga, indexedDepth: () => 8, indexedAlpha: true },
+  bmp: { label: 'BMP', filter: { name: 'BMP image', extensions: ['bmp'] }, rgba: encodeBmp, indexed: encodeIndexedBmp, indexedDepth: bmpBitDepth, indexedAlpha: false }
 }
 
 export function parseExportFormat(format: ExportFormat): { type: ExportFileType; indexed: boolean } {
@@ -80,14 +82,25 @@ export interface OutputSummary {
   height: number
   /** Distinct colors (all fully transparent pixels count as one); stops counting at 257. */
   colors: number
+  /** Like `colors`, but colors that differ only in alpha count once (for palettes without alpha). */
+  opaqueColors: number
   transparent: boolean
+  /** Some pixels are semi-transparent. */
+  translucent: boolean
 }
 
 export async function describeOutput(): Promise<OutputSummary | null> {
   const engine = getEngine()
   if (!engine || !useApp.getState().image) return null
   const image = await engine.readOutput()
-  return { width: image.width, height: image.height, colors: countColors(image), transparent: hasTransparency(image) }
+  return {
+    width: image.width,
+    height: image.height,
+    colors: countColors(image),
+    opaqueColors: countColors(image, 257, false),
+    transparent: hasTransparency(image),
+    translucent: hasTranslucency(image)
+  }
 }
 
 /** Returns true when the file was written. */
@@ -103,7 +116,7 @@ export async function exportImage(options: ExportOptions): Promise<boolean> {
     let detail: string
     if (indexed) {
       const palette = options.paletteId ? palettes.find((p) => p.id === options.paletteId) : undefined
-      const image = toIndexed(rgba, palette?.colors.map((c) => c.hex))
+      const image = toIndexed(rgba, palette?.colors.map((c) => c.hex), { alpha: encoder.indexedAlpha })
       bytes = await encoder.indexed(image)
       detail = `${image.palette.length} colors, ${encoder.indexedDepth(image.palette.length)}-bit indexed`
     } else {
