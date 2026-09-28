@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-4FXELIZER is an Electron desktop app that turns high-res textures into PSX-style low-res, palettized, dithered textures. Target users are artists, not programmers. `docs/PLAN.md` holds the full design, visual-style rules and roadmap. The app currently covers the 2D workflow: Adjust, Downscale, Upscale, Quantize and Dither stages, project palettes (generate / edit / import / export) plus per-stage generated palettes (up to 8192 colors), presets, undo, a palette eyedropper, and PNG / TGA / BMP export (full color or indexed). It has been verified on Windows only; keep macOS/Linux supported (no platform-specific code paths beyond `src/main/gpuFlags.ts`, menu accelerators and the window icon format (`.ico` on Windows)).
+4FXELIZER is an Electron desktop app that turns high-res textures into PSX-style low-res, palettized, dithered textures. Target users are artists, not programmers. `docs/PLAN.md` holds the full design, visual-style rules and roadmap. The app currently covers the 2D workflow: Adjust, Downscale, Upscale, Quantize and Dither stages, project palettes (generate / edit / import / export) plus per-stage generated palettes (up to 8192 colors), presets, undo, a palette eyedropper, and PNG / TGA / BMP export (full color or indexed). It has been verified on Windows only; keep macOS/Linux supported (no platform-specific code paths beyond `src/main/gpuFlags.ts`, menu accelerators, the window icon format (`.ico` on Windows) and the title bar (see below)).
 
 ## Commands
 
@@ -23,6 +23,8 @@ WebGPU check on a machine: `npm run build`, then `npx electron . --gpu-report`. 
 Three Electron processes share one IPC contract:
 
 - `src/shared/api.ts`: the `FxApi` interface (exposed as `window.fx`), the `IPC` channel names and `MenuCommand`. Change the contract here first, then update main (`ipcMain.handle`) and preload.
+- `src/shared/menu.ts` defines the app menu once (`appMenu`). Main builds the native menu from it (keyboard shortcuts everywhere, the real menu bar on macOS); the renderer draws it in the custom title bar (`components/TitleBar.tsx`) on Windows/Linux. Add menu items there, never in only one place. Command items send a `MenuCommand`; role items (clipboard, full screen, quit) are performed by main (`runMenuRole`).
+- Title bar: the window uses `titleBarStyle: 'hidden'`. Windows/Linux keep the native window buttons as a `titleBarOverlay`, which the renderer colors from `--fx-titlebar-*` tokens at startup (`setTitleBarOverlay`); the title bar keeps clear of them with the `env(titlebar-area-*)` CSS variables. macOS keeps its traffic lights. The title bar is a drag region (`-webkit-app-region: drag`); interactive parts inside it need `no-drag`.
 - `src/main/`: window, native menu (menu items send `MenuCommand`s to the renderer), file dialogs, GPU flags, `--gpu-report` mode. The window uses `sandbox: true` + `contextIsolation`, so the preload **must build as CommonJS** (`.cjs`, configured in `electron.vite.config.ts`).
 - `src/renderer/src/`: React UI plus all image processing, done on the GPU.
 
