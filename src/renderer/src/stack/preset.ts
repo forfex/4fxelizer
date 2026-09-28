@@ -25,7 +25,7 @@ export class PresetError extends Error {}
  * (only locked ones), since they are rebuilt from whatever texture the preset is applied to.
  */
 export function serializePreset(doc: Doc, name: string): string {
-  const palettes = doc.palettes.map((p) =>
+  const palettes = doc.palettes.map(({ generatedFor: _generatedFor, ...p }) =>
     p.generator?.auto ? { ...p, colors: p.colors.filter((c) => c.locked) } : p
   )
   // Pick the document fields explicitly: callers may pass the whole app state.

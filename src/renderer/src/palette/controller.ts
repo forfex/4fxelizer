@@ -53,6 +53,7 @@ export async function generatePaletteNow(paletteId: string, opts: { silent?: boo
     return
   }
   const settings = palette.generator
+  const generatedFor = generationKey(palette, input.key)
   app.setPaletteJob(paletteId, { status: 'running' })
   try {
     const pixels = await engine.samplePixels(input.key)
@@ -60,7 +61,9 @@ export async function generatePaletteNow(paletteId: string, opts: { silent?: boo
     const colors = await generatePaletteAsync(pixels.data, { ...settings, locked })
     const current = useApp.getState().palettes.find((p) => p.id === paletteId)
     if (!current) return
-    useApp.getState().updatePalette(paletteId, { colors: mergeGenerated(current.colors, colors, settings.count) }, opts)
+    useApp
+      .getState()
+      .updatePalette(paletteId, { colors: mergeGenerated(current.colors, colors, settings.count), generatedFor }, opts)
     useApp.getState().setPaletteJob(paletteId, null)
   } catch (e) {
     useApp.getState().setPaletteJob(paletteId, { status: 'error', message: errorText(e) })
@@ -68,7 +71,8 @@ export async function generatePaletteNow(paletteId: string, opts: { silent?: boo
 }
 
 export function startPaletteController(engine: Engine): () => void {
-  const lastKey = new Map<string, string>()
+  /** Key of the generation scheduled or running per palette (cleared once it finishes). */
+  const pendingKey = new Map<string, string>()
   const timers = new Map<string, number>()
   const running = new Map<string, Promise<void>>()
 
@@ -79,11 +83,12 @@ export function startPaletteController(engine: Engine): () => void {
       window.setTimeout(async () => {
         timers.delete(id)
         await running.get(id)
-        if (lastKey.get(id) !== key) return // superseded while waiting
+        if (pendingKey.get(id) !== key) return // superseded while waiting
         const job = generatePaletteNow(id, { silent: true })
         running.set(id, job)
         await job
         running.delete(id)
+        if (pendingKey.get(id) === key) pendingKey.delete(id)
       }, DEBOUNCE_MS)
     )
   }
@@ -105,13 +110,14 @@ export function startPaletteController(engine: Engine): () => void {
         if (job?.status !== 'blocked' || job.message !== input.blocked) {
           setPaletteJob(palette.id, { status: 'blocked', message: input.blocked })
         }
-        lastKey.delete(palette.id)
+        pendingKey.delete(palette.id)
         continue
       }
       if (paletteJobs[palette.id]?.status === 'blocked') setPaletteJob(palette.id, null)
       const key = generationKey(palette, input.key)
-      if (lastKey.get(palette.id) === key) continue
-      lastKey.set(palette.id, key)
+      // Colors already match (also after an undo that restored them), or a run is on its way.
+      if (palette.generatedFor === key || pendingKey.get(palette.id) === key) continue
+      pendingKey.set(palette.id, key)
       schedule(palette.id, key)
     }
   })

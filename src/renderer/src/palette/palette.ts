@@ -33,6 +33,11 @@ export interface Palette {
   generator?: GeneratorSettings
   /** Set when a stage owns this palette ("Generated" in Quantize/Dither): it lives and dies with the stage. */
   ownerUid?: string
+  /**
+   * Generation key (input image + settings) the colors were generated for. Lives in the document,
+   * so undo/redo restores it together with the colors; not saved in presets.
+   */
+  generatedFor?: string
 }
 
 /** Largest palette a stage can use (dithering/quantizing works with thousands of colors). */

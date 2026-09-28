@@ -35,8 +35,10 @@ describe('presets', () => {
     const doc = initialDoc()
     const owned = doc.palettes[0]!
     owned.colors = [{ hex: '#000000' }, { hex: '#ffffff', locked: true }]
+    owned.generatedFor = 'abc'
     const json = JSON.parse(serializePreset(doc, 'x'))
     expect(json.palettes[0].colors).toEqual([{ hex: '#ffffff', locked: true }])
+    expect(json.palettes[0]).not.toHaveProperty('generatedFor')
   })
 
   it('fills in missing settings and drops unknown ones', () => {
