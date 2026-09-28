@@ -81,7 +81,9 @@ export class PassChain {
     })
     const res = def.resources?.(params)
     const palette = this.resources.palette(res?.palette)
-    const uniforms = this.runner.createUniforms(def, params, blend, palette?.count ?? 0)
+    const serial = def.serial?.(params) ?? false
+    const steps = serial ? (def.serialSteps?.(params, texture) ?? 1) : 1
+    const uniforms = this.runner.createUniforms(def, params, blend, palette?.count ?? 0, steps)
     const scratch = this.runner.createScratch(def, params, texture)
     const maskSpec = def.mask?.(params)
     const mask = maskSpec ? this.masks.encode(encoder, input, texture, maskSpec, (slot) => this.resources.map(slot)) : null
@@ -89,7 +91,7 @@ export class PassChain {
       palette: palette?.buffer ?? this.resources.emptyPalette,
       paletteCount: palette?.count ?? 0,
       pattern: this.resources.pattern,
-      serial: def.serial?.(params) ?? false,
+      serial,
       scratch,
       mask: mask?.texture,
       customPattern: this.resources.customPattern(res?.pattern)

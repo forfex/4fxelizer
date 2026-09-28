@@ -246,6 +246,14 @@ export function diffusionKernel(pattern: DitherPattern): number[] {
 const RING_ROWS = ROW_THREADS + 4
 /** Rows run before the real scan with wrap-around, so the top rows start with the bottom's error. */
 const WARMUP_ROWS = 32
+/** Pixels per dispatch of the one-thread (serpentine / wrap-around) scan; see PassDef.serialSteps. */
+const SEQUENTIAL_STEP_PIXELS = 65536
+
+/** Rows of the one-thread scan (warm-up included) and how many run per dispatch. */
+function sequentialRows(p: DitherParams, size: { width: number; height: number }): { total: number; perStep: number } {
+  const warm = p.wrap ? Math.min(size.height, WARMUP_ROWS) : 0
+  return { total: warm + size.height, perStep: Math.max(1, Math.floor(SEQUENTIAL_STEP_PIXELS / Math.max(size.width, 1))) }
+}
 
 const index = <T extends { id: string }>(list: readonly T[], id: string): number =>
   Math.max(0, list.findIndex((d) => d.id === id))
@@ -267,6 +275,7 @@ struct Params {
 
 const RING_ROWS = ${RING_ROWS}u;
 const WARMUP_ROWS = ${WARMUP_ROWS}u;
+const SEQUENTIAL_STEP_PIXELS = ${SEQUENTIAL_STEP_PIXELS}u;
 const TAU = 6.283185307;
 
 // Classic 4×4 clustered-dot matrix (dots grow from the center of each cell).
@@ -538,10 +547,12 @@ fn diffusePixel(p: vec2u, size: vec2u, rows: u32, dir: i32, write: bool) {
   }
 }
 
-/** Rows run one after another (serpentine, wrap-around). */
+/** Rows run one after another (serpentine, wrap-around); this dispatch runs step \`stage.step\` of them. */
 fn runSequential(size: vec2u, rows: u32) {
   let warm = select(0u, min(size.y, WARMUP_ROWS), params.wrap == 1u);
-  for (var i = 0u; i < warm + size.y; i++) {
+  let perStep = max(1u, SEQUENTIAL_STEP_PIXELS / max(size.x, 1u));
+  let first = stage.step * perStep;
+  for (var i = first; i < min(warm + size.y, first + perStep); i++) {
     let r = select(i - warm, size.y - warm + i, i < warm);
     let reverse = params.serpentine == 1u && (r & 1u) == 1u;
     let dir = select(1, -1, reverse);
@@ -621,6 +632,11 @@ fn runRows(thread: u32, size: vec2u) {
   serial: (p) => {
     const outside = outsidePattern(p)
     return (isDiffusion(p.pattern) || (!!outside && isDiffusion(outside))) && p.mode !== 'pattern' && !p.showMask
+  },
+  serialSteps: (p, size) => {
+    if (!p.serpentine && !p.wrap) return 1
+    const { total, perStep } = sequentialRows(p, size)
+    return Math.ceil(total / perStep)
   },
   scratchBytes: (size) => 2 * size.width * Math.min(size.height, RING_ROWS) * 16
 })

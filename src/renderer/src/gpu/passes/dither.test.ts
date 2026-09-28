@@ -52,6 +52,14 @@ describe('dither', () => {
     expect(dither.resources!(DEFAULT_DITHER).pattern).toBeUndefined()
   })
 
+  it('splits the one-thread scan (serpentine, wrap-around) into bounded dispatches', () => {
+    const fs = { ...DEFAULT_DITHER, pattern: 'floyd-steinberg' as const }
+    expect(dither.serialSteps!(fs, { width: 2048, height: 2048 })).toBe(1) // parallel wavefront
+    expect(dither.serialSteps!({ ...fs, serpentine: true }, { width: 256, height: 256 })).toBe(1)
+    expect(dither.serialSteps!({ ...fs, serpentine: true }, { width: 2048, height: 2048 })).toBe(64)
+    expect(dither.serialSteps!({ ...fs, wrap: true }, { width: 2048, height: 2048 })).toBe(65) // + 32 warm-up rows
+  })
+
   it('packs params to match the WGSL struct (20 scalars + 6 vec4f)', () => {
     const data = dither.pack!(DEFAULT_DITHER) as ArrayBuffer
     expect(data.byteLength).toBe(176)

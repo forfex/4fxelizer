@@ -82,6 +82,12 @@ export interface PassDef<P = unknown> {
   serial?(params: P): boolean
   /** Bytes of zeroed `scratch` storage the serial path needs for an output of `size`. */
   scratchBytes?(size: Size, params: P): number
+  /**
+   * Number of times the serial `runRows` entry is dispatched (default 1); `stage.step` tells each
+   * dispatch which one it is. Long serial work is split so no single dispatch runs long enough for
+   * the OS to reset the GPU; `scratch` and the output persist between steps.
+   */
+  serialSteps?(params: P, size: Size): number
   /** The mask to build before the pass runs (read with `maskAt`); null = none (maskAt is 1). */
   mask?(params: P): MaskSpec | null
 }
@@ -114,7 +120,7 @@ function shaderSource(def: PassDef<never>): string {
   const hasParams = /\bstruct\s+Params\b/.test(def.wgsl)
   return /* wgsl */ `
 ${hasParams ? '' : 'struct Params { _unused: vec4f }'}
-struct Stage { opacity: f32, blendMode: u32, paletteCount: u32, _pad: u32 }
+struct Stage { opacity: f32, blendMode: u32, paletteCount: u32, step: u32 }
 struct PaletteEntry { color: vec4f, lab: vec4f }
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -269,16 +275,18 @@ export class PassRunner {
     return buffer
   }
 
-  /** Uniform buffers for one stage run: the pass's params and the framework's stage block. */
-  createUniforms<P>(def: PassDef<P>, params: P, blend: StageBlend, paletteCount: number): GPUBuffer[] {
+  /**
+   * Uniform buffers for one stage run: the pass's params, then the framework's stage block once per
+   * serial step (see PassDef.serialSteps).
+   */
+  createUniforms<P>(def: PassDef<P>, params: P, blend: StageBlend, paletteCount: number, steps = 1): GPUBuffer[] {
     const mode = BLEND_MODES.findIndex((m) => m.id === blend.mode)
-    return [
-      this.uniform(`${def.id} params`, def.pack?.(params) ?? new Float32Array(4)),
+    const stage = (step: number): GPUBuffer =>
       this.uniform(
         `${def.id} stage`,
-        packStruct(['f', Math.min(Math.max(blend.opacity, 0), 1)], ['u', Math.max(mode, 0)], ['u', paletteCount], ['u', 0])
+        packStruct(['f', Math.min(Math.max(blend.opacity, 0), 1)], ['u', Math.max(mode, 0)], ['u', paletteCount], ['u', step])
       )
-    ]
+    return [this.uniform(`${def.id} params`, def.pack?.(params) ?? new Float32Array(4)), ...Array.from({ length: Math.max(1, steps) }, (_, i) => stage(i))]
   }
 
   encode(
@@ -289,27 +297,32 @@ export class PassRunner {
     uniforms: GPUBuffer[],
     bindings: PassBindings
   ): void {
-    const bindGroup = this.device.createBindGroup({
-      layout: this.layout,
-      entries: [
-        { binding: 0, resource: input.createView() },
-        { binding: 1, resource: output.createView() },
-        { binding: 2, resource: { buffer: uniforms[0]! } },
-        { binding: 3, resource: this.sampler },
-        { binding: 4, resource: { buffer: bindings.palette } },
-        { binding: 5, resource: bindings.pattern.createView() },
-        { binding: 6, resource: { buffer: uniforms[1]! } },
-        { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } },
-        { binding: 8, resource: (bindings.mask ?? this.noMask).createView() },
-        { binding: 9, resource: (bindings.customPattern ?? this.noPattern).createView() }
-      ]
-    })
+    const bindGroup = (stage: GPUBuffer): GPUBindGroup =>
+      this.device.createBindGroup({
+        layout: this.layout,
+        entries: [
+          { binding: 0, resource: input.createView() },
+          { binding: 1, resource: output.createView() },
+          { binding: 2, resource: { buffer: uniforms[0]! } },
+          { binding: 3, resource: this.sampler },
+          { binding: 4, resource: { buffer: bindings.palette } },
+          { binding: 5, resource: bindings.pattern.createView() },
+          { binding: 6, resource: { buffer: stage } },
+          { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } },
+          { binding: 8, resource: (bindings.mask ?? this.noMask).createView() },
+          { binding: 9, resource: (bindings.customPattern ?? this.noPattern).createView() }
+        ]
+      })
     const pass = encoder.beginComputePass({ label: def.id })
-    pass.setBindGroup(0, bindGroup)
     if (bindings.serial) {
+      // One dispatch per serial step, each with its own stage block (stage.step).
       pass.setPipeline(this.pipeline(def, 'mainRows'))
-      pass.dispatchWorkgroups(1)
+      for (const stage of uniforms.slice(1)) {
+        pass.setBindGroup(0, bindGroup(stage))
+        pass.dispatchWorkgroups(1)
+      }
     } else {
+      pass.setBindGroup(0, bindGroup(uniforms[1]!))
       pass.setPipeline(this.pipeline(def, 'main'))
       pass.dispatchWorkgroups(Math.ceil(output.width / WORKGROUP), Math.ceil(output.height / WORKGROUP))
     }
