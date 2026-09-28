@@ -30,6 +30,8 @@ export interface UserSettings {
   split: boolean
   /** Tiling view (copies of the texture around it). */
   tile: boolean
+  /** Interface theme. */
+  theme: Theme
   /** Last format chosen in the Export dialog. */
   exportFormat: ExportFormat
   /** Panel layout as last arranged (dockview JSON); null = build the active workspace fresh. */
@@ -46,6 +48,22 @@ export interface SavedWorkspace {
   layout: object
 }
 
+/**
+ * Interface themes (`data-theme` on <html>, values in styles/tokens.css). Dark is the plum desktop
+ * with purple and magenta accents; Night is neutral greyscale for dim rooms and color judging.
+ */
+export const THEMES = ['dark', 'night'] as const
+export type Theme = (typeof THEMES)[number]
+
+/**
+ * Window background and title-bar symbol color per theme, for main to paint the window before the
+ * renderer has loaded its tokens. Keep in sync with --fx-bg / --fx-text in styles/tokens.css.
+ */
+export const THEME_WINDOW_COLORS: Record<Theme, { background: string; symbol: string }> = {
+  dark: { background: '#16121e', symbol: '#f1e9dc' },
+  night: { background: '#090909', symbol: '#e3e3e3' }
+}
+
 /** Most saved workspaces kept (oldest dropped first). */
 export const MAX_WORKSPACES = 32
 
@@ -60,6 +78,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   grid: false,
   split: true,
   tile: false,
+  theme: 'dark',
   exportFormat: 'png-indexed',
   layout: null,
   workspace: 'essentials',
@@ -89,6 +108,7 @@ export function normalizeSettings(raw: unknown): UserSettings {
     grid: bool('grid'),
     split: bool('split'),
     tile: bool('tile'),
+    theme: THEMES.includes(r.theme as Theme) ? (r.theme as Theme) : DEFAULT_SETTINGS.theme,
     exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
     layout: isObject(r.layout) ? r.layout : null,
     workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace.trim() : DEFAULT_SETTINGS.workspace,
@@ -131,6 +151,8 @@ export type MenuCommand =
   | 'toggle-grid'
   | 'toggle-split'
   | 'toggle-tile'
+  | 'theme-dark'
+  | 'theme-night'
   | 'gpu-diagnostics'
 
 export interface FxApi {

@@ -268,6 +268,7 @@ function SwatchCanvas({
   onSelect(index: number): void
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const theme = useApp((s) => s.theme)
   const cols = colors.length <= 1024 ? 32 : 64
   const rows = Math.ceil(colors.length / cols)
 
@@ -294,13 +295,13 @@ function SwatchCanvas({
       }
       const lockColor = token('--fx-edge')
       colors.forEach((c, i) => c.locked && mark(i, lockColor, 1))
-      if (selected !== null && selected < colors.length) mark(selected, token('--fx-accent'), 0.5)
+      if (selected !== null && selected < colors.length) mark(selected, token('--fx-magenta'), 0.5)
     }
     draw()
     const observer = new ResizeObserver(draw)
     observer.observe(canvas)
     return () => observer.disconnect()
-  }, [colors, selected, cols, rows])
+  }, [colors, selected, cols, rows, theme])
 
   const indexAt = (e: React.MouseEvent<HTMLCanvasElement>): number => {
     const rect = e.currentTarget.getBoundingClientRect()

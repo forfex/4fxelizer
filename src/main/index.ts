@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
-import { IPC, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
+import { IPC, THEME_WINDOW_COLORS, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
 import { siblingMaps } from '@shared/maps'
 import type { MenuRole } from '@shared/menu'
 import { applyGpuFlags } from './gpuFlags'
@@ -167,7 +167,8 @@ const MENU_ROLES: MenuRole[] = ['cut', 'copy', 'paste', 'selectAll', 'togglefull
 function titleBarOptions(): Electron.BrowserWindowConstructorOptions {
   if (process.platform === 'darwin') return { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 10 } }
   // Matches --fx-titlebar-bg / -symbol / -height until the renderer applies the tokens.
-  return { titleBarStyle: 'hidden', titleBarOverlay: { color: '#1d1c1a', symbolColor: '#e4e0d6', height: 32 } }
+  const colors = THEME_WINDOW_COLORS[getSettings().theme]
+  return { titleBarStyle: 'hidden', titleBarOverlay: { color: colors.background, symbolColor: colors.symbol, height: 32 } }
 }
 
 function createWindow(): void {
@@ -181,7 +182,7 @@ function createWindow(): void {
     show: false,
     title: '4FXELIZER',
     icon: join(app.getAppPath(), 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-    backgroundColor: '#1d1c1a',
+    backgroundColor: THEME_WINDOW_COLORS[getSettings().theme].background,
     ...(gpuReportPath ? {} : titleBarOptions()),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),

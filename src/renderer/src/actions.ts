@@ -496,6 +496,8 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'toggle-grid': return app.toggleGrid()
     case 'toggle-split': return app.toggleSplit()
     case 'toggle-tile': return app.toggleTile()
+    case 'theme-dark': return app.setTheme('dark')
+    case 'theme-night': return app.setTheme('night')
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
   }
 }

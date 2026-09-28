@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { Theme } from '@shared/api'
 import type { MapChannel, MapSlot } from '@shared/maps'
 import type { StageSpec } from '@/gpu/plan'
 import type { Palette } from '@/palette/palette'
@@ -66,6 +67,8 @@ interface AppState extends Doc {
   split: boolean
   /** Tiling view: copies of the image around it, to check seams. */
   tile: boolean
+  /** Interface theme (applied to <html> by theme.ts). */
+  theme: Theme
   /** Split divider position as a fraction of the image width (moves with the image). */
   splitPos: number
   cursor: { x: number; y: number } | null
@@ -103,6 +106,7 @@ interface AppState extends Doc {
   zoomActual(): void
   zoomStep(dir: 1 | -1): void
   toggleGrid(): void
+  setTheme(theme: Theme): void
   toggleSplit(): void
   toggleTile(): void
   setSplitPos(pos: number): void
@@ -165,6 +169,7 @@ export const useApp = create<AppState>()((set, get) => ({
   grid: false,
   split: true,
   tile: false,
+  theme: 'dark',
   splitPos: 0.5,
   cursor: null,
   message: null,
@@ -217,6 +222,7 @@ export const useApp = create<AppState>()((set, get) => ({
     set({ view: zoomAt(view, stepZoom(view.zoom, dir), center) })
   },
   toggleGrid: () => set({ grid: !get().grid }),
+  setTheme: (theme) => set({ theme }),
   toggleSplit: () => {
     const { split, image, view, canvasSize, splitPos } = get()
     // Turning the split on with the divider off-screen: bring it to the middle of what's visible.

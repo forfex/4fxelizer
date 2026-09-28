@@ -62,6 +62,9 @@ export function appMenu(platform: string, isDev: boolean): MenuSection[] {
         command('Split View', 'toggle-split', 'CmdOrCtrl+\\'),
         command('Tiling View', 'toggle-tile', 'CmdOrCtrl+T'),
         separator,
+        command('Dark Theme', 'theme-dark'),
+        command('Night Theme', 'theme-night'),
+        separator,
         role('Toggle Full Screen', 'togglefullscreen', isMac ? 'Ctrl+Cmd+F' : 'F11'),
         ...(isDev ? [separator, role('Reload', 'reload', 'CmdOrCtrl+R'), role('Toggle Developer Tools', 'toggleDevTools', isMac ? 'Alt+Cmd+I' : 'Ctrl+Shift+I')] : [])
       ]

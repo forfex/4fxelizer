@@ -27,6 +27,7 @@ function tokenRgb(token: string): string {
 export function TitleBar() {
   const header = useRef<HTMLElement>(null)
   const imageName = useApp((s) => s.image?.name ?? null)
+  const theme = useApp((s) => s.theme)
   const title = imageName ? `${imageName} — 4FXELIZER` : '4FXELIZER'
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function TitleBar() {
     // The rendered height, so the token may use any CSS unit.
     const height = header.current?.getBoundingClientRect().height || 32
     window.fx.setTitleBarOverlay({ color: tokenRgb('--fx-titlebar-bg'), symbolColor: tokenRgb('--fx-titlebar-symbol'), height })
-  }, [])
+  }, [theme])
 
   // Only the icon and the empty area around the title are drag regions. The menus sit outside
   // any drag region: a drag region layered over them (even a click-through one) swallows real
