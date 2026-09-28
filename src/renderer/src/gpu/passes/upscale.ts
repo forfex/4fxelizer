@@ -5,7 +5,10 @@ export const UPSCALE_METHODS = [
   { id: 'nearest', label: 'Nearest', hint: 'Blocky, every texel stays a hard square.' },
   { id: 'n64', label: 'N64 3-point', hint: 'The Nintendo 64 texture filter: blends 3 texels, soft with slightly jagged diagonals.' },
   { id: 'bilinear', label: 'Bilinear', hint: 'Blends the 4 nearest texels. Smooth, like most PC hardware.' },
-  { id: 'bicubic', label: 'Bicubic', hint: 'Smoother and a little sharper than bilinear (Catmull-Rom).' }
+  { id: 'bicubic', label: 'Bicubic', hint: 'Smoother and a little sharper than bilinear (Catmull-Rom).' },
+  { id: 'sharp-bilinear', label: 'Sharp bilinear', hint: 'Crisp pixels with only their edges softened, like emulator "sharp" shaders. Differs from Nearest at non-integer sizes (e.g. Original).' },
+  { id: 'lanczos', label: 'Lanczos', hint: 'Sharpest smooth filter (Lanczos-3); may ring around hard edges.' },
+  { id: 'epx', label: 'Scale2x / Scale3x (EPX)', hint: 'Pixel-art upscaler: rounds off jagged diagonals without blurring or adding colors.' }
 ] as const
 
 export type UpscaleMethod = (typeof UPSCALE_METHODS)[number]['id']
@@ -66,6 +69,94 @@ fn catmullRom(t: f32) -> vec4f {
     0.5 * t3 - 0.5 * t2);
 }
 
+fn bilinearAt(pos: vec2f) -> vec4f {
+  let base = vec2i(floor(pos));
+  let f = pos - floor(pos);
+  let c00 = premul(texel(base));
+  let c10 = premul(texel(base + vec2i(1, 0)));
+  let c01 = premul(texel(base + vec2i(0, 1)));
+  let c11 = premul(texel(base + vec2i(1, 1)));
+  return unpremul(mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y));
+}
+
+fn sinc(x: f32) -> f32 {
+  if (abs(x) < 1e-5) { return 1.0; }
+  let a = 3.14159265 * x;
+  return sin(a) / a;
+}
+
+fn lanczos3(x: f32) -> f32 {
+  if (abs(x) >= 3.0) { return 0.0; }
+  return sinc(x) * sinc(x / 3.0);
+}
+
+// ── EPX / Scale2x / Scale3x ──────────────────────────────────────────────────
+// Exact color comparisons on the input texels; outputs only colors that are already there.
+
+fn same(a: vec4f, b: vec4f) -> bool { return all(a == b); }
+
+fn floorDiv(a: vec2i, b: i32) -> vec2i {
+  return vec2i(floor(vec2f(a) / f32(b)));
+}
+
+/** Scale2x rule: sub-pixel q (0/1, 0/1) of center e with neighbors up a, right b, left c, down d. */
+fn scale2xPick(e: vec4f, a: vec4f, b: vec4f, c: vec4f, d: vec4f, q: vec2i) -> vec4f {
+  if (q.x == 0 && q.y == 0) { if (same(c, a) && !same(c, d) && !same(a, b)) { return a; } }
+  else if (q.x == 1 && q.y == 0) { if (same(a, b) && !same(a, c) && !same(b, d)) { return b; } }
+  else if (q.x == 0 && q.y == 1) { if (same(d, c) && !same(d, b) && !same(c, a)) { return c; } }
+  else { if (same(b, d) && !same(b, a) && !same(d, c)) { return d; } }
+  return e;
+}
+
+/** One Scale2x level: the texel at c of the 2× image. */
+fn scale2x(c: vec2i) -> vec4f {
+  let s = floorDiv(c, 2);
+  return scale2xPick(texel(s), texel(s + vec2i(0, -1)), texel(s + vec2i(1, 0)), texel(s + vec2i(-1, 0)), texel(s + vec2i(0, 1)), c - s * 2);
+}
+
+/** Two Scale2x levels: the texel at c of the 4× image. */
+fn scale4x(c: vec2i) -> vec4f {
+  let s = floorDiv(c, 2);
+  return scale2xPick(scale2x(s), scale2x(s + vec2i(0, -1)), scale2x(s + vec2i(1, 0)), scale2x(s + vec2i(-1, 0)), scale2x(s + vec2i(0, 1)), c - s * 2);
+}
+
+/** Scale3x: the texel at c of the 3× image. */
+fn scale3x(c: vec2i) -> vec4f {
+  let s = floorDiv(c, 3);
+  let q = c - s * 3;
+  let A = texel(s + vec2i(-1, -1)); let B = texel(s + vec2i(0, -1)); let C = texel(s + vec2i(1, -1));
+  let D = texel(s + vec2i(-1, 0));  let E = texel(s);                let F = texel(s + vec2i(1, 0));
+  let G = texel(s + vec2i(-1, 1));  let H = texel(s + vec2i(0, 1));  let I = texel(s + vec2i(1, 1));
+  let db = same(D, B) && !same(B, F) && !same(D, H);
+  let bf = same(B, F) && !same(B, D) && !same(F, H);
+  let dh = same(D, H) && !same(D, F) && !same(H, B);
+  let hf = same(H, F) && !same(D, F) && !same(B, H);
+  let i = q.y * 3 + q.x;
+  switch i {
+    case 0: { if (db) { return D; } }
+    case 1: { if ((db && !same(E, C)) || (bf && !same(E, A))) { return B; } }
+    case 2: { if (bf) { return F; } }
+    case 3: { if ((db && !same(E, G)) || (dh && !same(E, A))) { return D; } }
+    case 5: { if ((bf && !same(E, I)) || (hf && !same(E, C))) { return F; } }
+    case 6: { if (dh) { return D; } }
+    case 7: { if ((dh && !same(E, I)) || (hf && !same(E, G))) { return H; } }
+    case 8: { if (hf) { return F; } }
+    default: {}
+  }
+  return E;
+}
+
+fn epx(p: vec2u, size: vec2u, srcSize: vec2f) -> vec4f {
+  let k = f32(size.x) / srcSize.x;
+  // Pick the pattern that best fits the factor, then enlarge that result with nearest.
+  var m = 2;
+  if (abs(k - 3.0) < 0.01 || abs(k - 6.0) < 0.01) { m = 3; } else if (k >= 3.99) { m = 4; }
+  let c = vec2i(floor((vec2f(p) + 0.5) * f32(m) * srcSize / vec2f(size)));
+  if (m == 3) { return scale3x(c); }
+  if (m == 4) { return scale4x(c); }
+  return scale2x(c);
+}
+
 fn run(p: vec2u, size: vec2u) -> vec4f {
   let srcSize = vec2f(textureDimensions(src));
   // Source-space position of this output texel's center, relative to texel centers.
@@ -76,6 +167,28 @@ fn run(p: vec2u, size: vec2u) -> vec4f {
   if (params.method == 0u) {
     return texel(vec2i(floor((vec2f(p) + 0.5) * srcSize / vec2f(size))));
   }
+  if (params.method == 4u) {
+    // Sharp bilinear: stay on the texel center, blend only within ~1 output pixel of its edges.
+    let scale = vec2f(size) / srcSize;
+    let t = (vec2f(p) + 0.5) * srcSize / vec2f(size);
+    let d = fract(t) - 0.5;
+    let region = max(0.5 - 0.5 / scale, vec2f(0.0));
+    let offset = (d - clamp(d, -region, region)) * scale + 0.5;
+    return bilinearAt(floor(t) + offset - 0.5);
+  }
+  if (params.method == 5u) {
+    var acc = vec4f(0.0);
+    var total = 0.0;
+    for (var j = -2; j <= 3; j++) {
+      for (var i = -2; i <= 3; i++) {
+        let w = lanczos3(f.x - f32(i)) * lanczos3(f.y - f32(j));
+        acc += w * premul(texel(base + vec2i(i, j)));
+        total += w;
+      }
+    }
+    return unpremul(acc / total);
+  }
+  if (params.method == 6u) { return epx(p, size, srcSize); }
   let c00 = premul(texel(base));
   let c10 = premul(texel(base + vec2i(1, 0)));
   let c01 = premul(texel(base + vec2i(0, 1)));

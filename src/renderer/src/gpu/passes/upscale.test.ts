@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeStack } from '@/stack/analyze'
+import { analyzeStack, makesNewColors } from '@/stack/analyze'
 import { BUILTIN_PRESETS } from '@/stack/builtinPresets'
 import { DEFAULT_UPSCALE, upscaleSize } from './upscale'
 
@@ -11,6 +11,13 @@ describe('upscale', () => {
       height: 250
     })
     expect(upscaleSize({ width: 4096, height: 4096 }, { ...DEFAULT_UPSCALE, factor: 16 }, null)).toEqual({ width: 8192, height: 8192 })
+  })
+
+  it('knows which filters keep the input colors', () => {
+    const stage = (method: string) => ({ uid: 'u', passId: 'upscale', enabled: true, blend: { opacity: 1, mode: 'normal' as const }, params: { ...DEFAULT_UPSCALE, method } })
+    expect(makesNewColors(stage('epx'))).toBe(false)
+    expect(makesNewColors(stage('nearest'))).toBe(false)
+    expect(makesNewColors(stage('n64'))).toBe(true)
   })
 
   it('N64 preset: 64 px texture, filtered back up ×4', () => {

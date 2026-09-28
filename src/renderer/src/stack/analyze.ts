@@ -39,7 +39,7 @@ export function makesNewColors(s: StageSpec): boolean {
   if (!isFullStrength(s)) return true
   if (s.passId === 'adjust') return true
   if (s.passId === 'downscale') return !['nearest', 'median'].includes((s.params as DownscaleParams).method)
-  if (s.passId === 'upscale') return (s.params as UpscaleParams).method !== 'nearest'
+  if (s.passId === 'upscale') return !['nearest', 'epx'].includes((s.params as UpscaleParams).method)
   if (s.passId === 'dither') return (s.params as DitherParams).mode === 'pattern'
   return false
 }
