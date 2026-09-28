@@ -22,7 +22,7 @@ const C = {
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
 const tier = (v) => (v < 5 ? 'on' : v < 10 ? 'mid' : 'off')
 
-// Layout on a 64-unit grid: 4px bevelled frame, 4x4 cells of 12 units with 2 unit gaps.
+// Layout on a 64-unit grid: 2-unit bevelled frame, 5-unit margin, 4x4 cells of 12 units with 2-unit gaps.
 const U = 64
 const PAD = 5
 const CELL = 12
