@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   DockviewDefaultTab,
   DockviewReact,
+  type DockviewApi,
   type DockviewTheme,
   type IDockviewPanelHeaderProps,
   type IDockviewPanelProps
@@ -62,15 +63,17 @@ const TAB_COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelHeade
 
 /** The dockable panel area: viewer plus tool panels, arranged by the active workspace. */
 export function DockArea() {
-  const [stop, setStop] = useState<(() => void) | null>(null)
-  useEffect(() => () => stop?.(), [stop])
+  // The layout is built from an effect, not from onReady itself: under StrictMode (dev) the dock
+  // mounts twice, and only the instance that survives may be filled.
+  const [api, setApi] = useState<DockviewApi | null>(null)
+  useEffect(() => (api ? startWorkspace(api) : undefined), [api])
   return (
     <DockviewReact
       className="min-h-0 flex-1"
       theme={THEME}
       components={COMPONENTS}
       tabComponents={TAB_COMPONENTS}
-      onReady={(e) => setStop(() => startWorkspace(e.api))}
+      onReady={(e) => setApi(e.api)}
       getTabContextMenuItems={({ panel }) =>
         panel.id === VIEWER ? ['maximize'] : ['float', 'maximize', 'separator', 'close']
       }

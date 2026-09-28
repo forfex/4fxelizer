@@ -132,7 +132,7 @@ function applyLayout(dock: DockviewApi, workspace: string): boolean {
   const builtin = BUILTIN_WORKSPACES.find((w) => w.id === workspace)
   const saved = savedSettings().workspaces.find((w) => w.name === workspace)
   try {
-    dock.clear()
+    if (dock.panels.length) dock.clear()
     if (builtin) builtin.build(dock)
     else if (saved) dock.fromJSON(saved.layout as SerializedDockview)
     else return false
@@ -146,7 +146,7 @@ function applyLayout(dock: DockviewApi, workspace: string): boolean {
 }
 
 function buildDefault(dock: DockviewApi): void {
-  dock.clear()
+  if (dock.panels.length) dock.clear()
   BUILTIN_WORKSPACES[0]!.build(dock)
   finishLayout(dock)
 }
