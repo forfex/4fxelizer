@@ -83,6 +83,34 @@
     user-select: none;
     overflow: hidden;
   }
+  /* Retro scrollbars: a sunken track with a raised, beveled thumb (no arrow buttons). */
+  ::-webkit-scrollbar {
+    width: var(--fx-scrollbar-size);
+    height: var(--fx-scrollbar-size);
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--fx-scrollbar-track);
+    box-shadow:
+      inset var(--px) var(--px) 0 var(--fx-bevel-dark),
+      inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--fx-bevel-light);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--fx-scrollbar-thumb);
+    border: calc(2 * var(--px)) solid transparent;
+    background-clip: padding-box;
+    box-shadow:
+      inset var(--px) var(--px) 0 var(--fx-bevel-light),
+      inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--fx-bevel-dark);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--fx-scrollbar-thumb-hover);
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--fx-accent);
+  }
+  ::-webkit-scrollbar-corner {
+    background: var(--fx-scrollbar-track);
+  }
   :focus-visible {
     outline: var(--px) dotted var(--fx-accent);
     outline-offset: 1px;

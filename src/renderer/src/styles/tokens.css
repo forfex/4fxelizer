@@ -31,6 +31,12 @@
   --fx-lcd-bg: #121810;
   --fx-lcd-text: #9fdc7c;
 
+  /* Scrollbars: sunken track, raised bevel thumb */
+  --fx-scrollbar-size: 12px;
+  --fx-scrollbar-track: var(--fx-well);
+  --fx-scrollbar-thumb: var(--fx-panel-hi);
+  --fx-scrollbar-thumb-hover: #45423a;
+
   /* Shape & type */
   --fx-radius: 2px;
   --fx-font-ui: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Ubuntu, 'Noto Sans', sans-serif;
