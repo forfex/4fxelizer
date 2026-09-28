@@ -1,7 +1,8 @@
 // WGSL helpers available to every pass (prepended by pass.ts after the bindings).
 // Color values in the pipeline are sRGB-encoded, straight alpha.
 
-export const WGSL_LIB = /* wgsl */ `
+/** Color conversions; need no bindings, so other shaders (masks) use them too. */
+export const WGSL_COLOR = /* wgsl */ `
 fn srgbToLinear3(c: vec3f) -> vec3f {
   return select(pow((c + 0.055) / 1.055, vec3f(2.4)), c / 12.92, c <= vec3f(0.04045));
 }
@@ -41,6 +42,10 @@ fn oklabToRgb(lab: vec3f) -> vec3f {
 fn luma(c: vec3f) -> f32 {
   return dot(c, vec3f(0.2126, 0.7152, 0.0722));
 }
+`
+
+export const WGSL_LIB = /* wgsl */ `
+${WGSL_COLOR}
 
 /** Input texel for output texel p (resampled when the stage changes the size). */
 fn inputAt(p: vec2u, size: vec2u) -> vec4f {
@@ -48,6 +53,17 @@ fn inputAt(p: vec2u, size: vec2u) -> vec4f {
   if (all(srcSize == size)) { return textureLoad(src, p, 0); }
   let uv = (vec2f(p) + 0.5) / vec2f(size);
   return textureSampleLevel(src, linearSampler, uv, 0.0);
+}
+
+/**
+ * The stage's mask at output texel p: 1 = full effect. Built before the stage runs (see mask.ts);
+ * 1 everywhere when the stage has no mask.
+ */
+fn maskAt(p: vec2u, size: vec2u) -> f32 {
+  let dims = textureDimensions(maskTex);
+  if (all(dims == size)) { return textureLoad(maskTex, p, 0).r; }
+  let uv = (vec2f(p) + 0.5) / vec2f(size);
+  return textureSampleLevel(maskTex, linearSampler, uv, 0.0).r;
 }
 
 // ── Palette ─────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DITHER, DITHER_PATTERNS, diffusionKernel, dither, ditherMixing, ditherPeriod, ditherTiles, isDiffusion } from './dither'
+import { DEFAULT_DITHER, DITHER_PATTERNS, diffusionKernel, dither, ditherMask, ditherMixing, ditherPeriod, ditherTiles, isDiffusion, outsidePattern } from './dither'
 
 describe('dither', () => {
   it('keeps the original patterns at their shader indices', () => {
@@ -42,8 +42,27 @@ describe('dither', () => {
     expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'jarvis', wrap: true }, { width: 7, height: 5 })).toBe(true)
   })
 
-  it('packs params to match the WGSL struct (16 scalars + 3 vec4f)', () => {
+  it('packs params to match the WGSL struct (20 scalars + 6 vec4f)', () => {
     const data = dither.pack!(DEFAULT_DITHER) as ArrayBuffer
-    expect(data.byteLength).toBe(112)
+    expect(data.byteLength).toBe(176)
+  })
+
+  it('builds a mask from one or two sources, and reads the maps they use', () => {
+    expect(ditherMask(DEFAULT_DITHER)).toBeNull()
+    expect(dither.mask!(DEFAULT_DITHER)).toBeNull()
+    const second = { ...DEFAULT_DITHER, mask2: 'map-ao' as const, mask2Invert: true, maskBlur: 3 }
+    expect(ditherMask(second)).toMatchObject({ a: 'map-ao', aInvert: true, b: 'none', blur: 3 })
+    const both = { ...second, mask: 'edges' as const, maskCombine: 'max' as const }
+    expect(ditherMask(both)).toMatchObject({ a: 'edges', b: 'map-ao', bInvert: true, combine: 'max' })
+    expect(dither.resources!(both).maps).toEqual(['ao'])
+  })
+
+  it('uses the outside pattern only with a mask, and runs serially when it diffuses', () => {
+    const outside = { ...DEFAULT_DITHER, outsidePattern: 'atkinson' as const }
+    expect(outsidePattern(outside)).toBeNull()
+    expect(dither.serial!(outside)).toBe(false)
+    const masked = { ...outside, mask: 'shadows' as const }
+    expect(outsidePattern(masked)).toBe('atkinson')
+    expect(dither.serial!(masked)).toBe(true)
   })
 })

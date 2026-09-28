@@ -1,4 +1,5 @@
 import type { PaletteParams } from '@/stack/doc'
+import { MASK_SOURCES, maskMaps, type MaskCombine, type MaskSource, type MaskSpec } from '../mask'
 import { definePass, packStruct, ROW_THREADS } from '../pass'
 import type { ColorMetric } from './quantize'
 
@@ -53,19 +54,13 @@ export const DITHER_MIXING = [
 
 export type DitherMixing = (typeof DITHER_MIXING)[number]['id']
 
-/** Where the dither is applied (the rest of the image gets less of it). */
-export const DITHER_MASKS = [
-  { id: 'none', label: 'Everywhere', hint: 'Dither the whole image evenly.' },
-  { id: 'edges', label: 'Edges', hint: 'Dither mostly along edges and detail.' },
-  { id: 'flats', label: 'Flats', hint: 'Dither mostly in smooth, flat areas (gradients), keep edges clean.' },
-  { id: 'shadows', label: 'Shadows', hint: 'Dither mostly in dark areas.' },
-  { id: 'midtones', label: 'Midtones', hint: 'Dither mostly in mid-brightness areas.' },
-  { id: 'highlights', label: 'Highlights', hint: 'Dither mostly in bright areas.' },
-  { id: 'saturated', label: 'Saturated', hint: 'Dither mostly in colorful areas.' },
-  { id: 'grays', label: 'Grays', hint: 'Dither mostly in gray, desaturated areas.' }
-] as const
+/** Where the dither is applied (the rest of the image gets less of it); see gpu/mask.ts. */
+export const DITHER_MASKS = MASK_SOURCES
 
-export type DitherMask = (typeof DITHER_MASKS)[number]['id']
+export type DitherMask = MaskSource
+
+/** Pattern used outside the mask: 'none' = the same pattern, just weaker there. */
+export type OutsidePattern = DitherPattern | 'none'
 
 export interface DitherParams extends PaletteParams {
   pattern: DitherPattern
@@ -87,17 +82,28 @@ export interface DitherParams extends PaletteParams {
    */
   saturation: number
   mask: DitherMask
+  maskInvert: boolean
+  /** Second mask source, combined with the first ('none' = only the first). */
+  mask2: DitherMask
+  mask2Invert: boolean
+  maskCombine: MaskCombine
+  /** Mask blur radius in pixels. */
+  maskBlur: number
   /** 0 = mask ignored, 1 = dither fully follows the mask. */
   maskStrength: number
   /** Shapes the mask: < 1 widens it, > 1 narrows it. */
   maskGamma: number
+  /** Different pattern where the mask is dark (below 50%). */
+  outsidePattern: OutsidePattern
+  /** Strength of the outside pattern. */
+  outsideStrength: number
   /** dither: alpha becomes 0/1 using the pattern (dithered cutout). */
   alpha: 'keep' | 'dither'
   /** Error diffusion: every other row runs right to left (fewer diagonal "worms"). */
   serpentine: boolean
   /**
-   * Error diffusion: error leaving one edge re-enters on the opposite one, so the result tiles.
-   * Slower: rows run one at a time.
+   * Tiling: error diffusion sends error leaving one edge back in on the opposite one (slower: rows
+   * run one at a time), and mask edge detection and blur wrap around.
    */
   wrap: boolean
   /** Output the mask instead of the dithered image (viewer only, never stored). */
@@ -119,8 +125,15 @@ export const DEFAULT_DITHER: DitherParams = {
   knollCount: 8,
   saturation: 0,
   mask: 'none',
+  maskInvert: false,
+  mask2: 'none',
+  mask2Invert: false,
+  maskCombine: 'multiply',
+  maskBlur: 0,
   maskStrength: 1,
   maskGamma: 1,
+  outsidePattern: 'none',
+  outsideStrength: 0.5,
   alpha: 'keep',
   serpentine: false,
   wrap: false
@@ -135,20 +148,55 @@ export function ditherMixing(p: DitherParams): DitherMixing {
   return p.mixing === 'offset' && p.twoNearest ? 'two-nearest' : p.mixing
 }
 
+/** The mask the stage builds, or null when it has none. */
+export function ditherMask(p: DitherParams): MaskSpec | null {
+  if (p.mask === 'none' && p.mask2 === 'none') return null
+  const [a, aInvert, b, bInvert] =
+    p.mask === 'none' ? [p.mask2, p.mask2Invert, 'none' as const, false] : [p.mask, p.maskInvert, p.mask2, p.mask2Invert]
+  return { a, aInvert, b, bInvert, combine: p.maskCombine, blur: p.maskBlur, wrap: p.wrap }
+}
+
+/** The pattern used outside the mask, or null when there is none. */
+export function outsidePattern(p: DitherParams): DitherPattern | null {
+  return p.outsidePattern !== 'none' && ditherMask(p) ? p.outsidePattern : null
+}
+
+function patternPeriod(pattern: DitherPattern, scale: number): number {
+  const period = DITHER_PATTERNS.find((d) => d.id === pattern)?.period ?? 0
+  return period * (isDiffusion(pattern) ? 1 : Math.max(1, Math.round(scale)))
+}
+
 /**
  * Pattern period in texels; ordered patterns tile seamlessly when this divides the texture size.
- * 0 = the pattern never repeats (noise, error diffusion; see `ditherTiles` for wrap-around).
+ * 0 = the pattern never repeats (noise, error diffusion; see `ditherTiling` for wrap-around).
  */
 export function ditherPeriod(p: DitherParams): number {
-  const period = DITHER_PATTERNS.find((d) => d.id === p.pattern)?.period ?? 0
-  return period * (isDiffusion(p.pattern) ? 1 : Math.max(1, Math.round(p.scale)))
+  return patternPeriod(p.pattern, p.scale)
+}
+
+/** Why the dithered result won't tile on a texture of `size`, or null when it tiles seamlessly. */
+export function ditherTiling(p: DitherParams, size: { width: number; height: number }): string | null {
+  const patterns = [p.pattern, outsidePattern(p)].filter((d): d is DitherPattern => !!d)
+  for (const pattern of patterns) {
+    const name = DITHER_PATTERNS.find((d) => d.id === pattern)?.label ?? pattern
+    const period = patternPeriod(pattern, p.scale)
+    if (isDiffusion(pattern)) {
+      if (!p.wrap) return `${name} won't tile seamlessly. Turn on "Wrap edges" for tiling textures.`
+    } else if (period === 0) {
+      return `${name} doesn't repeat, so the texture won't tile seamlessly. Use an ordered pattern for tiling textures.`
+    } else if (size.width % period !== 0 || size.height % period !== 0) {
+      return `The ${period}px pattern doesn't divide ${size.width}×${size.height}, so the texture won't tile seamlessly.`
+    }
+  }
+  const mask = ditherMask(p)
+  const filtered = mask && (mask.blur > 0 || [mask.a, mask.b].some((s) => s === 'edges' || s === 'flats'))
+  if (filtered && !p.wrap) return 'The mask stops at the image edges. Turn on "Wrap edges" for tiling textures.'
+  return null
 }
 
 /** Whether the dithered result tiles seamlessly on a texture of `size`. */
 export function ditherTiles(p: DitherParams, size: { width: number; height: number }): boolean {
-  if (isDiffusion(p.pattern)) return p.wrap
-  const period = ditherPeriod(p)
-  return period > 0 && size.width % period === 0 && size.height % period === 0
+  return ditherTiling(p, size) === null
 }
 
 /**
@@ -187,9 +235,12 @@ export const dither = definePass<DitherParams>({
 struct Params {
   pattern: u32, mode: u32, metric: u32, levels: f32,
   strength: f32, scale: u32, mixing: u32, alphaMode: u32,
-  saturation: f32, mask: u32, maskStrength: f32, maskGamma: f32,
+  saturation: f32, hasMask: u32, maskStrength: f32, maskGamma: f32,
   knollCount: u32, showMask: u32, serpentine: u32, wrap: u32,
+  outside: u32, outsideStrength: f32, diffuseIn: u32, diffuseOut: u32,
+  // Diffusion kernels inside (k*) and outside (o*) the mask, see diffusionKernel().
   k0: vec4f, k1: vec4f, k2: vec4f,
+  o0: vec4f, o1: vec4f, o2: vec4f,
 }
 
 const RING_ROWS = ${RING_ROWS}u;
@@ -259,9 +310,9 @@ fn rankThreshold(p: vec2u, kind: u32, n: u32) -> f32 {
   return (f32(rank) + 0.5) / f32(n * n);
 }
 
-fn threshold(p: vec2u) -> f32 {
+fn threshold(p: vec2u, pattern: u32) -> f32 {
   let q = p / max(params.scale, 1u);
-  switch params.pattern {
+  switch pattern {
     case 0u: { return bayer(q, 2u); }
     case 1u: { return bayer(q, 4u); }
     case 2u: { return bayer(q, 8u); }
@@ -283,45 +334,22 @@ fn threshold(p: vec2u) -> f32 {
 
 // ── Mask ────────────────────────────────────────────────────────────────────
 
-fn lightAt(p: vec2i, size: vec2u) -> f32 {
-  let q = clamp(p, vec2i(0), vec2i(size) - 1);
-  return rgbToOklab(textureLoad(src, vec2u(q), 0).rgb).x;
-}
-
-/** 0..1: how much this pixel belongs to the mask. */
+/** The mask shaped by gamma: 1 = inside. */
 fn maskValue(p: vec2u, size: vec2u) -> f32 {
-  if (params.mask == 1u || params.mask == 2u) {
-    let c = vec2i(p);
-    let tl = lightAt(c + vec2i(-1, -1), size);
-    let t = lightAt(c + vec2i(0, -1), size);
-    let tr = lightAt(c + vec2i(1, -1), size);
-    let l = lightAt(c + vec2i(-1, 0), size);
-    let r = lightAt(c + vec2i(1, 0), size);
-    let bl = lightAt(c + vec2i(-1, 1), size);
-    let b = lightAt(c + vec2i(0, 1), size);
-    let br = lightAt(c + vec2i(1, 1), size);
-    let gx = (tr + 2.0 * r + br) - (tl + 2.0 * l + bl);
-    let gy = (bl + 2.0 * b + br) - (tl + 2.0 * t + tr);
-    let edge = clamp(length(vec2f(gx, gy)), 0.0, 1.0);
-    return select(1.0 - edge, edge, params.mask == 1u);
-  }
-  let lab = rgbToOklab(textureLoad(src, p, 0).rgb);
-  let chroma = clamp(length(lab.yz) / 0.2, 0.0, 1.0);
-  switch params.mask {
-    case 3u: { return 1.0 - lab.x; }
-    case 4u: { return 1.0 - abs(2.0 * lab.x - 1.0); }
-    case 5u: { return lab.x; }
-    case 6u: { return chroma; }
-    case 7u: { return 1.0 - chroma; }
-    default: { return 1.0; }
-  }
+  if (params.hasMask == 0u) { return 1.0; }
+  return pow(clamp(maskAt(p, size), 0.0, 1.0), max(params.maskGamma, 0.01));
 }
 
-/** Dither amount multiplier from the mask (1 = unmasked). */
-fn maskWeight(p: vec2u, size: vec2u) -> f32 {
-  if (params.mask == 0u) { return 1.0; }
-  let m = pow(clamp(maskValue(p, size), 0.0, 1.0), max(params.maskGamma, 0.01));
-  return mix(1.0, m, clamp(params.maskStrength, 0.0, 1.0));
+/** Pattern and amount for one pixel: inside or outside the mask. */
+struct Pick { pattern: u32, amount: f32, outside: bool, diffuse: bool }
+
+fn pick(p: vec2u, size: vec2u) -> Pick {
+  let m = maskValue(p, size);
+  let ms = clamp(params.maskStrength, 0.0, 1.0);
+  if (params.outside != 0u && m < 0.5) {
+    return Pick(params.outside - 1u, params.outsideStrength * mix(1.0, 1.0 - m, ms), true, params.diffuseOut == 1u);
+  }
+  return Pick(params.pattern, params.strength * mix(1.0, m, ms), false, params.diffuseIn == 1u);
 }
 
 // ── Ordered ─────────────────────────────────────────────────────────────────
@@ -353,12 +381,9 @@ fn knoll(rgb: vec3f, t: f32, amount: f32) -> vec3f {
   return paletteRgb(idx[min(u32(t * f32(n)), n - 1u)]);
 }
 
-fn run(p: vec2u, size: vec2u) -> vec4f {
-  let c = inputAt(p, size);
-  let w = maskWeight(p, size);
-  if (params.showMask == 1u) { return vec4f(vec3f(w), 1.0); }
-  let t = threshold(p);
-  let s = params.strength * w;
+/** Ordered dithering of color c at pixel p with a pattern and amount s. */
+fn ordered(c: vec4f, p: vec2u, pattern: u32, s: f32) -> vec4f {
+  let t = threshold(p, pattern);
   // Per-channel thresholds: the same value (brightness only) or phase-shifted per channel (color).
   let tv = mix(vec3f(t), vec3f(t, fract(t + 0.3333333), fract(t + 0.6666667)), clamp(params.saturation, 0.0, 1.0));
   var rgb = clamp(c.rgb, vec3f(0.0), vec3f(1.0));
@@ -388,6 +413,15 @@ fn run(p: vec2u, size: vec2u) -> vec4f {
   var a = c.a;
   if (params.alphaMode == 1u) { a = select(0.0, 1.0, a > 1.0 - t); }
   return vec4f(rgb, a);
+}
+
+fn run(p: vec2u, size: vec2u) -> vec4f {
+  if (params.showMask == 1u) {
+    let w = mix(1.0, maskValue(p, size), clamp(params.maskStrength, 0.0, 1.0));
+    return vec4f(vec3f(w), 1.0);
+  }
+  let k = pick(p, size);
+  return ordered(inputAt(p, size), p, k.pattern, k.amount);
 }
 
 // ── Error diffusion ─────────────────────────────────────────────────────────
@@ -440,9 +474,21 @@ fn spread(buffer: u32, x: u32, row: u32, size: vec2u, rows: u32, e: vec3f, w: ar
   }
 }
 
-/** Dithers one pixel of an error diffusion scan in direction dir; writes it when \`write\`. */
+/**
+ * Dithers one pixel of an error diffusion scan in direction dir; writes it when \`write\`. Pixels
+ * that get an ordered pattern (inside or outside the mask) take no part in the diffusion.
+ */
 fn diffusePixel(p: vec2u, size: vec2u, rows: u32, dir: i32, write: bool) {
   let c = textureLoad(src, p, 0);
+  let k = pick(p, size);
+  if (!k.diffuse) {
+    carryCur = carryNxt;
+    carryNxt = vec3f(0.0);
+    scratch[ringIndex(0u, p.x, p.y, size.x, rows)] = vec4f(0.0);
+    scratch[ringIndex(1u, p.x, p.y, size.x, rows)] = vec4f(0.0);
+    if (write) { emit(p, size, ordered(c, p, k.pattern, k.amount)); }
+    return;
+  }
   let a0 = ringIndex(0u, p.x, p.y, size.x, rows);
   let a1 = ringIndex(1u, p.x, p.y, size.x, rows);
   let value = clamp(c.rgb + carryCur + scratch[a0].rgb + scratch[a1].rgb, vec3f(0.0), vec3f(1.0));
@@ -450,13 +496,17 @@ fn diffusePixel(p: vec2u, size: vec2u, rows: u32, dir: i32, write: bool) {
   scratch[a1] = vec4f(0.0);
   let out = snapColor(value);
 
-  var e = (value - out) * params.strength * maskWeight(p, size) * select(0.0, 1.0, c.a > 0.0);
+  var e = (value - out) * k.amount * select(0.0, 1.0, c.a > 0.0);
   let el = luma(e);
   e = vec3f(el) + (e - vec3f(el)) * clamp(params.saturation, 0.0, 1.0);
-  carryCur = carryNxt + e * params.k0.x;
-  carryNxt = e * params.k0.y;
-  spread(0u, p.x, p.y + 1u, size, rows, e, array<f32, 5>(params.k0.z, params.k0.w, params.k1.x, params.k1.y, params.k1.z), dir);
-  spread(1u, p.x, p.y + 2u, size, rows, e, array<f32, 5>(params.k1.w, params.k2.x, params.k2.y, params.k2.z, params.k2.w), dir);
+  var k0 = params.k0;
+  var k1 = params.k1;
+  var k2 = params.k2;
+  if (k.outside) { k0 = params.o0; k1 = params.o1; k2 = params.o2; }
+  carryCur = carryNxt + e * k0.x;
+  carryNxt = e * k0.y;
+  spread(0u, p.x, p.y + 1u, size, rows, e, array<f32, 5>(k0.z, k0.w, k1.x, k1.y, k1.z), dir);
+  spread(1u, p.x, p.y + 2u, size, rows, e, array<f32, 5>(k1.w, k2.x, k2.y, k2.z, k2.w), dir);
 
   if (write) {
     var alpha = c.a;
@@ -510,7 +560,7 @@ fn runRows(thread: u32, size: vec2u) {
 }
 `,
   pack: (p) => {
-    const k = diffusionKernel(p.pattern)
+    const outside = outsidePattern(p)
     return packStruct(
       ['u', index(DITHER_PATTERNS, p.pattern)],
       ['u', index(DITHER_MODES, p.mode)],
@@ -521,17 +571,29 @@ fn runRows(thread: u32, size: vec2u) {
       ['u', index(DITHER_MIXING, ditherMixing(p))],
       ['u', p.alpha === 'dither' ? 1 : 0],
       ['f', p.saturation],
-      ['u', index(DITHER_MASKS, p.mask)],
+      ['u', ditherMask(p) ? 1 : 0],
       ['f', p.maskStrength],
       ['f', p.maskGamma],
       ['u', Math.round(p.knollCount)],
       ['u', p.showMask ? 1 : 0],
       ['u', p.serpentine ? 1 : 0],
       ['u', p.wrap ? 1 : 0],
-      ...k.map((w): ['f', number] => ['f', w])
+      ['u', outside ? index(DITHER_PATTERNS, outside) + 1 : 0],
+      ['f', p.outsideStrength],
+      ['u', isDiffusion(p.pattern) ? 1 : 0],
+      ['u', outside && isDiffusion(outside) ? 1 : 0],
+      ...diffusionKernel(p.pattern).map((w): ['f', number] => ['f', w]),
+      ...diffusionKernel(outside ?? p.pattern).map((w): ['f', number] => ['f', w])
     )
   },
-  resources: (p) => ({ palette: p.mode === 'palette' ? p.paletteId : null }),
-  serial: (p) => isDiffusion(p.pattern) && p.mode !== 'pattern' && !p.showMask,
+  resources: (p) => {
+    const mask = ditherMask(p)
+    return { palette: p.mode === 'palette' ? p.paletteId : null, maps: mask ? maskMaps(mask) : [] }
+  },
+  mask: (p) => ditherMask(p),
+  serial: (p) => {
+    const outside = outsidePattern(p)
+    return (isDiffusion(p.pattern) || (!!outside && isDiffusion(outside))) && p.mode !== 'pattern' && !p.showMask
+  },
   scratchBytes: (size) => 2 * size.width * Math.min(size.height, RING_ROWS) * 16
 })

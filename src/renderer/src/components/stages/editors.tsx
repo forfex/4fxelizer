@@ -7,11 +7,14 @@ import {
   DITHER_MIXING,
   DITHER_MODES,
   DITHER_PATTERNS,
+  ditherMask,
   ditherMixing,
   isDiffusion,
+  type DitherMask,
   type DitherParams,
   type DitherPattern
 } from '@/gpu/passes/dither'
+import { MASK_COMBINE, MAX_MASK_BLUR } from '@/gpu/mask'
 import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
 import { MAX_UPSCALE_FACTOR, UPSCALE_METHODS, type UpscaleParams } from '@/gpu/passes/upscale'
@@ -354,8 +357,6 @@ const defaultSaturation = (pattern: DitherPattern): number => (isDiffusion(patte
 function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
   const diffusion = isDiffusion(p.pattern)
   const mixing = ditherMixing(p)
-  const maskShown = useApp((s) => s.maskUid === stage.uid)
-  const { setMaskView } = useApp.getState()
 
   const setPattern = (pattern: DitherPattern): void => {
     const patch: Partial<DitherParams> = { pattern }
@@ -380,7 +381,12 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
         <Segmented
           className="flex-1"
           value={p.mode}
-          onChange={(mode) => set(mode === 'pattern' && diffusion ? { mode, pattern: 'bayer4', saturation: 0 } : { mode })}
+          onChange={(mode) => {
+            // Pattern only can't diffuse error: fall back to ordered patterns.
+            const patch: Partial<DitherParams> = mode === 'pattern' && diffusion ? { mode, pattern: 'bayer4', saturation: 0 } : { mode }
+            if (mode === 'pattern' && p.outsidePattern !== 'none' && isDiffusion(p.outsidePattern)) patch.outsidePattern = 'none'
+            set(patch)
+          }}
           options={DITHER_MODES.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
         />
       </Field>
@@ -388,7 +394,7 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
         label="Algorithm"
         hint={
           diffusion
-            ? 'Error diffusion spreads each pixel\'s rounding error to its neighbors: smooth and organic. Turn on Wrap around for tiling textures.'
+            ? 'Error diffusion spreads each pixel\'s rounding error to its neighbors: smooth and organic. Turn on Wrap edges for tiling textures.'
             : 'Ordered patterns compare each pixel with a repeating threshold pattern: crisp, retro, tileable.'
         }
       >
@@ -440,46 +446,146 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
         />
       )}
       {diffusion && (
-        <Field label="Scan">
+        <Field label="">
           <Checkbox
             checked={p.serpentine}
             onCheckedChange={(serpentine) => set({ serpentine })}
             label="Serpentine"
             hint="Every other row runs right to left, which breaks up the diagonal streaks error diffusion leaves."
           />
-          <Checkbox
-            checked={p.wrap}
-            onCheckedChange={(wrap) => set({ wrap })}
-            label="Wrap around"
-            hint="Error leaving one edge comes back in on the opposite edge, so the result tiles seamlessly. Slower on large images."
-          />
         </Field>
       )}
       {!diffusion && (
         <ParamSlider label="Pattern scale" hint="Pixels per pattern cell." value={p.scale} min={1} max={8} ticks={8} onChange={(scale) => set({ scale })} suffix="×" />
       )}
-      <Field label="Mask" hint={DITHER_MASKS.find((m) => m.id === p.mask)?.hint}>
-        <Select
-          className="min-w-0 flex-1"
-          value={p.mask}
-          onValueChange={(mask) => {
-            set({ mask })
-            if (mask === 'none' && maskShown) setMaskView(null)
-          }}
-          options={DITHER_MASKS.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
+      <Field label="Tiling">
+        <Checkbox
+          checked={p.wrap}
+          onCheckedChange={(wrap) => set({ wrap })}
+          label="Wrap edges"
+          hint={
+            'For tiling textures: error diffusion carries error across the edges (slower on large images), ' +
+            'and mask edge detection and blur wrap around.'
+          }
         />
+      </Field>
+      <DitherMaskSettings stage={stage} params={p} set={set} patterns={patterns} />
+      <Field label="Alpha">
+        <Segmented
+          className="flex-1"
+          value={p.alpha}
+          onChange={(alpha) => set({ alpha })}
+          options={[
+            { value: 'keep', label: 'Keep' },
+            { value: 'dither', label: 'Dithered cutout', hint: 'Alpha becomes 0 or 1 using the pattern.' }
+          ]}
+        />
+      </Field>
+    </>
+  )
+}
+
+const MASK_OPTIONS = DITHER_MASKS.map((m) => ({ value: m.id, label: m.label, hint: m.hint, group: m.group }))
+
+/** Mask source dropdown with an Invert switch. */
+function MaskSourceField({
+  label,
+  hint,
+  value,
+  invert,
+  onChange,
+  onInvert,
+  none,
+  children
+}: {
+  label: string
+  hint: string
+  value: DitherMask
+  invert: boolean
+  onChange(value: DitherMask): void
+  onInvert(invert: boolean): void
+  /** Label of the 'none' option. */
+  none: string
+  children?: React.ReactNode
+}) {
+  const options = MASK_OPTIONS.map((o) => (o.value === 'none' ? { ...o, label: none } : o))
+  return (
+    <Field label={label} hint={DITHER_MASKS.find((m) => m.id === value)?.hint ?? hint}>
+      <Select className="min-w-0 flex-1" value={value} onValueChange={onChange} options={options} />
+      <Checkbox checked={invert} disabled={value === 'none'} onCheckedChange={onInvert} label="Inv" hint="Invert: swap white and black." />
+      {children}
+    </Field>
+  )
+}
+
+/** Where the dither goes: up to two mask sources, combined, blurred and shaped, and the pattern outside. */
+function DitherMaskSettings({
+  stage,
+  params: p,
+  set,
+  patterns
+}: Omit<EditorProps<DitherParams>, 'info'> & { patterns: { value: DitherPattern; label: string; group: string }[] }) {
+  const maskShown = useApp((s) => s.maskUid === stage.uid)
+  const { setMaskView } = useApp.getState()
+  const hasMask = ditherMask(p) !== null
+  const update = (patch: Partial<DitherParams>): void => {
+    set(patch)
+    if (maskShown && !ditherMask({ ...p, ...patch })) setMaskView(null)
+  }
+  return (
+    <>
+      <MaskSourceField
+        label="Mask"
+        hint="Where to dither. White = full dither, black = none (or the outside pattern)."
+        value={p.mask}
+        invert={p.maskInvert}
+        onChange={(mask) => update({ mask })}
+        onInvert={(maskInvert) => set({ maskInvert })}
+        none="Everywhere"
+      >
         <Button
           size="sm"
           aria-pressed={maskShown}
-          disabled={p.mask === 'none'}
+          disabled={!hasMask}
           title={maskShown ? 'Showing the mask (white = full dither). Click to show the image.' : 'Show the mask in the viewer (white = full dither, black = none)'}
           onClick={() => setMaskView(maskShown ? null : stage.uid)}
         >
           View
         </Button>
-      </Field>
-      {p.mask !== 'none' && (
+      </MaskSourceField>
+      {(hasMask || p.mask2 !== 'none') && (
+        <MaskSourceField
+          label="Combine with"
+          hint="A second mask source, combined with the first."
+          value={p.mask2}
+          invert={p.mask2Invert}
+          onChange={(mask2) => update({ mask2 })}
+          onInvert={(mask2Invert) => set({ mask2Invert })}
+          none="Nothing"
+        />
+      )}
+      {p.mask !== 'none' && p.mask2 !== 'none' && (
+        <Field label="" hint={MASK_COMBINE.find((m) => m.id === p.maskCombine)?.hint}>
+          <Segmented
+            className="flex-1"
+            value={p.maskCombine}
+            onChange={(maskCombine) => set({ maskCombine })}
+            options={MASK_COMBINE.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
+          />
+        </Field>
+      )}
+      {hasMask && (
         <>
+          <ParamSlider
+            label="Mask blur"
+            hint="Softens the mask, in pixels of this stage's image."
+            value={p.maskBlur}
+            min={0}
+            max={MAX_MASK_BLUR}
+            step={0.5}
+            onChange={(maskBlur) => set({ maskBlur })}
+            suffix="px"
+          />
           <ParamSlider
             label="Mask strength"
             hint="0 = ignore the mask, 1 = dither only where the mask is white."
@@ -499,19 +605,27 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
             scale="log"
             onChange={(maskGamma) => set({ maskGamma })}
           />
+          <Field label="Outside" hint="Pattern where the mask is dark (below 50%). Same = the same pattern, weaker there.">
+            <Select
+              className="min-w-0 flex-1"
+              value={p.outsidePattern}
+              onValueChange={(outsidePattern) => set({ outsidePattern })}
+              options={[{ value: 'none' as const, label: 'Same pattern' }, ...patterns]}
+            />
+          </Field>
+          {p.outsidePattern !== 'none' && (
+            <ParamSlider
+              label="Outside strength"
+              hint="Dither strength of the outside pattern."
+              value={p.outsideStrength}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(outsideStrength) => set({ outsideStrength })}
+            />
+          )}
         </>
       )}
-      <Field label="Alpha">
-        <Segmented
-          className="flex-1"
-          value={p.alpha}
-          onChange={(alpha) => set({ alpha })}
-          options={[
-            { value: 'keep', label: 'Keep' },
-            { value: 'dither', label: 'Dithered cutout', hint: 'Alpha becomes 0 or 1 using the pattern.' }
-          ]}
-        />
-      </Field>
     </>
   )
 }

@@ -2,6 +2,8 @@
 // writes one texture. The framework owns bindings, dispatch, pipeline caching and the
 // per-stage blend; a pass only supplies a `run` function in WGSL plus its parameter packing.
 
+import type { MapSlot } from '@shared/maps'
+import type { MaskSpec } from './mask'
 import { WGSL_LIB } from './wgslLib'
 
 export interface Size {
@@ -40,6 +42,8 @@ export const DEFAULT_BLEND: StageBlend = { opacity: 1, mode: 'normal' }
 export interface PassResources {
   /** Id of the project palette the pass reads (bound as `palette`, count in `paletteCount()`). */
   palette?: string | null
+  /** Imported map slots the pass reads (through its mask). */
+  maps?: MapSlot[]
 }
 
 /** Stack-wide facts a pass may need beyond its own input. */
@@ -56,8 +60,8 @@ export interface PassDef<P = unknown> {
    *   fn run(p: vec2u, size: vec2u) -> vec4f   // color for output texel p of an output of `size`
    * and, if the pass has parameters, `struct Params { ... }` matching `pack`.
    * In scope: `src` (texture_2d<f32>), `params` (uniform Params), `linearSampler`, `palette`,
-   * `pattern` (blue noise), `scratch` (read-write storage, see `scratchBytes`) and the helpers in
-   * wgslLib.ts.
+   * `pattern` (blue noise), `scratch` (read-write storage, see `scratchBytes`), the stage mask
+   * (`maskAt(p, size)`, see `mask`) and the helpers in wgslLib.ts.
    *
    * A pass whose pixels depend on each other (error diffusion) can also define
    *   fn runRows(thread: u32, size: vec2u)      // one workgroup of ROW_THREADS threads
@@ -75,6 +79,8 @@ export interface PassDef<P = unknown> {
   serial?(params: P): boolean
   /** Bytes of zeroed `scratch` storage the serial path needs for an output of `size`. */
   scratchBytes?(size: Size, params: P): number
+  /** The mask to build before the pass runs (read with `maskAt`); null = none (maskAt is 1). */
+  mask?(params: P): MaskSpec | null
 }
 
 export function definePass<P>(def: PassDef<P>): PassDef<P> {
@@ -116,6 +122,7 @@ struct PaletteEntry { color: vec4f, lab: vec4f }
 @group(0) @binding(5) var pattern: texture_2d<f32>;
 @group(0) @binding(6) var<uniform> stage: Stage;
 @group(0) @binding(7) var<storage, read_write> scratch: array<vec4f>;
+@group(0) @binding(8) var maskTex: texture_2d<f32>;
 
 const ROW_THREADS = ${ROW_THREADS}u;
 
@@ -161,6 +168,8 @@ export interface PassBindings {
   serial?: boolean
   /** Zeroed storage for the serial path; defaults to a tiny placeholder. */
   scratch?: GPUBuffer | null
+  /** The stage mask (see PassDef.mask); defaults to white (no mask). */
+  mask?: GPUTexture | null
 }
 
 export class PassRunner {
@@ -170,6 +179,7 @@ export class PassRunner {
   private readonly pipelines = new Map<string, GPUComputePipeline>()
   private readonly modules = new Map<string, GPUShaderModule>()
   private readonly emptyScratch: GPUBuffer
+  private readonly noMask: GPUTexture
 
   constructor(private readonly device: GPUDevice) {
     const compute = GPUShaderStage.COMPUTE
@@ -183,10 +193,13 @@ export class PassRunner {
         { binding: 4, visibility: compute, buffer: { type: 'read-only-storage' } },
         { binding: 5, visibility: compute, texture: { sampleType: 'float' } },
         { binding: 6, visibility: compute, buffer: { type: 'uniform' } },
-        { binding: 7, visibility: compute, buffer: { type: 'storage' } }
+        { binding: 7, visibility: compute, buffer: { type: 'storage' } },
+        { binding: 8, visibility: compute, texture: { sampleType: 'float' } }
       ]
     })
     this.emptyScratch = device.createBuffer({ label: 'empty scratch', size: 16, usage: GPUBufferUsage.STORAGE })
+    this.noMask = device.createTexture({ label: 'no mask', size: [1, 1], format: 'r8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST })
+    device.queue.writeTexture({ texture: this.noMask }, new Uint8Array([255]), { bytesPerRow: 1 }, [1, 1])
     this.pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [this.layout] })
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
   }
@@ -276,7 +289,8 @@ export class PassRunner {
         { binding: 4, resource: { buffer: bindings.palette } },
         { binding: 5, resource: bindings.pattern.createView() },
         { binding: 6, resource: { buffer: uniforms[1]! } },
-        { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } }
+        { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } },
+        { binding: 8, resource: (bindings.mask ?? this.noMask).createView() }
       ]
     })
     const pass = encoder.beginComputePass({ label: def.id })

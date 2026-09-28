@@ -105,26 +105,14 @@ export class Engine {
     const old = this.mask
     this.mask = null
     const planned = uid ? plan.stages.find((s) => s.stage.uid === uid) : undefined
-    const def = planned && (PASSES.get(planned.stage.passId) as PassDef<unknown> | undefined)
     const input = planned && this.textureForKey(planned.inputKey)
-    if (planned && def && input) {
+    if (planned && input && PASSES.has(planned.stage.passId)) {
       const params = { ...(planned.stage.params as object), showMask: true }
-      const size = def.outputSize?.(input, params, { source: this.source!.texture }) ?? input
-      const texture = this.gpu.device.createTexture({
-        label: 'mask view',
-        size: [Math.max(1, size.width), Math.max(1, size.height)],
-        format: WORK_FORMAT,
-        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
-      })
-      const uniforms = this.runner.createUniforms(def, params, DEFAULT_BLEND, 0)
       const encoder = this.gpu.device.createCommandEncoder({ label: 'mask view' })
-      this.runner.encode(encoder, def as PassDef<never>, input, texture, uniforms, {
-        palette: this.resources.emptyPalette,
-        paletteCount: 0,
-        pattern: this.resources.pattern
-      })
+      const run = this.chain.encodeStage(encoder, planned.stage.passId, params, DEFAULT_BLEND, input, this.source!.texture, 'mask view')
       this.gpu.device.queue.submit([encoder.finish()])
-      this.mask = { texture, uniforms }
+      run.release()
+      this.mask = { texture: run.texture, uniforms: run.uniforms }
     }
     // The viewer must drop the old texture before it's destroyed; process() rebinds right after.
     if (old) {
