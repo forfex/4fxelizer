@@ -2,15 +2,9 @@
 // checkboxes and segmented choices.
 
 import { useEffect, useState, type ReactNode } from 'react'
+import { clamp, decimalsOf, LOG_POSITIONS, logToPosition, positionToLog, snapToStep, wheelLogValue } from '@/lib/sliderMath'
 import { cn } from '@/lib/utils'
 import { Slider } from './slider'
-
-const clamp = (v: number, min: number, max: number): number => Math.min(Math.max(v, min), max)
-
-function decimalsOf(step: number): number {
-  const s = String(step)
-  return s.includes('.') ? s.length - s.indexOf('.') - 1 : 0
-}
 
 /** Editable numeric readout in an LCD box. Commits on Enter/blur; ↑/↓ step (Shift = ×10). */
 export function NumberField({
@@ -43,7 +37,7 @@ export function NumberField({
 
   const commit = (): void => {
     const v = parseFloat(text)
-    if (Number.isFinite(v)) onChange(clamp(Math.round(v / step) * step, min, max))
+    if (Number.isFinite(v)) onChange(snapToStep(v, Number.isFinite(min) ? min : 0, max, step))
     else setText(format(value))
     setEditing(false)
   }
@@ -89,7 +83,10 @@ export function NumberField({
   )
 }
 
-/** Label + slider + numeric field on one row. */
+/**
+ * Label + slider + numeric field on one row. The mouse wheel adjusts the slider.
+ * `scale="log"` spaces values logarithmically (for wide ranges like 2–8192 colors); requires min > 0.
+ */
 export function ParamSlider({
   label,
   hint,
@@ -100,7 +97,8 @@ export function ParamSlider({
   step = 1,
   ticks = 0,
   suffix,
-  disabled
+  disabled,
+  scale = 'linear'
 }: {
   label: string
   hint?: string
@@ -112,19 +110,25 @@ export function ParamSlider({
   ticks?: number
   suffix?: string
   disabled?: boolean
+  scale?: 'linear' | 'log'
 }) {
+  const log = scale === 'log'
   return (
     <div className="flex items-center gap-2" title={hint}>
       <span className="w-20 shrink-0 truncate text-dim">{label}</span>
       <Slider
         className="min-w-0 flex-1"
-        min={min}
-        max={max}
-        step={step}
+        min={log ? 0 : min}
+        max={log ? LOG_POSITIONS : max}
+        step={log ? 1 : step}
         ticks={ticks}
-        value={[clamp(value, min, max)]}
+        value={[log ? logToPosition(value, min, max) : clamp(value, min, max)]}
         disabled={disabled}
-        onValueChange={([v]) => onChange(v!)}
+        onValueChange={([v]) => {
+          const next = log ? positionToLog(v!, min, max, step) : v!
+          if (next !== value) onChange(next)
+        }}
+        onWheelNotches={log ? (n, coarse) => onChange(wheelLogValue(value, n, min, max, step, coarse)) : undefined}
         aria-label={label}
       />
       <NumberField className="w-16 shrink-0" value={value} onChange={onChange} min={min} max={max} step={step} suffix={suffix} disabled={disabled} />
