@@ -19,7 +19,7 @@
 
 ## Gallery
 
-One 1024×1024 source texture through the built-in presets:
+One source texture through the built-in presets:
 
 | Source | PSX 8bpp | PSX 4bpp | N64 |
 |:--:|:--:|:--:|:--:|
@@ -56,14 +56,17 @@ Quantize and Dither take their colors from a **palette** or a **generated** pale
 automatically from the stage's input). Palettes are shared resources: generate them from the image
 (median cut, Wu, octree or k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
 `.hex/.gpl/.pal/.act/.ase`, edit and lock colors, or pick colors from the image with the eyedropper
-(**Pick**, or Alt+click the viewer).
+(**Pick**, or Alt+click the viewer; some Linux desktops reserve Alt+click for moving windows, so use **Pick** there).
+Wu and octree reach the requested color count even on smooth gradients.
 **Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
 PSX 15-bit, N64, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
 Panels dock, tab together, float over the viewer and resize, like in Photoshop; the toolbar's workspace menu
 switches between built-in layouts (Essentials, Wide viewer, Palette editing, Floating), saves your own and resets them.
+On Windows and Linux the app draws its own title bar with the menus in the theme's colors; Alt or F10 moves to
+the menus and Alt+letter opens one, as in a native menu bar. macOS keeps its system menu bar.
 Grid, split view, the export format, the panel layout and the window size and position are remembered between sessions.
 **File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
-BMP has no transparency).
+indexed BMP has no alpha, so transparent pixels use index 0 and semi-transparent ones become opaque).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
 
 ## Development
@@ -110,16 +113,17 @@ AppImage + deb) and publishes a GitHub release when a `v*` tag is pushed. Bump `
 first; the tag must match it:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ## Layout
 
 ```
-src/main/            Electron main: window, menu, file dialogs, GPU flags, --gpu-report
+src/main/            Electron main: window, native menu, file dialogs, settings, GPU flags, --gpu-report
 src/preload/         window.fx bridge (sandboxed, CommonJS)
-src/shared/api.ts    IPC contract shared by main, preload and renderer
+src/shared/api.ts    IPC contract and user settings shared by main, preload and renderer
+src/shared/menu.ts   the app menu, defined once: native menu in main, title bar menus in the renderer
 src/renderer/src/
   gpu/pass.ts        pass framework: each stage = one WGSL compute function (+ blend, palette, pattern)
   gpu/wgslLib.ts     WGSL helpers shared by all passes (OKLab, palette lookup, dither thresholds, blend)
@@ -132,11 +136,12 @@ src/renderer/src/
   palette/           palette model, generation (worker), file formats, built-ins, auto-regeneration
   dither/            blue-noise generator (void-and-cluster)
   stack/             document ops, presets, built-in presets, order warnings (pure, unit-tested)
-  image/             PNG (RGBA + indexed) encoder, TGA decoder, half-float readback
+  image/             PNG, TGA and BMP encoders (RGBA + indexed), TGA decoder, half-float readback
   viewer/viewport.ts zoom/pan math in device pixels
   engine.ts          owns GPU objects; React talks to it
   store.ts           app state + undoable document (zustand)
-  components/        stack panel, stage editors, palette panel, export dialog, viewer
+  workspace/         dockable panel layout: built-in workspaces, saved layouts and their checks
+  components/        title bar, dock, stack panel, stage editors, palette panel, export dialog, viewer
   components/ui/     shadcn-style primitives, restyled via tokens
   styles/tokens.css  design tokens: the one place to restyle the app
 ```

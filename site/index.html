@@ -79,20 +79,20 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--dim);font-siz
   <div class="grid">
     <div class="card"><h3>Reorderable stage stack</h3><p>Adjust, Downscale, Upscale, Quantize and Dither. Drag them in any order, add the same stage twice, click one to preview the image at that point.</p></div>
     <div class="card"><h3>Real dithering</h3><p>Bayer, blue noise, halftone, lines, N64 magic square, plus Floyd–Steinberg, Atkinson, Stucki, Sierra and more. Masks decide where it applies.</p></div>
-    <div class="card"><h3>Smart palettes</h3><p>Generate up to 8192 colors in OKLab, start from PICO-8, NES, Game Boy, CGA or C64, import <code>.hex .gpl .pal .act .ase</code>, edit and lock colors.</p></div>
+    <div class="card"><h3>Smart palettes</h3><p>Generate up to 8192 colors in OKLab with median cut, Wu, octree or k-means, start from PICO-8, NES, Game Boy, CGA or C64, import <code>.hex .gpl .pal .act .ase</code>, edit and lock colors, or pick them from the image with the eyedropper.</p></div>
     <div class="card"><h3>Downscale &amp; upscale filters</h3><p>Box, Lanczos, dominant color, edge-preserving, contrast-aware; back up with the N64 3-point filter, Scale2x, sharp bilinear and more.</p></div>
     <div class="card"><h3>Presets</h3><p>PSX 8bpp / 4bpp / 15-bit, N64, NES-ish, Game Boy, Crunchy. Save your own as shareable <code>.4fxpreset</code> files.</p></div>
-    <div class="card"><h3>Exact export</h3><p>PNG (RGBA) or indexed PNG at 1/2/4/8 bits, with palette order kept and transparency at index 0. No color-space surprises.</p></div>
+    <div class="card"><h3>Exact export</h3><p>PNG, TGA or BMP, full color or indexed, with palette order kept and transparency at index 0. No color-space surprises.</p></div>
     <div class="card"><h3>WebGPU speed</h3><p>Every stage is a compute shader with per-stage caching, so tweaking a slider only re-runs what changed.</p></div>
-    <div class="card"><h3>Undo everything</h3><p>Undo and redo cover the stack and the palettes. Split view, pixel grid and zoom for close inspection.</p></div>
+    <div class="card"><h3>Your workspace</h3><p>Dock, tab, float and resize the panels, switch between built-in workspaces or save your own. Undo covers the stack and palettes; split view and pixel grid for close inspection.</p></div>
   </div>
 </div></section>
 
 <section id="gallery"><div class="wrap">
   <h2>Gallery</h2>
-  <p class="sub">One 1024×1024 source texture, six built-in presets.</p>
+  <p class="sub">One source texture, six built-in presets.</p>
   <div class="gallery">
-    <figure><img src="images/gallery-source.png" alt="Source" loading="lazy"><figcaption><b>Source</b> 1024×1024</figcaption></figure>
+    <figure><img src="images/gallery-source.png" alt="Source" loading="lazy"><figcaption><b>Source</b></figcaption></figure>
     <figure><img src="images/gallery-psx-8bpp.png" alt="PSX 8bpp" loading="lazy"><figcaption><b>PSX 8bpp</b> 256 colors</figcaption></figure>
     <figure><img src="images/gallery-psx-4bpp.png" alt="PSX 4bpp" loading="lazy"><figcaption><b>PSX 4bpp</b> 16 colors</figcaption></figure>
     <figure><img src="images/gallery-n64.png" alt="N64" loading="lazy"><figcaption><b>N64</b> filtered blur</figcaption></figure>
@@ -107,7 +107,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--dim);font-siz
   <ol class="steps">
     <li><b>Download</b> the installer for your OS from the <a href="https://github.com/forfex/4fxelizer/releases/latest">latest release</a> (Windows setup, macOS dmg, Linux AppImage or deb). Builds are not code-signed yet, so Windows SmartScreen or macOS Gatekeeper may warn.</li>
     <li><b>Drop a texture</b> into the window (PNG, JPG, TGA and more), or use <i>File › Open Image…</i>.</li>
-    <li><b>Pick a preset</b> or tweak the stack, compare with the split view, then <b>Export</b> a PNG or indexed PNG.</li>
+    <li><b>Pick a preset</b> or tweak the stack, compare with the split view, then <b>Export</b> a PNG, TGA or BMP, full color or indexed.</li>
   </ol>
   <p class="sub" style="margin-top:24px">Requires a GPU with WebGPU support. Windows 11 is the verified platform so far; macOS and Linux builds are produced by CI and feedback is welcome.</p>
   <p class="sub">Build from source:</p>
@@ -117,6 +117,6 @@ npm install
 npm run dev</code></pre>
 </div></section>
 
-<footer><div class="wrap">4FXELIZER · <a href="https://github.com/forfex/4fxelizer">GitHub</a> · <a href="https://github.com/forfex/4fxelizer/blob/master/docs/PLAN.md">Roadmap</a> · <a href="https://github.com/forfex/4fxelizer/issues">Issues</a></div></footer>
+<footer><div class="wrap">4FXELIZER · <a href="https://github.com/forfex/4fxelizer">GitHub</a> · <a href="https://github.com/forfex/4fxelizer/blob/master/docs/PLAN.md">Roadmap</a> · <a href="https://github.com/forfex/4fxelizer/issues">Issues</a> · <a href="https://github.com/forfex/4fxelizer/blob/master/LICENSE">MIT License</a></div></footer>
 </body>
 </html>
