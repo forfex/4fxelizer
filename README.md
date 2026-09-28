@@ -2,6 +2,22 @@
 
 PSX-style texture stylizer. See [docs/PLAN.md](docs/PLAN.md) for the full design and roadmap.
 
+## What it does (Phase 1)
+
+Load a texture (drag and drop, or **File › Open**), then shape it with a reorderable stack of stages:
+
+- **Adjust**: brightness, contrast, gamma, saturation, hue, levels, sharpen.
+- **Downscale**: nearest, bilinear, bicubic, box, Lanczos, dominant color, median, edge-preserving,
+  contrast-aware; longest side / exact size / scale, optional power-of-two.
+- **Quantize**: snap to a palette (perceptual OKLab or RGB matching) or to N levels per channel (32 = PSX 15-bit).
+- **Dither**: Bayer 2×2 to 16×16 or blue noise; to palette, to levels, or pattern only.
+
+Every stage has on/off, opacity and a blend mode; click a stage to preview the image at that point.
+Palettes are shared resources: generate them from the image (median cut / k-means, automatic or on demand),
+start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import `.hex/.gpl/.pal/.act/.ase`, edit and lock colors.
+**File › Export** writes PNG (RGBA) or indexed PNG (1/2/4/8-bit, palette order kept, transparency at index 0).
+Undo/redo covers the stack and palettes.
+
 ## Commands
 
 ```bash
@@ -41,15 +57,22 @@ src/main/            Electron main: window, menu, file dialogs, GPU flags, --gpu
 src/preload/         window.fx bridge (sandboxed, CommonJS)
 src/shared/api.ts    IPC contract shared by main, preload and renderer
 src/renderer/src/
-  gpu/pass.ts        pass framework: each stage = one WGSL compute function
+  gpu/pass.ts        pass framework: each stage = one WGSL compute function (+ blend, palette, pattern)
+  gpu/wgslLib.ts     WGSL helpers shared by all passes (OKLab, palette lookup, dither thresholds, blend)
   gpu/plan.ts        stage-cache planning (pure, unit-tested)
   gpu/chain.ts       runs the stage stack on the GPU with per-stage caching
+  gpu/resources.ts   GPU copies of palettes and the blue-noise texture
   gpu/viewer.*       2D viewer renderer: zoom, split view, pixel grid, alpha checker
-  gpu/passes/        stage implementations (Phase 0: a posterize test pass)
-  image/             PNG encoder, TGA decoder, half-float readback
+  gpu/passes/        stages: adjust, downscale, quantize, dither
+  color/             OKLab conversion
+  palette/           palette model, generation (worker), file formats, built-ins, auto-regeneration
+  dither/            blue-noise generator (void-and-cluster)
+  stack/analyze.ts   per-stage sizes and order warnings (pure, unit-tested)
+  image/             PNG (RGBA + indexed) encoder, TGA decoder, half-float readback
   viewer/viewport.ts zoom/pan math in device pixels
   engine.ts          owns GPU objects; React talks to it
-  store.ts           app state (zustand)
+  store.ts           app state + undoable document (zustand)
+  components/        stack panel, stage editors, palette panel, export dialog, viewer
   components/ui/     shadcn-style primitives, restyled via tokens
   styles/tokens.css  design tokens: the one place to restyle the app
 ```
@@ -60,7 +83,8 @@ src/renderer/src/
 - **Everything is a devDependency**: the renderer bundles its libraries, and main/preload have
   no runtime deps, so the packaged app ships only `out/`.
 - **Adding a stage**: create `gpu/passes/<name>.ts` with `definePass` (a WGSL `run` function,
-  a `Params` struct and `pack`), then register it in `gpu/passes/index.ts`.
+  a `Params` struct and `pack`), register it in `gpu/passes/index.ts` (`PASSES` + `STAGE_TYPES`),
+  and add its settings editor in `components/stages/editors.tsx`.
 - **Image values are kept exact**: images decode without color-space conversion or alpha
   premultiplication, stages work in `rgba16float`, and PNG export uses our own encoder
   (canvas encoding would premultiply alpha).
