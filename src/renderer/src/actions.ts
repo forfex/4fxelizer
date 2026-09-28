@@ -1,8 +1,10 @@
-import type { FileFilter, MenuCommand } from '@shared/api'
+import type { ExportFileType, ExportFormat, FileFilter, MenuCommand } from '@shared/api'
 import { getEngine } from '@/engine'
 import { decodeImage } from '@/image/decode'
+import { bmpBitDepth, encodeBmp, encodeIndexedBmp } from '@/image/bmp'
 import { countColors, hasTransparency, toIndexed } from '@/image/indexed'
-import { encodeIndexedPng, encodePng, indexedBitDepth } from '@/image/png'
+import { encodeIndexedPng, encodePng, indexedBitDepth, type IndexedImage, type RgbaImage } from '@/image/png'
+import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
 import { MAX_PALETTE, rgb8ToHex } from '@/palette/palette'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
@@ -42,12 +44,32 @@ export async function openDroppedFile(name: string, bytes: Uint8Array): Promise<
   else await loadImageFile(name, bytes)
 }
 
-export type ExportFormat = 'png-rgba' | 'png-indexed'
+export type { ExportFormat }
 
 export interface ExportOptions {
   format: ExportFormat
-  /** Indexed only: palette whose order and colors become the PNG palette; null = the image's colors. */
+  /** Indexed only: palette whose order and colors become the file's palette; null = the image's colors. */
   paletteId: string | null
+}
+
+interface Encoder {
+  label: string
+  filter: FileFilter
+  rgba(image: RgbaImage): Uint8Array | Promise<Uint8Array>
+  indexed(image: IndexedImage): Uint8Array | Promise<Uint8Array>
+  /** Bits per pixel for an indexed image with `count` palette entries. */
+  indexedDepth(count: number): number
+}
+
+export const ENCODERS: Record<ExportFileType, Encoder> = {
+  png: { label: 'PNG', filter: { name: 'PNG image', extensions: ['png'] }, rgba: encodePng, indexed: encodeIndexedPng, indexedDepth: indexedBitDepth },
+  tga: { label: 'TGA', filter: { name: 'TGA image', extensions: ['tga'] }, rgba: encodeTga, indexed: encodeIndexedTga, indexedDepth: () => 8 },
+  bmp: { label: 'BMP', filter: { name: 'BMP image', extensions: ['bmp'] }, rgba: encodeBmp, indexed: encodeIndexedBmp, indexedDepth: bmpBitDepth }
+}
+
+export function parseExportFormat(format: ExportFormat): { type: ExportFileType; indexed: boolean } {
+  const [type, mode] = format.split('-') as [ExportFileType, string]
+  return { type, indexed: mode === 'indexed' }
 }
 
 const baseName = (): string => useApp.getState().image?.name.replace(/\.[^.]+$/, '') ?? 'texture'
@@ -75,18 +97,20 @@ export async function exportImage(options: ExportOptions): Promise<boolean> {
   if (!engine || !image) return false
   try {
     const rgba = await engine.readOutput()
+    const { type, indexed } = parseExportFormat(options.format)
+    const encoder = ENCODERS[type]
     let bytes: Uint8Array
     let detail: string
-    if (options.format === 'png-indexed') {
+    if (indexed) {
       const palette = options.paletteId ? palettes.find((p) => p.id === options.paletteId) : undefined
-      const indexed = toIndexed(rgba, palette?.colors.map((c) => c.hex))
-      bytes = await encodeIndexedPng(indexed)
-      detail = `${indexed.palette.length} colors, ${indexedBitDepth(indexed.palette.length)}-bit indexed`
+      const image = toIndexed(rgba, palette?.colors.map((c) => c.hex))
+      bytes = await encoder.indexed(image)
+      detail = `${image.palette.length} colors, ${encoder.indexedDepth(image.palette.length)}-bit indexed`
     } else {
-      bytes = await encodePng(rgba)
+      bytes = await encoder.rgba(rgba)
       detail = 'RGBA'
     }
-    const path = await window.fx.saveFile(`${baseName()}_4fx.png`, bytes, [{ name: 'PNG image', extensions: ['png'] }])
+    const path = await window.fx.saveFile(`${baseName()}_4fx.${encoder.filter.extensions[0]}`, bytes, [encoder.filter])
     if (!path) return false
     setMessage({ kind: 'info', text: `Saved ${path} (${rgba.width}×${rgba.height}, ${detail})` })
     return true

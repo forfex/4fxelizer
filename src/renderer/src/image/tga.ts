@@ -1,8 +1,9 @@
-// TGA decoder. Browsers can't decode TGA, but it's everywhere in game texture pipelines.
-// Supports color-mapped (1/9), truecolor (2/10) and grayscale (3/11), raw or RLE,
-// 8/15/16/24/32-bit pixels, and both origins.
+// TGA decoder and encoder. Browsers can't decode TGA, but it's everywhere in game texture pipelines.
+// Decodes color-mapped (1/9), truecolor (2/10) and grayscale (3/11), raw or RLE,
+// 8/15/16/24/32-bit pixels, and both origins. Encodes uncompressed truecolor and color-mapped,
+// top-left origin (the most widely readable variants).
 
-import type { RgbaImage } from './png'
+import type { IndexedImage, RgbaImage } from './png'
 
 export function decodeTga(bytes: Uint8Array): RgbaImage {
   if (bytes.length < 18) throw new Error('TGA: file too short')
@@ -118,4 +119,72 @@ function readPixel(bytes: Uint8Array, i: number, depth: number, out: Uint8Array,
   } else {
     throw new Error(`TGA: unsupported pixel depth ${depth}`)
   }
+}
+
+function tgaHeader(fields: {
+  colorMapType: number
+  imageType: number
+  cmapLength?: number
+  cmapDepth?: number
+  width: number
+  height: number
+  depth: number
+  alphaBits: number
+}): Uint8Array {
+  const out = new Uint8Array(18)
+  const view = new DataView(out.buffer)
+  out[1] = fields.colorMapType
+  out[2] = fields.imageType
+  view.setUint16(5, fields.cmapLength ?? 0, true)
+  out[7] = fields.cmapDepth ?? 0
+  view.setUint16(12, fields.width, true)
+  view.setUint16(14, fields.height, true)
+  out[16] = fields.depth
+  out[17] = 0x20 | fields.alphaBits // top-left origin
+  return out
+}
+
+function checkSize(width: number, height: number): void {
+  if (width < 1 || height < 1 || width > 0xffff || height > 0xffff) throw new Error('TGA: size must be 1–65535 pixels')
+}
+
+/** Truecolor TGA: 24-bit BGR when every pixel is opaque, else 32-bit BGRA (straight alpha). */
+export function encodeTga(image: RgbaImage): Uint8Array {
+  const { width, height, data } = image
+  checkSize(width, height)
+  let opaque = true
+  for (let i = 3; i < data.length; i += 4) if (data[i] !== 255) { opaque = false; break }
+  const bpp = opaque ? 3 : 4
+  const out = new Uint8Array(18 + width * height * bpp)
+  out.set(tgaHeader({ colorMapType: 0, imageType: 2, width, height, depth: bpp * 8, alphaBits: opaque ? 0 : 8 }))
+  for (let i = 0, o = 18; i < width * height; i++, o += bpp) {
+    out[o] = data[i * 4 + 2]!
+    out[o + 1] = data[i * 4 + 1]!
+    out[o + 2] = data[i * 4]!
+    if (!opaque) out[o + 3] = data[i * 4 + 3]!
+  }
+  return out
+}
+
+/** Color-mapped TGA with 8-bit indices; 24-bit color map, or 32-bit when an entry is translucent. */
+export function encodeIndexedTga(image: IndexedImage): Uint8Array {
+  const { width, height, indices, palette } = image
+  checkSize(width, height)
+  if (palette.length === 0 || palette.length > 256) throw new Error('TGA: palette must have 1–256 entries')
+  const opaque = palette.every(([, , , a]) => a === 255)
+  const entry = opaque ? 3 : 4
+  const out = new Uint8Array(18 + palette.length * entry + width * height)
+  out.set(tgaHeader({
+    colorMapType: 1,
+    imageType: 1,
+    cmapLength: palette.length,
+    cmapDepth: entry * 8,
+    width,
+    height,
+    depth: 8,
+    alphaBits: opaque ? 0 : 8
+  }))
+  palette.forEach(([r, g, b, a], i) => out.set(opaque ? [b, g, r] : [b, g, r, a], 18 + i * entry))
+  out.set(indices, 18 + palette.length * entry)
+  return out
 }

@@ -14,5 +14,7 @@ describe('settings', () => {
       exportFormat: 'png-rgba'
     })
     expect(normalizeSettings({ exportFormat: 'tiff' }).exportFormat).toBe('png-indexed')
+    for (const f of ['tga-indexed', 'tga-rgba', 'bmp-indexed', 'bmp-rgba']) expect(normalizeSettings({ exportFormat: f }).exportFormat).toBe(f)
+    expect(normalizeSettings({ exportFormat: 'bmp-cmyk' }).exportFormat).toBe('png-indexed')
   })
 })

@@ -1,4 +1,4 @@
-// RGBA → indexed conversion for indexed PNG export.
+// RGBA → indexed conversion for indexed export (PNG, TGA, BMP).
 
 import { rgbToOklab } from '@/color/oklab'
 import { hexToRgb8 } from '@/palette/palette'
@@ -65,7 +65,7 @@ export function toIndexed(image: RgbaImage, palette?: string[]): IndexedImage {
 
   if (entries.length > 256) {
     throw new IndexedExportError(
-      `The image has ${entries.length} colors; indexed PNG allows 256. ` +
+      `The image has ${entries.length} colors; indexed images allow 256. ` +
         'Add a Quantize or Dither stage, or turn on the output palette lock.'
     )
   }

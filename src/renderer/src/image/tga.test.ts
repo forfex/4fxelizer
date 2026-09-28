@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { decodeTga } from './tga'
+import { toIndexed } from './indexed'
+import { decodeTga, encodeIndexedTga, encodeTga } from './tga'
 
 function header(opts: {
   type: number
@@ -90,5 +91,45 @@ describe('decodeTga', () => {
 
   it('rejects truncated files', () => {
     expect(() => decodeTga(new Uint8Array(header({ type: 2, width: 4, height: 4, depth: 24 })))).toThrow()
+  })
+})
+
+describe('encodeTga', () => {
+  const rgba = (pixels: number[][], width: number) => ({
+    width,
+    height: pixels.length / width,
+    data: new Uint8Array(pixels.flat())
+  })
+
+  it('round-trips opaque images as 24-bit', () => {
+    const img = rgba([[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [10, 20, 30, 255], [1, 2, 3, 255], [200, 100, 50, 255]], 3)
+    const bytes = encodeTga(img)
+    expect(bytes[16]).toBe(24)
+    expect(decodeTga(bytes)).toEqual(img)
+  })
+
+  it('keeps straight alpha as 32-bit', () => {
+    const img = rgba([[255, 0, 0, 128], [0, 0, 0, 0], [9, 8, 7, 255], [100, 150, 200, 1]], 2)
+    const bytes = encodeTga(img)
+    expect(bytes[16]).toBe(32)
+    expect(bytes[17]! & 0x0f).toBe(8)
+    expect(decodeTga(bytes)).toEqual(img)
+  })
+
+  it('round-trips indexed images, palette order and transparency included', () => {
+    const img = rgba([[0, 0, 0, 0], [255, 0, 0, 255], [0, 255, 0, 255], [255, 0, 0, 255]], 2)
+    const indexed = toIndexed(img, ['#00ff00', '#ff0000'])
+    const bytes = encodeIndexedTga(indexed)
+    expect(bytes[1]).toBe(1) // has a color map
+    expect(bytes[7]).toBe(32) // translucent entry → 32-bit map
+    expect([...bytes.subarray(bytes.length - 4)]).toEqual([...indexed.indices])
+    expect(decodeTga(bytes)).toEqual(img)
+  })
+
+  it('uses a 24-bit color map when every entry is opaque', () => {
+    const img = rgba([[255, 0, 0, 255], [0, 255, 0, 255]], 2)
+    const bytes = encodeIndexedTga(toIndexed(img))
+    expect(bytes[7]).toBe(24)
+    expect(decodeTga(bytes)).toEqual(img)
   })
 })

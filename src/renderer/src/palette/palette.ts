@@ -50,7 +50,7 @@ export interface Palette {
 /** Largest palette a stage can use (dithering/quantizing works with thousands of colors). */
 export const MAX_PALETTE = 8192
 
-/** Largest palette an indexed PNG (and .act file) can hold. */
+/** Largest palette an indexed image (and .act file) can hold. */
 export const MAX_INDEXED = 256
 
 export const DEFAULT_GENERATOR: GeneratorSettings = {

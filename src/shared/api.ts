@@ -25,8 +25,15 @@ export interface UserSettings {
   /** Before/after split view. */
   split: boolean
   /** Last format chosen in the Export dialog. */
-  exportFormat: 'png-indexed' | 'png-rgba'
+  exportFormat: ExportFormat
 }
+
+export const EXPORT_FILE_TYPES = ['png', 'tga', 'bmp'] as const
+export type ExportFileType = (typeof EXPORT_FILE_TYPES)[number]
+/** File type plus color mode: palette-indexed, or full RGBA. */
+export type ExportFormat = `${ExportFileType}-${'indexed' | 'rgba'}`
+
+const EXPORT_FORMATS: readonly string[] = EXPORT_FILE_TYPES.flatMap((t) => [`${t}-indexed`, `${t}-rgba`])
 
 export const DEFAULT_SETTINGS: UserSettings = {
   grid: false,
@@ -41,7 +48,7 @@ export function normalizeSettings(raw: unknown): UserSettings {
   return {
     grid: bool('grid'),
     split: bool('split'),
-    exportFormat: r.exportFormat === 'png-rgba' || r.exportFormat === 'png-indexed' ? r.exportFormat : DEFAULT_SETTINGS.exportFormat
+    exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat
   }
 }
 
