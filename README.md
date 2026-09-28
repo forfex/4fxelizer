@@ -13,10 +13,14 @@ Load a texture (drag and drop, or **File › Open**), then shape it with a reord
 - **Dither**: Bayer 2×2 to 16×16 or blue noise; to palette, to levels, or pattern only.
 
 Every stage has on/off, opacity and a blend mode; click a stage to preview the image at that point.
-Palettes are shared resources: generate them from the image (median cut / k-means, automatic or on demand),
-start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import `.hex/.gpl/.pal/.act/.ase`, edit and lock colors.
+Quantize and Dither take their colors from a **palette** or a **generated** palette (2–8192 colors, built
+automatically from the stage's input). Palettes are shared resources: generate them from the image
+(median cut / k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
+`.hex/.gpl/.pal/.act/.ase`, edit and lock colors.
+**Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
+PSX 15-bit, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
 **File › Export** writes PNG (RGBA) or indexed PNG (1/2/4/8-bit, palette order kept, transparency at index 0).
-Undo/redo covers the stack and palettes.
+Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
 
 ## Commands
 
@@ -67,7 +71,7 @@ src/renderer/src/
   color/             OKLab conversion
   palette/           palette model, generation (worker), file formats, built-ins, auto-regeneration
   dither/            blue-noise generator (void-and-cluster)
-  stack/analyze.ts   per-stage sizes and order warnings (pure, unit-tested)
+  stack/             document ops, presets, built-in presets, order warnings (pure, unit-tested)
   image/             PNG (RGBA + indexed) encoder, TGA decoder, half-float readback
   viewer/viewport.ts zoom/pan math in device pixels
   engine.ts          owns GPU objects; React talks to it

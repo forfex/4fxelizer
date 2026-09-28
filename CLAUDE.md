@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-4FXELIZER is an Electron desktop app that turns high-res textures into PSX-style low-res, palettized, dithered textures. Target users are artists, not programmers. `docs/PLAN.md` holds the full design, visual-style rules and roadmap. The project is at Phase 1 (2D core): Adjust, Downscale, Quantize and Dither stages, project palettes (generate / edit / import / export), undo, and PNG + indexed PNG export. Phase 1 has been verified on Windows only; keep macOS/Linux supported (no platform-specific code paths beyond `src/main/gpuFlags.ts` and menu accelerators).
+4FXELIZER is an Electron desktop app that turns high-res textures into PSX-style low-res, palettized, dithered textures. Target users are artists, not programmers. `docs/PLAN.md` holds the full design, visual-style rules and roadmap. The project is at Phase 1 (2D core): Adjust, Downscale, Quantize and Dither stages, project palettes (generate / edit / import / export) plus per-stage generated palettes (up to 8192 colors), presets, undo, and PNG + indexed PNG export. Phase 1 has been verified on Windows only; keep macOS/Linux supported (no platform-specific code paths beyond `src/main/gpuFlags.ts` and menu accelerators).
 
 ## Commands
 
@@ -30,17 +30,19 @@ Path aliases: `@shared` → `src/shared`, `@` → `src/renderer/src`. They are d
 
 ### Renderer data flow
 
-- `store.ts` (zustand) holds UI state. The undoable **document** is `stages`, `palettes` and `outputLock`; change it only through `edit()` (or the helpers built on it) so it lands in undo history. `coalesce` merges rapid edits (slider drags) into one step; `silent` skips history (derived updates such as auto-generated palette colors). GPU objects never go in React state.
+- `store.ts` (zustand) holds UI state. The undoable **document** (`stack/doc.ts`: `stages`, `palettes`, `outputLock`) changes only through `edit()` (or the helpers built on it) so it lands in undo history. Pure document operations live in `stack/doc.ts` (tested): a Quantize/Dither stage can own a palette (`palette.ownerUid`) generated from its own input; `makeStage`, `duplicateStage`, `removeStage`, `toGeneratedPalette` / `toProjectPalette` keep owned palettes consistent with their stages. `coalesce` merges rapid edits (slider drags) into one step; `silent` skips history (derived updates such as auto-generated palette colors). GPU objects never go in React state.
 - `engine.ts` is a module-level singleton (`startEngine()` / `getEngine()`) that owns the GPU device, the source texture, `GpuResources` (palette buffers, blue noise), the `PassChain` and the `ViewerRenderer`. The output palette lock runs as a trailing Quantize stage (`withOutputLock`). `onPlan` listeners run after every stack run.
 - `palette/controller.ts` regenerates palettes with `generator.auto` when the image they come from (the source, or a stage's input cache key) or their settings change. Generation runs in a worker (`palette/palette.worker.ts`).
 - `actions.ts` connects UI and engine: file load, export, palette import/export, undo/redo, `runMenuCommand`.
 - `components/Viewer.tsx` runs the frame loop. It calls `engine.process(...)` when the image, stages, palettes, output lock or previewed stage change, and `engine.draw(...)` each frame. Processing is rAF-driven, so it pauses while the window is hidden or minimized.
 - `stack/analyze.ts` (pure, tested) computes per-stage sizes and the order warnings shown on stage cards.
+- Presets (`stack/preset.ts`, tested) serialize the document as `.4fxpreset` JSON. Parsing validates, fills defaults, drops unknown stages and remaps every stage/palette id and reference. User presets are files in `<userData>/presets` handled by `src/main/presets.ts` (file names validated there); built-ins are in `stack/builtinPresets.ts`. Keep old presets loading when params change: add defaults, never repurpose a field.
 - Dev builds expose `window.__fx = { useApp, getEngine }` for DevTools and automation.
 
 ### GPU pipeline (`src/renderer/src/gpu/`)
 
 - `pass.ts`: each stage is one WGSL compute pass. A pass supplies only `fn run(p: vec2u, size: vec2u) -> vec4f`, plus an optional `struct Params` with a matching `pack()` (16-byte aligned; `packStruct` mixes f32/u32), an optional `outputSize()` and an optional `resources()` (the palette id it reads). The framework wraps it with bindings (`src`, `dst`, `params`, `linearSampler`, `palette`, `pattern`, `stage`), the WGSL helpers in `wgslLib.ts` (OKLab, palette lookup, Bayer/blue-noise thresholds, `inputAt`, blend modes) and the per-stage blend (opacity + mode over the stage's input). The working format between stages is `rgba16float`.
+- Palette buffers (`resources.ts`) hold every color twice, sorted by OKLab lightness and by (r+g+b)/√3, with the sort key in `lab.w`. The WGSL lookups binary-search that key and stop once its squared difference exceeds the best distance (exact, fast for thousands of colors). Shader palette indices are therefore buffer positions, not palette order. The CPU k-means uses the same idea (`CenterIndex` in `palette/generate.ts`).
 - `plan.ts`: pure, unit-tested cache planning. Each stage's output key hashes the upstream key plus `passId`, the stable-stringified params, the blend, and a signature of the resources it reads (palette colors). So a params or palette change re-runs only the affected stages and those after them, and reordering needs no explicit invalidation. Disabled stages pass their input key through.
 - `chain.ts`: runs the plan on the GPU and frees cache entries that aren't in `liveKeys`.
 - **Adding a stage**: create `gpu/passes/<name>.ts` with `definePass(...)` and default params, register it in `PASSES` and `STAGE_TYPES` in `gpu/passes/index.ts`, add its editor to `components/stages/editors.tsx`, and teach `stack/analyze.ts` whether it snaps colors or creates new ones.
@@ -60,6 +62,7 @@ Path aliases: `@shared` → `src/shared`, `@` → `src/renderer/src`. They are d
 
 - The user designs the UI (in Figma) and Claude implements it. Keep all styling token-driven: `styles/tokens.css` (`--fx-*` variables) is the single place to restyle, and Figma variables map 1:1 onto it. Don't hard-code colors or sizes in components.
 - `components/ui/` holds shadcn-style primitives (Radix for behavior) restyled into a retro late-90s / PS1-era look: hard bevels, sunken wells, LCD readouts, small corners. It is **not** pixel-art: fonts stay readable and retro accents are used sparingly. Besides button/dialog/slider/retro there are `select.tsx`, `menu.tsx` (dropdown) and `controls.tsx` (NumberField, ParamSlider, Field, Checkbox, Segmented).
+- Sliders respond to the mouse wheel only once **armed** (pointer rested 1 s without scrolling, or the slider was pressed), shown by an accent outline on the thumb; otherwise the wheel scrolls the panel. `ParamSlider scale="log"` for wide ranges. Slider math is in `lib/sliderMath.ts` (tested).
 - Custom Tailwind utilities (`border-px`, `outline-px`, `bevel-*`) that overlap a Tailwind class group must be registered in `lib/utils.ts` (tailwind-merge), or `cn()` drops them as conflicts.
 - `lib/pixelSnap.ts` sets `--px` to a whole number of device pixels, so bevels and borders stay crisp at 125%/150% scaling. Use `var(--px)` for line widths. The GPU viewer reads theme colors through `cssColor(token)`.
 
