@@ -160,9 +160,12 @@ source into the project and Radix supplies only behavior, so every visual detail
   inset wells for image previews and value fields. Small or square corners, no big soft shadows.
 - **Crisp lines at any scaling**: border and bevel widths are rounded to whole screen pixels (via `devicePixelRatio`),
   so 1px lines stay sharp at Windows 125%/150% and on Retina/HiDPI.
-- **Fonts**: a normal, readable UI font for labels and body text; a monospace or LCD-style font for numeric readouts;
-  an optional retro display font for headings only.
-- **Color**: dark theme with muted, slightly warm or desaturated tones and a small set of accent colors (like status LEDs).
+- **Fonts**: Rubik for labels and body text; Martian Mono for numeric readouts; Chakra Petch (a squared-off display face)
+  for titles, stage names and tracked uppercase labels only.
+- **Color**: two themes sharing every role. Dark: a deep plum desktop, purple for state, magenta for focus and "hot"
+  marks. Night: neutral greyscale for dim rooms and color judging, keeping only magenta and the status LEDs.
+- **Depth is drawn, never blurred**: bevels inside controls, a hard offset shadow under things that float; ordered
+  dither instead of gradients.
 - **Icons**: simple, crisp, lightly retro icon set; custom icons for stages and maps.
 - **Controls**: slightly chunky sliders with tick marks, beveled buttons with a clear pressed state, value readouts in
   "LCD" boxes, palette swatches as square tiles.
