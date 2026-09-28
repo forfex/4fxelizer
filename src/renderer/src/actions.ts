@@ -196,6 +196,10 @@ export async function pickColor(side: 'before' | 'after', uv: { u: number; v: nu
   const engine = getEngine()
   const { setMessage } = useApp.getState()
   if (!engine || !useApp.getState().image) return
+  if (side === 'after' && useApp.getState().maskUid) {
+    setMessage({ kind: 'error', text: 'The viewer shows a stage mask; turn the mask view off to pick colors.' })
+    return
+  }
   try {
     const [r, g, b, a] = await engine.readShownPixel(side, uv)
     if (a === 0) {
@@ -209,7 +213,8 @@ export async function pickColor(side: 'before' | 'after', uv: { u: number; v: nu
     }
     const hex = rgb8ToHex(r, g, b)
     const { selectedColor, updatePalette, selectColor } = useApp.getState()
-    const index = selectedColor?.paletteId === palette.id ? selectedColor.index : null
+    // An undo can leave the selection past the end of the palette; then the pick adds a color.
+    const index = selectedColor?.paletteId === palette.id && selectedColor.index < palette.colors.length ? selectedColor.index : null
     const result = applyPick(palette.colors, hex, index, !!palette.generator)
     if (!result) {
       setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
