@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Bundle
+        run: npx electron-vite build
+
+      # Software Vulkan (lavapipe) + virtual display so the app can start on a GPU-less runner.
+      - name: Install Linux display and Vulkan drivers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb mesa-vulkan-drivers
+
+      # Launches the app headless: fails if it doesn't start; WebGPU itself is a warning because
+      # hosted runners have no real GPU.
+      - name: App launch + WebGPU smoke test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a node scripts/gpu-smoke.mjs gpu-report.json -- --no-sandbox
+          else
+            node scripts/gpu-smoke.mjs gpu-report.json
+          fi
+
+      - name: Package (unpacked)
+        run: npx electron-builder --dir --publish never
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gpu-report-${{ runner.os }}
+          path: gpu-report.json
+          if-no-files-found: ignore
