@@ -136,7 +136,8 @@ function loadRenderer(win: BrowserWindow): void {
 }
 
 const MIN_WINDOW = { width: 900, height: 600 }
-const MENU_ROLES: MenuRole[] = ['cut', 'copy', 'paste', 'selectAll', 'togglefullscreen', 'quit', 'close', 'reload', 'toggleDevTools']
+/** Roles the renderer may ask for; reload and dev tools only in dev builds, like the menu offers them. */
+const MENU_ROLES: MenuRole[] = ['cut', 'copy', 'paste', 'selectAll', 'togglefullscreen', 'quit', 'close', ...(isDev ? (['reload', 'toggleDevTools'] as const) : [])]
 
 /**
  * The app draws its own title bar (menus included). Windows and Linux keep the native window
@@ -144,7 +145,8 @@ const MENU_ROLES: MenuRole[] = ['cut', 'copy', 'paste', 'selectAll', 'togglefull
  */
 function titleBarOptions(): Electron.BrowserWindowConstructorOptions {
   if (process.platform === 'darwin') return { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 10 } }
-  return { titleBarStyle: 'hidden', titleBarOverlay: { color: '#2b2a27', symbolColor: '#e4e0d6', height: 32 } }
+  // Matches --fx-titlebar-bg / -symbol / -height until the renderer applies the tokens.
+  return { titleBarStyle: 'hidden', titleBarOverlay: { color: '#1d1c1a', symbolColor: '#e4e0d6', height: 32 } }
 }
 
 function createWindow(): void {
