@@ -1,62 +1,38 @@
-import { Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
+import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
 import { IPC, type MenuCommand } from '@shared/api'
+import { appMenu, type MenuEntry, type MenuRole } from '@shared/menu'
 
+/** Performs a menu role for the in-app menu bar (the native menu uses Electron's roles directly). */
+export function runMenuRole(win: BrowserWindow, role: MenuRole): void {
+  const wc = win.webContents
+  switch (role) {
+    case 'cut': return wc.cut()
+    case 'copy': return wc.copy()
+    case 'paste': return wc.paste()
+    case 'selectAll': return wc.selectAll()
+    case 'togglefullscreen': return win.setFullScreen(!win.isFullScreen())
+    case 'close': return win.close()
+    case 'quit': return app.quit()
+    case 'reload': return wc.reload()
+    case 'toggleDevTools': return wc.toggleDevTools()
+  }
+}
+
+/**
+ * Native menu built from the shared definition. On Windows/Linux it's hidden behind the custom
+ * title bar but still provides the keyboard shortcuts; on macOS it's the real menu bar.
+ */
 export function buildMenu(win: BrowserWindow, isDev: boolean): Menu {
   const send = (command: MenuCommand) => () => win.webContents.send(IPC.menuCommand, command)
   const isMac = process.platform === 'darwin'
-
-  const devItems: MenuItemConstructorOptions[] = isDev
-    ? [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }]
-    : []
-
+  const item = (entry: MenuEntry): MenuItemConstructorOptions => {
+    if (entry.kind === 'separator') return { type: 'separator' }
+    if (entry.kind === 'role') return { role: entry.role, label: entry.label, accelerator: entry.accelerator }
+    return { label: entry.label, accelerator: entry.accelerator, click: send(entry.command) }
+  }
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: 'appMenu' } as const] : []),
-    {
-      label: 'File',
-      submenu: [
-        { label: 'Open Image…', accelerator: 'CmdOrCtrl+O', click: send('open') },
-        { label: 'Export…', accelerator: 'CmdOrCtrl+E', click: send('export') },
-        { type: 'separator' },
-        { label: 'Import Palette…', click: send('import-palette') },
-        { type: 'separator' },
-        { label: 'Presets…', accelerator: 'CmdOrCtrl+Shift+P', click: send('presets') },
-        { label: 'Import Preset…', click: send('import-preset') },
-        { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' }
-      ]
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        // Undo/redo go to the stage stack; the renderer falls back to text undo inside text fields.
-        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: send('undo') },
-        { label: 'Redo', accelerator: isMac ? 'Shift+Cmd+Z' : 'Ctrl+Y', click: send('redo') },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' }
-      ]
-    },
-    {
-      label: 'View',
-      submenu: [
-        { label: 'Fit to Window', accelerator: 'CmdOrCtrl+0', click: send('zoom-fit') },
-        { label: 'Actual Pixels', accelerator: 'CmdOrCtrl+1', click: send('zoom-actual') },
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: send('zoom-in') },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: send('zoom-out') },
-        { type: 'separator' },
-        { label: 'Pixel Grid', accelerator: 'CmdOrCtrl+G', click: send('toggle-grid') },
-        { label: 'Split View', accelerator: 'CmdOrCtrl+\\', click: send('toggle-split') },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-        ...devItems
-      ]
-    },
-    {
-      label: 'Help',
-      submenu: [{ label: 'GPU Diagnostics…', click: send('gpu-diagnostics') }]
-    }
+    ...appMenu(process.platform, isDev).map((section) => ({ label: section.label, submenu: section.items.map(item) }))
   ]
   return Menu.buildFromTemplate(template)
 }
