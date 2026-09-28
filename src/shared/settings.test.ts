@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, normalizeSettings } from './api'
+import { DEFAULT_SETTINGS, MAX_WORKSPACES, normalizeSettings } from './api'
 
 describe('settings', () => {
   it('defaults: pixel grid off, split on', () => {
@@ -32,5 +32,13 @@ describe('settings', () => {
     expect(s.workspace).toBe('Mine')
     expect(s.workspaces).toEqual([{ name: 'Mine', layout: { v: 2 } }])
     expect(normalizeSettings({ layout: [1], workspace: '  ' })).toMatchObject({ layout: null, workspace: 'essentials' })
+  })
+
+  it('trims the active workspace name and keeps only the newest saved workspaces', () => {
+    expect(normalizeSettings({ workspace: ' Mine ' }).workspace).toBe('Mine')
+    const workspaces = Array.from({ length: MAX_WORKSPACES + 3 }, (_, i) => ({ name: `w${i}`, layout: {} }))
+    const kept = normalizeSettings({ workspaces }).workspaces
+    expect(kept).toHaveLength(MAX_WORKSPACES)
+    expect(kept[0]!.name).toBe('w3')
   })
 })

@@ -6,7 +6,7 @@ import type { MenuRole } from '@shared/menu'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
-import { getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
+import { flushSettings, getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
 const gpuFlags = applyGpuFlags()
@@ -193,6 +193,8 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+app.on('will-quit', flushSettings)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

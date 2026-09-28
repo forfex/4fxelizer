@@ -9,7 +9,7 @@ import {
 } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import '@/styles/dock.css'
-import { savedSettings, useSavedSettings } from '@/settings'
+import { savedSettings, saveSettings, useSavedSettings } from '@/settings'
 import {
   BUILTIN_WORKSPACES,
   deleteWorkspace,
@@ -17,6 +17,7 @@ import {
   isReservedName,
   PANELS,
   resetWorkspace,
+  savedWorkspaces,
   saveWorkspaceAs,
   selectWorkspace,
   startWorkspace,
@@ -28,6 +29,7 @@ import { GeneratePanel, PalettePanel } from './PalettePanel'
 import { StackPanel } from './StackPanel'
 import { Button } from './ui/button'
 import { Dialog, DialogClose, DialogContent } from './ui/dialog'
+import { ErrorBoundary } from './ErrorBoundary'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { Viewer } from './Viewer'
 
@@ -36,7 +38,8 @@ const THEME: DockviewTheme = {
   name: '4fx',
   className: 'dockview-theme-fx',
   colorScheme: 'dark',
-  gap: 4,
+  // dockview takes the gap as a number, so it is read from the token once.
+  gap: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fx-dock-gap')) || 4,
   dndOverlayMounting: 'absolute',
   dndPanelOverlay: 'group'
 }
@@ -61,8 +64,32 @@ const TAB_COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelHeade
   )
 }
 
-/** The dockable panel area: viewer plus tool panels, arranged by the active workspace. */
+/** The dock, falling back to a notice with a layout reset if a panel fails to render. */
 export function DockArea() {
+  return (
+    <ErrorBoundary
+      fallback={(error, retry) => (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-panel p-4 text-center">
+          <p>The panel layout could not be shown.</p>
+          <p className="text-small text-dim">{error}</p>
+          <Button
+            onClick={() => {
+              saveSettings({ layout: null, workspace: BUILTIN_WORKSPACES[0]!.id })
+              retry()
+            }}
+          >
+            Reset panel layout
+          </Button>
+        </div>
+      )}
+    >
+      <Dock />
+    </ErrorBoundary>
+  )
+}
+
+/** The dockable panel area: viewer plus tool panels, arranged by the active workspace. */
+function Dock() {
   // The layout is built from an effect, not from onReady itself: under StrictMode (dev) the dock
   // mounts twice, and only the instance that survives may be filled.
   const [api, setApi] = useState<DockviewApi | null>(null)
@@ -74,6 +101,7 @@ export function DockArea() {
       components={COMPONENTS}
       tabComponents={TAB_COMPONENTS}
       onReady={(e) => setApi(e.api)}
+      floatingGroupBounds="boundedWithinViewport"
       getTabContextMenuItems={({ panel }) =>
         panel.id === VIEWER ? ['maximize'] : ['float', 'maximize', 'separator', 'close']
       }
@@ -84,7 +112,8 @@ export function DockArea() {
 /** Toolbar dropdown: switch, save, reset and delete workspaces; show or hide panels. */
 export function WorkspaceMenu() {
   const [saveOpen, setSaveOpen] = useState(false)
-  const { workspace, workspaces } = useSavedSettings()
+  const { workspace } = useSavedSettings()
+  const workspaces = savedWorkspaces()
   return (
     <>
       <Menu>

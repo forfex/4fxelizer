@@ -85,7 +85,7 @@ export function normalizeSettings(raw: unknown): UserSettings {
     split: bool('split'),
     exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
     layout: isObject(r.layout) ? r.layout : null,
-    workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace : DEFAULT_SETTINGS.workspace,
+    workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace.trim() : DEFAULT_SETTINGS.workspace,
     workspaces: normalizeWorkspaces(r.workspaces)
   }
 }

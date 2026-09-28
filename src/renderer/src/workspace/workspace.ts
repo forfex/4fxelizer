@@ -7,6 +7,7 @@ import type { DockviewApi, SerializedDockview } from 'dockview-react'
 import { MAX_WORKSPACES, type SavedWorkspace } from '@shared/api'
 import { savedSettings, saveSettings } from '@/settings'
 import { useApp } from '@/store'
+import { layoutProblem } from './layoutCheck'
 
 export const VIEWER = 'viewer'
 
@@ -33,15 +34,27 @@ interface BuiltinWorkspace {
 
 const panelDef = (id: string): PanelDef => PANELS.find((p) => p.id === id)!
 
+/** Components a stored layout may use (they match the components registered in Workspace.tsx). */
+const KNOWN = { components: [VIEWER, ...PANELS.map((p) => p.id)], tabComponents: [VIEWER], required: VIEWER }
+
+/** Restores a stored layout, after checking it only uses panels this version has. */
+function restore(dock: DockviewApi, layout: unknown): void {
+  const problem = layoutProblem(layout, KNOWN)
+  if (problem) throw new Error(problem)
+  dock.fromJSON(layout as SerializedDockview)
+}
+
+/** Adds the viewer, unless it is still there (kept so switching workspaces doesn't remount it). */
 function addViewer(api: DockviewApi): void {
+  if (api.getPanel(VIEWER)) return
   api.addPanel({ id: VIEWER, component: VIEWER, tabComponent: VIEWER, title: viewerTitle(), renderer: 'always' })
 }
 
-/** Adds a tool panel next to (or, with 'within', tabbed into) `reference`. */
+/** Adds a tool panel next to (or, with 'within', tabbed into) `reference`; null = at that edge of the dock. */
 function addTool(
   api: DockviewApi,
   id: string,
-  reference: string,
+  reference: string | null,
   direction: 'left' | 'right' | 'above' | 'below' | 'within',
   size?: number
 ): void {
@@ -51,7 +64,7 @@ function addTool(
     component: id,
     title: def.title,
     minimumWidth: def.minWidth,
-    position: { referencePanel: reference, direction },
+    position: reference ? { referencePanel: reference, direction } : { direction: direction === 'within' ? 'right' : direction },
     ...(size && (direction === 'left' || direction === 'right' ? { initialWidth: size } : { initialHeight: size })),
     inactive: direction === 'within'
   })
@@ -110,21 +123,33 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
 
 let api: DockviewApi | null = null
 
-export function getDockApi(): DockviewApi | null {
-  return api
-}
-
 function viewerTitle(): string {
   return useApp.getState().image?.name ?? 'Viewer'
 }
 
-/** After any layout is built or loaded: keep the viewer's group from taking other panels as tabs. */
-function finishLayout(dock: DockviewApi): void {
-  const viewer = dock.getPanel(VIEWER)
-  if (viewer) {
-    viewer.api.setTitle(viewerTitle())
-    viewer.group.locked = true
+/** Keeps whichever group holds the viewer from taking other panels as tabs (also after the viewer moves). */
+function lockViewerGroup(dock: DockviewApi): void {
+  for (const group of dock.groups) {
+    const locked = group.panels.some((p) => p.id === VIEWER)
+    if (!!group.locked !== locked) group.locked = locked
   }
+}
+
+/** After any layout is built or loaded. */
+function finishLayout(dock: DockviewApi): void {
+  dock.getPanel(VIEWER)?.api.setTitle(viewerTitle())
+  lockViewerGroup(dock)
+}
+
+/** Removes every panel but a docked viewer (a floating viewer goes too, so templates start clean). */
+function clearTools(dock: DockviewApi): void {
+  if (dock.hasMaximizedGroup()) dock.exitMaximizedGroup()
+  const viewer = dock.getPanel(VIEWER)
+  if (!viewer || viewer.api.location.type !== 'grid') {
+    if (dock.panels.length) dock.clear()
+    return
+  }
+  for (const panel of [...dock.panels]) if (panel.id !== VIEWER) dock.removePanel(panel)
 }
 
 /** Builds a layout: a built-in workspace, or a saved one. Returns false when it couldn't. */
@@ -132,9 +157,10 @@ function applyLayout(dock: DockviewApi, workspace: string): boolean {
   const builtin = BUILTIN_WORKSPACES.find((w) => w.id === workspace)
   const saved = savedSettings().workspaces.find((w) => w.name === workspace)
   try {
-    if (dock.panels.length) dock.clear()
-    if (builtin) builtin.build(dock)
-    else if (saved) dock.fromJSON(saved.layout as SerializedDockview)
+    if (builtin) {
+      clearTools(dock)
+      builtin.build(dock)
+    } else if (saved) restore(dock, saved.layout)
     else return false
     if (!dock.getPanel(VIEWER)) throw new Error('layout has no viewer')
     finishLayout(dock)
@@ -146,7 +172,7 @@ function applyLayout(dock: DockviewApi, workspace: string): boolean {
 }
 
 function buildDefault(dock: DockviewApi): void {
-  if (dock.panels.length) dock.clear()
+  clearTools(dock)
   BUILTIN_WORKSPACES[0]!.build(dock)
   finishLayout(dock)
 }
@@ -160,7 +186,7 @@ export function startWorkspace(dock: DockviewApi): () => void {
   let restored = false
   if (settings.layout) {
     try {
-      dock.fromJSON(settings.layout as SerializedDockview)
+      restore(dock, settings.layout)
       restored = !!dock.getPanel(VIEWER)
       if (restored) finishLayout(dock)
     } catch (e) {
@@ -172,16 +198,29 @@ export function startWorkspace(dock: DockviewApi): () => void {
     saveSettings({ workspace: BUILTIN_WORKSPACES[0]!.id })
   }
 
+  const save = (): void => {
+    clearTimeout(saveTimer)
+    saveTimer = undefined
+    saveSettings({ layout: dock.toJSON() })
+  }
   const layoutSub = dock.onDidLayoutChange(() => {
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => saveSettings({ layout: dock.toJSON() }), 400)
+    saveTimer = setTimeout(save, 400)
   })
+  const moveSub = dock.onDidMovePanel(() => lockViewerGroup(dock))
+  // Quitting right after a change: save it now rather than dropping it.
+  const flush = (): void => {
+    if (saveTimer !== undefined) save()
+  }
+  window.addEventListener('beforeunload', flush)
   // The viewer's tab shows the image's file name.
   const unsubscribe = useApp.subscribe((s, prev) => {
     if (s.image !== prev.image) dock.getPanel(VIEWER)?.api.setTitle(viewerTitle())
   })
   return () => {
     layoutSub.dispose()
+    moveSub.dispose()
+    window.removeEventListener('beforeunload', flush)
     unsubscribe()
     clearTimeout(saveTimer)
     if (api === dock) api = null
@@ -206,6 +245,11 @@ export function resetWorkspace(): void {
 
 export function workspaceName(workspace: string): string {
   return BUILTIN_WORKSPACES.find((w) => w.id === workspace)?.name ?? workspace
+}
+
+/** The user's saved workspaces, minus any that a built-in one would shadow (a hand-edited settings file). */
+export function savedWorkspaces(): SavedWorkspace[] {
+  return savedSettings().workspaces.filter((w) => !isReservedName(w.name))
 }
 
 /** Names that would shadow a built-in workspace (compared without case). */
@@ -245,9 +289,11 @@ export function togglePanel(id: string): void {
     panel.api.close()
     return
   }
-  // Tab it into another open tool panel's group when there is one, else dock it beside the viewer.
-  const neighbor = PANELS.map((p) => api!.getPanel(p.id)).find((p) => p && p.api.location.type === 'grid')
+  // Tab it into another docked tool panel's group when there is one, else dock it at the right edge.
+  const neighbor = PANELS.map((p) => api!.getPanel(p.id)).find(
+    (p) => p && p.api.location.type === 'grid' && !p.group.panels.some((q) => q.id === VIEWER)
+  )
   if (neighbor) addTool(api, id, neighbor.id, 'within')
-  else addTool(api, id, VIEWER, 'right', 300)
+  else addTool(api, id, null, 'right', 300)
   api.getPanel(id)?.api.setActive()
 }
