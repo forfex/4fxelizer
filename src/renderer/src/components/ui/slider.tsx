@@ -35,21 +35,27 @@ export function Slider({ className, ticks = 0, onWheelNotches, ...props }: Slide
         className="group relative flex h-5 w-full touch-none items-center select-none"
         {...props}
       >
-        <SliderPrimitive.Track className="bevel-sunken relative h-1.5 w-full grow bg-well">
-          <SliderPrimitive.Range className="absolute h-full bg-accent/60 group-data-[wheel=armed]:bg-accent/85" />
+        <SliderPrimitive.Track
+          className={cn(
+            'bevel-sunken relative h-2 w-full grow overflow-hidden rounded-fx border-px border-edge bg-well',
+            'group-data-[wheel=armed]:outline-2 group-data-[wheel=armed]:outline-offset-1 group-data-[wheel=armed]:outline-magenta group-data-[wheel=armed]:outline-solid'
+          )}
+        >
+          {/* 50% dither fill: the brand's stand-in for a gradient. */}
+          <SliderPrimitive.Range className="absolute h-full dither-50 [--dither-a:var(--fx-accent)] [--dither-b:var(--fx-accent-soft)]" />
         </SliderPrimitive.Track>
         <SliderPrimitive.Thumb
           className={cn(
-            'bevel-raised block h-4 w-2.5 bg-panel-hi hover:brightness-110',
-            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent',
-            'group-data-[wheel=armed]:outline-px group-data-[wheel=armed]:outline-offset-1 group-data-[wheel=armed]:outline-accent'
+            'bevel-raised relative block h-4.5 w-2.5 rounded-[2px] border-px border-edge bg-panel-hi hover:bg-hover',
+            'after:absolute after:inset-x-0.5 after:top-1/2 after:h-0.5 after:-translate-y-1/2 after:bg-accent',
+            'focus-visible:ring-focus'
           )}
         />
       </SliderPrimitive.Root>
       {ticks > 1 && (
         <div className="flex justify-between px-[5px]" aria-hidden>
           {Array.from({ length: ticks }, (_, i) => (
-            <span key={i} className="h-1 w-(--px) bg-dim/50" />
+            <span key={i} className="h-1 w-(--px) bg-line" />
           ))}
         </div>
       )}

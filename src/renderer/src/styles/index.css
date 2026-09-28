@@ -84,10 +84,16 @@
   box-shadow: var(--fx-shadow-window);
 }
 
-/* 50% ordered dither in 2px dots: the brand's replacement for a gradient or a flat tint.
+/* Ordered dither in 2px dots: the brand's replacement for a gradient or a flat tint.
    --dither-a is the dot color, --dither-b the ground. */
+@utility dither-25 {
+  background: repeating-conic-gradient(var(--dither-a, var(--fx-accent)) 0 25%, var(--dither-b, var(--fx-panel)) 0 100%) 0 0 / 4px 4px;
+}
 @utility dither-50 {
   background: repeating-conic-gradient(var(--dither-a, var(--fx-accent)) 0 25%, var(--dither-b, var(--fx-panel)) 0 50%) 0 0 / 4px 4px;
+}
+@utility dither-75 {
+  background: repeating-conic-gradient(var(--dither-b, var(--fx-panel)) 0 25%, var(--dither-a, var(--fx-accent)) 0 100%) 0 0 / 4px 4px;
 }
 
 /* The tracked uppercase label style (group-box legends, dock tabs, menu headings). */

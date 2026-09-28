@@ -2,6 +2,7 @@ import { Select as SelectPrimitive } from 'radix-ui'
 import { useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useWheelArming } from '@/lib/useWheelArming'
+import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_LABEL_CLASS, MENU_MARK_CLASS } from './menu'
 
 export interface SelectOption<T extends string> {
   value: T
@@ -23,7 +24,7 @@ function groupOptions<T extends string>(options: readonly SelectOption<T>[]): { 
 }
 
 /**
- * Dropdown select: a sunken field with a beveled drop button, options in a raised panel.
+ * Dropdown select: a beveled trigger with a caret cell, options in a floating menu panel.
  * Like sliders, the mouse wheel steps through the options once the field is armed (see useWheelArming).
  */
 export function Select<T extends string>({
@@ -62,43 +63,36 @@ export function Select<T extends string>({
 ` : ''}Mouse wheel changes this option` : title}
         data-wheel={wheelReady ? 'armed' : undefined}
         className={cn(
-          'bevel-sunken flex h-6 min-w-0 items-center justify-between gap-1 rounded-fx bg-well pr-0.5 pl-1.5 text-left',
-          'disabled:opacity-45 data-placeholder:text-dim',
-          'data-[wheel=armed]:outline-px data-[wheel=armed]:outline-offset-1 data-[wheel=armed]:outline-accent',
+          'bevel-raised flex h-control min-w-0 items-center justify-between gap-1 rounded-fx border-px border-edge bg-panel-hi pl-2 text-left',
+          'hover:bg-hover disabled:opacity-45 data-placeholder:text-dim data-[state=open]:bg-well data-[state=open]:bevel-sunken',
+          'data-[wheel=armed]:outline-2 data-[wheel=armed]:outline-offset-1 data-[wheel=armed]:outline-magenta data-[wheel=armed]:outline-solid',
           className
         )}
       >
         <span className="truncate">
           <SelectPrimitive.Value placeholder={placeholder ?? 'Choose…'} />
         </span>
-        <SelectPrimitive.Icon className="bevel-raised flex h-5 w-4 shrink-0 items-center justify-center bg-panel-hi text-small leading-none text-dim">
-          ▼
+        {/* Caret cell, split off by an ink line. */}
+        <SelectPrimitive.Icon className="flex w-5 shrink-0 items-center justify-center self-stretch rounded-r-fx border-l-px border-edge bg-panel">
+          <span className="mt-1 size-0 border-4 border-transparent border-t-[5px] border-t-text" />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
           position="popper"
           sideOffset={2}
-          className="bevel-raised z-50 max-h-(--radix-select-content-available-height) min-w-(--radix-select-trigger-width) overflow-hidden rounded-fx border-px border-edge bg-panel"
+          className={cn(
+            MENU_CONTENT_CLASS,
+            'max-h-(--radix-select-content-available-height) min-w-(--radix-select-trigger-width) overflow-hidden p-0'
+          )}
         >
-          <SelectPrimitive.Viewport className="p-0.5">
+          <SelectPrimitive.Viewport className="p-1">
             {groupOptions(options).map((g, i) => (
               <SelectPrimitive.Group key={g.group ?? i}>
-                {g.group && (
-                  <SelectPrimitive.Label className="px-2 pt-1 pb-0.5 text-small font-semibold tracking-wide text-dim uppercase">
-                    {g.group}
-                  </SelectPrimitive.Label>
-                )}
+                {g.group && <SelectPrimitive.Label className={MENU_LABEL_CLASS}>{g.group}</SelectPrimitive.Label>}
                 {g.items.map((o) => (
-                  <SelectPrimitive.Item
-                    key={o.value}
-                    value={o.value}
-                    title={o.hint}
-                    className={cn(
-                      'flex h-6 cursor-default items-center rounded-fx px-2 outline-none select-none',
-                      'data-highlighted:bg-accent data-highlighted:text-accent-text data-[state=checked]:font-semibold'
-                    )}
-                  >
+                  <SelectPrimitive.Item key={o.value} value={o.value} title={o.hint} className={MENU_ITEM_CLASS}>
+                    <SelectPrimitive.ItemIndicator className={MENU_MARK_CLASS} />
                     <SelectPrimitive.ItemText>{o.label}</SelectPrimitive.ItemText>
                   </SelectPrimitive.Item>
                 ))}
