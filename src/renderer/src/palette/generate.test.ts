@@ -161,6 +161,18 @@ describe('large palettes', () => {
     })
   }
 
+  it('every method reaches the requested count on a dense gradient', () => {
+    // A red × green plane: 1024 histogram bins packed tightly, which used to leave octree and Wu short.
+    const rgba = new Uint8Array(256 * 256 * 4)
+    for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) rgba.set([x, y, 64, 255], (y * 256 + x) * 4)
+    for (const method of ['median-cut', 'wu', 'octree'] as const) {
+      for (const count of [16, 1024]) {
+        const out = generatePalette(rgba, { method, count, quality: 0, lumaWeight: 1, chromaWeight: 1, locked: [] })
+        expect(out.length, `${method} ${count}`).toBe(count)
+      }
+    }
+  })
+
   it('wu and octree generate thousands of colors in reasonable time', () => {
     const rgba = noiseImage(512, 512)
     for (const method of ['wu', 'octree'] as const) {

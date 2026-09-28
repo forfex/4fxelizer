@@ -75,6 +75,14 @@ function mean(points: Point[], idx: number[]): Vec3 {
 /** Weighted median cut: repeatedly split the box with the largest squared error at its weighted median. */
 export function medianCut(points: Point[], k: number): Vec3[] {
   if (!points.length || k <= 0) return []
+  return splitGroups(points, [points.map((_, i) => i)], k)
+}
+
+/**
+ * Median-cut splitting that starts from the given groups of point indices (each non-empty) and
+ * splits until there are `k` groups or no group can be split. Returns each group's mean.
+ */
+function splitGroups(points: Point[], groups: number[][], k: number): Vec3[] {
   interface Box { idx: number[]; sse: number; axis: number }
   const makeBox = (idx: number[]): Box => {
     const m = mean(points, idx)
@@ -86,7 +94,7 @@ export function medianCut(points: Point[], k: number): Vec3[] {
     const axis = v[0] >= v[1] && v[0] >= v[2] ? 0 : v[1] >= v[2] ? 1 : 2
     return { idx, sse: idx.length > 1 ? v[0] + v[1] + v[2] : 0, axis }
   }
-  const boxes = [makeBox(points.map((_, i) => i))]
+  const boxes = groups.map(makeBox)
   while (boxes.length < k) {
     let best = -1
     for (let i = 0; i < boxes.length; i++) if (boxes[i]!.sse > 0 && (best < 0 || boxes[i]!.sse > boxes[best]!.sse)) best = i
@@ -104,6 +112,19 @@ export function medianCut(points: Point[], k: number): Vec3[] {
     boxes.splice(best, 1, makeBox(sorted.slice(0, cut)), makeBox(sorted.slice(cut)))
   }
   return boxes.map((b) => mean(points, b.idx))
+}
+
+/**
+ * Tops up a result that came out short of `k` colors (Wu and octree work on a fixed grid, so
+ * distinct colors can share a cell, and an octree merge can drop up to 7 leaves at once): every
+ * point joins its nearest center, then the worst clusters are split by median cut.
+ */
+export function fillTo(points: Point[], centers: Vec3[], k: number): Vec3[] {
+  if (centers.length >= k || !centers.length) return centers
+  const index = new CenterIndex(centers)
+  const groups: number[][] = centers.map(() => [])
+  points.forEach((pt, i) => groups[index.nearest(pt.p)]!.push(i))
+  return splitGroups(points, groups.filter((g) => g.length), k)
 }
 
 /** Per-axis minimum and extent of the points (extent at least a tiny epsilon). */
@@ -208,8 +229,8 @@ export function wu(points: Point[], k: number): Vec3[] {
 /**
  * Octree quantizer: points go into a 64-per-axis octree over a cube around them (a cube, so the
  * luma/chroma weights still shape the result). Then the node whose leaf children cost the least
- * error to merge is folded into one leaf, until at most `k` leaves remain (a merge can remove up
- * to 7 leaves, so the result may fall a few colors short of `k`).
+ * error to merge is folded into one leaf, until at most `k` leaves remain. A merge can remove up
+ * to 7 leaves, so the result can fall short of `k`; `generatePalette` tops it up with `fillTo`.
  */
 export function octree(points: Point[], k: number): Vec3[] {
   if (!points.length || k <= 0) return []
@@ -408,6 +429,7 @@ export function generatePalette(rgba: Uint8Array, opts: GenerateOptions): string
 
   const lockedCenters = opts.locked.map((hex) => weigh(hexToOklab(hex), lw, cw))
   let centers = opts.method === 'wu' ? wu(points, want) : opts.method === 'octree' ? octree(points, want) : medianCut(points, want)
+  centers = fillTo(points, centers, want)
   if (opts.method === 'kmeans' && opts.quality > 0) {
     centers = kmeans(points, [...lockedCenters, ...centers], lockedCenters.length, opts.quality).slice(
       lockedCenters.length
