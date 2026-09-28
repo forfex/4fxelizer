@@ -215,7 +215,8 @@ export function Segmented<T extends string>({
   return (
     <div
       role="radiogroup"
-      className={cn('bevel-sunken flex h-control min-w-0 gap-0.5 rounded-fx border-px border-edge bg-well p-0.5', className)}
+      // Choices wrap onto another line when they don't fit, rather than truncating.
+      className={cn('bevel-sunken flex min-h-control min-w-0 flex-wrap gap-0.5 rounded-fx border-px border-edge bg-well p-0.5', className)}
     >
       {options.map((o) => (
         <button
@@ -228,7 +229,7 @@ export function Segmented<T extends string>({
           disabled={disabled}
           onClick={() => onChange(o.value)}
           className={cn(
-            'min-w-0 flex-1 truncate rounded-[2px] px-1.5 text-small font-medium text-dim hover:text-text disabled:opacity-45',
+            'h-4.5 min-w-0 flex-auto truncate rounded-[2px] px-1.5 text-small font-medium text-dim hover:text-text disabled:opacity-45',
             'aria-checked:bg-accent aria-checked:text-accent-text aria-checked:shadow-[inset_var(--px)_var(--px)_0_var(--fx-accent-hi)]'
           )}
         >
