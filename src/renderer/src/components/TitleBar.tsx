@@ -37,23 +37,25 @@ export function TitleBar() {
     window.fx.setTitleBarOverlay({ color: tokenRgb('--fx-titlebar-bg'), symbolColor: tokenRgb('--fx-titlebar-symbol'), height })
   }, [])
 
+  // Only the icon and the empty area around the title are drag regions. The menus sit outside
+  // any drag region: a drag region layered over them (even a click-through one) swallows real
+  // mouse clicks, because Windows hit-tests drag regions before the page sees the click.
   return (
     <header
-      className={cn(
-        'relative flex h-(--fx-titlebar-height) shrink-0 items-center bg-(--fx-titlebar-bg) [-webkit-app-region:drag]',
-        isMac && 'pl-20' // clear of the traffic lights
-      )}
+      className={cn('flex h-(--fx-titlebar-height) shrink-0 items-center bg-(--fx-titlebar-bg)', isMac && 'pl-20')}
       // Windows/Linux: clear of the native window buttons (outside the title bar area).
       style={isMac ? undefined : { paddingRight: 'calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))' }}
     >
       {!isMac && (
         <>
-          <img src={iconUrl} alt="" className="mx-2 size-4 shrink-0" draggable={false} />
+          <span className="flex h-full shrink-0 items-center px-2 [-webkit-app-region:drag]">
+            <img src={iconUrl} alt="" className="size-4" draggable={false} />
+          </span>
           <AppMenuBar />
         </>
       )}
-      <span className="pointer-events-none absolute inset-x-0 truncate px-48 text-center text-small text-(--fx-titlebar-text)">
-        {title}
+      <span className="flex h-full min-w-0 flex-1 items-center justify-center px-4 [-webkit-app-region:drag]">
+        <span className="truncate text-small text-(--fx-titlebar-text)">{title}</span>
       </span>
     </header>
   )
@@ -72,7 +74,7 @@ function AppMenuBar() {
   }
   return (
     <Menubar.Root
-      className="relative z-10 flex h-full items-center [-webkit-app-region:no-drag]"
+      className="flex h-full shrink-0 items-center [-webkit-app-region:no-drag]"
       onValueChange={(value) => {
         if (value && !lastFocus.current) lastFocus.current = document.activeElement as HTMLElement | null
         if (!value) lastFocus.current = null
