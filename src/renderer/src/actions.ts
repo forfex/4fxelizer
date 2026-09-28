@@ -1,5 +1,8 @@
-import type { ExportFileType, ExportFormat, FileFilter, MenuCommand } from '@shared/api'
+import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile } from '@shared/api'
+import { detectMap, MAP_IMAGE_EXTENSIONS, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
+import { encodePattern, patternFromRgba } from '@/dither/customPattern'
 import { getEngine } from '@/engine'
+import type { DitherParams } from '@/gpu/passes/dither'
 import { decodeImage } from '@/image/decode'
 import { bmpBitDepth, encodeBmp, encodeIndexedBmp } from '@/image/bmp'
 import { countColors, hasTranslucency, hasTransparency, toIndexed } from '@/image/indexed'
@@ -16,7 +19,11 @@ const errorText = (e: unknown): string => (e instanceof Error ? e.message : Stri
 export const PALETTE_EXTENSIONS = ['hex', 'gpl', 'pal', 'act', 'ase', 'txt']
 const PALETTE_FILTERS: FileFilter[] = [{ name: 'Palettes', extensions: PALETTE_EXTENSIONS }]
 
-export async function loadImageFile(name: string, bytes: Uint8Array): Promise<void> {
+/**
+ * Opens a texture. Its maps (AO, cavity, … named like it, e.g. rock_ao.png next to rock.png) are
+ * loaded too when the file's path is known; the previous texture's maps are dropped.
+ */
+export async function loadImageFile(name: string, bytes: Uint8Array, path?: string): Promise<void> {
   const engine = getEngine()
   const { setMessage, setImage } = useApp.getState()
   if (!engine) return
@@ -25,7 +32,10 @@ export async function loadImageFile(name: string, bytes: Uint8Array): Promise<vo
     engine.loadBitmap(bitmap)
     setImage({ name, width: bitmap.width, height: bitmap.height })
     bitmap.close()
-    setMessage({ kind: 'info', text: `Loaded ${name}` })
+    clearMaps()
+    const maps = path ? await window.fx.findMaps(path).catch(() => []) : []
+    const loaded = maps.length ? await importMapFiles(maps, { quiet: true }) : []
+    setMessage({ kind: 'info', text: loaded.length ? `Loaded ${name} with its ${mapList(loaded)} maps` : `Loaded ${name}` })
   } catch (e) {
     setMessage({ kind: 'error', text: errorText(e) })
   }
@@ -33,15 +43,152 @@ export async function loadImageFile(name: string, bytes: Uint8Array): Promise<vo
 
 export async function openImage(): Promise<void> {
   const file = await window.fx.openImage()
-  if (file) await loadImageFile(file.name, file.bytes)
+  if (file) await loadImageFile(file.name, file.bytes, file.path)
 }
 
-/** Dropped file: palette files become palettes, everything else is opened as an image. */
-export async function openDroppedFile(name: string, bytes: Uint8Array): Promise<void> {
-  const ext = /\.([^.]+)$/.exec(name)?.[1]?.toLowerCase() ?? ''
-  if (ext === PRESET_EXTENSION) loadPresetJson(new TextDecoder().decode(bytes), name)
-  else if (PALETTE_EXTENSIONS.includes(ext) && ext !== 'txt') importPaletteBytes(name, bytes)
-  else await loadImageFile(name, bytes)
+const extensionOf = (name: string): string => /\.([^.]+)$/.exec(name)?.[1]?.toLowerCase() ?? ''
+
+/**
+ * Dropped files: presets load, palette files become palettes, images open as the texture. Images
+ * named like maps (rock_ao.png) fill map slots instead when a texture is open or comes with them.
+ */
+export async function openDroppedFiles(files: OpenedFile[]): Promise<void> {
+  const images: OpenedFile[] = []
+  for (const file of files) {
+    const ext = extensionOf(file.name)
+    if (ext === PRESET_EXTENSION) loadPresetJson(new TextDecoder().decode(file.bytes), file.name)
+    else if (PALETTE_EXTENSIONS.includes(ext) && ext !== 'txt') importPaletteBytes(file.name, file.bytes)
+    else images.push(file)
+  }
+  if (!images.length) return
+  const maps = images.filter((f) => detectMap(f.name))
+  const texture = images.find((f) => !detectMap(f.name)) ?? (useApp.getState().image ? undefined : images[0])
+  if (texture) await loadImageFile(texture.name, texture.bytes, texture.path)
+  const dropped = maps.filter((f) => f !== texture)
+  if (dropped.length) {
+    const loaded = await importMapFiles(dropped, { quiet: true })
+    if (loaded.length) {
+      const image = useApp.getState().image
+      useApp.getState().setMessage({ kind: 'info', text: `Loaded the ${mapList(loaded)} maps${texture && image ? ` for ${image.name}` : ''}` })
+    }
+  }
+}
+
+// ── Custom dither patterns ─────────────────────────────────────────────────
+
+/** Asks for a small image to use as a dither pattern and stores it in a Dither stage. */
+export async function loadPatternImage(uid: string): Promise<void> {
+  const { setMessage } = useApp.getState()
+  const file = await window.fx.openFile([{ name: 'Images', extensions: MAP_IMAGE_EXTENSIONS }])
+  if (!file) return
+  try {
+    const bitmap = await decodeImage(file.name, file.bytes)
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Could not read the image.')
+    ctx.drawImage(bitmap, 0, 0)
+    bitmap.close()
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const pattern = patternFromRgba({ width, height, data: new Uint8Array(data.buffer) })
+    useApp.getState().updateParams<DitherParams>(uid, { customPattern: encodePattern(pattern), customPatternName: file.name })
+    setMessage({ kind: 'info', text: `Using ${file.name} (${width}×${height}) as the dither pattern` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't use ${file.name} as a pattern: ${errorText(e)}` })
+  }
+}
+
+// ── Maps ───────────────────────────────────────────────────────────────────
+
+let mapVersion = 0
+
+const mapLabel = (slot: MapSlot): string => MAP_SLOTS.find((m) => m.id === slot)?.short ?? slot
+const mapList = (slots: MapSlot[]): string => [...new Set(slots)].map(mapLabel).join(', ')
+
+/** A small preview of a map for the Maps panel. */
+function thumbnail(bitmap: ImageBitmap, side = 48): string | null {
+  const canvas = document.createElement('canvas')
+  const scale = side / Math.max(bitmap.width, bitmap.height)
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL()
+}
+
+/** Decodes a map image once and puts it into each slot it fills. */
+async function loadMapInto(assignments: { slot: MapSlot; channel: MapChannel }[], name: string, bytes: Uint8Array): Promise<void> {
+  const engine = getEngine()
+  if (!engine) throw new Error('The GPU is not ready.')
+  const bitmap = await decodeImage(name, bytes)
+  try {
+    const thumb = thumbnail(bitmap)
+    for (const { slot, channel } of assignments) {
+      const version = ++mapVersion
+      engine.loadMap(slot, bitmap, version)
+      useApp.getState().setMap(slot, { name, width: bitmap.width, height: bitmap.height, channel, version, thumbnail: thumb })
+    }
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
+ * Loads map files into the slots their names point to (rock_ao.png → AO; rock_orm.png → AO,
+ * roughness and metallic from its channels). Returns the slots filled.
+ */
+export async function importMapFiles(files: OpenedFile[], opts: { quiet?: boolean } = {}): Promise<MapSlot[]> {
+  const { setMessage } = useApp.getState()
+  const filled: MapSlot[] = []
+  const unknown: string[] = []
+  // Packed maps (ORM) first, so a dedicated map for the same slot (rock_ao.png) wins.
+  const packedFirst = [...files].sort((a, b) => (detectMap(b.name)?.maps.length ?? 0) - (detectMap(a.name)?.maps.length ?? 0))
+  for (const file of packedFirst) {
+    const detected = detectMap(file.name)
+    if (!detected) {
+      unknown.push(file.name)
+      continue
+    }
+    try {
+      await loadMapInto(detected.maps, file.name, file.bytes)
+      filled.push(...detected.maps.map((m) => m.slot))
+    } catch (e) {
+      setMessage({ kind: 'error', text: `Couldn't load ${file.name}: ${errorText(e)}` })
+      return filled
+    }
+  }
+  if (unknown.length) {
+    setMessage({
+      kind: 'error',
+      text: `Couldn't tell which map ${unknown.join(', ')} is. Name maps like rock_ao.png, or load them from the Maps panel.`
+    })
+  } else if (!opts.quiet && filled.length) {
+    setMessage({ kind: 'info', text: `Loaded the ${mapList(filled)} maps` })
+  }
+  return filled
+}
+
+/** Loads a map into one slot from a file dialog. A packed map (ORM) keeps the channel its name implies. */
+export async function openMapFile(slot: MapSlot): Promise<void> {
+  const file = await window.fx.openFile([{ name: 'Images', extensions: MAP_IMAGE_EXTENSIONS }])
+  if (!file) return
+  const channel = detectMap(file.name)?.maps.find((m) => m.slot === slot)?.channel ?? 'luma'
+  try {
+    await loadMapInto([{ slot, channel }], file.name, file.bytes)
+    useApp.getState().setMessage({ kind: 'info', text: `Loaded ${file.name} as the ${mapLabel(slot)} map` })
+  } catch (e) {
+    useApp.getState().setMessage({ kind: 'error', text: `Couldn't load ${file.name}: ${errorText(e)}` })
+  }
+}
+
+export function clearMap(slot: MapSlot): void {
+  getEngine()?.loadMap(slot, null, ++mapVersion)
+  useApp.getState().setMap(slot, null)
+}
+
+export function clearMaps(): void {
+  for (const slot of Object.keys(useApp.getState().maps) as MapSlot[]) getEngine()?.loadMap(slot, null, ++mapVersion)
+  useApp.getState().clearMaps()
 }
 
 export type { ExportFormat }
@@ -348,6 +495,7 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'zoom-out': return app.zoomStep(-1)
     case 'toggle-grid': return app.toggleGrid()
     case 'toggle-split': return app.toggleSplit()
+    case 'toggle-tile': return app.toggleTile()
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
   }
 }

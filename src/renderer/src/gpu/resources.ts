@@ -1,12 +1,16 @@
-// GPU copies of project resources that passes read: palettes (storage buffers) and the
-// shared blue-noise pattern.
+// GPU copies of project resources that passes read: palettes (storage buffers), imported maps
+// (textures) and the shared blue-noise pattern.
 //
 // A palette buffer holds each color twice, sorted two ways (see the palette section of
 // wgslLib.ts), so shader palette indices are buffer positions, not palette order.
 
 import { blueNoise64 } from '@/dither/blueNoise'
+import { decodePattern, patternThresholds } from '@/dither/customPattern'
+import type { MapChannel, MapSlot } from '@shared/maps'
 import { hexToOklab, hexToRgb8, paletteSignature, type Palette } from '@/palette/palette'
+import type { MaskMap } from './mask'
 import { PALETTE_ENTRY_BYTES } from './pass'
+import { uploadBitmap } from './textureIO'
 
 export interface GpuPalette {
   buffer: GPUBuffer
@@ -14,11 +18,23 @@ export interface GpuPalette {
   signature: string
 }
 
+export interface GpuMap extends MaskMap {
+  /** Changes when the map's pixels or channel change; part of the cache key of stages reading it. */
+  signature: string
+}
+
+/** Custom pattern textures kept around (several stages may use different ones). */
+const MAX_PATTERNS = 8
+
 export class GpuResources {
   readonly pattern: GPUTexture
   /** Bound when a pass reads no palette (bindings can't be empty). */
   readonly emptyPalette: GPUBuffer
   private readonly palettes = new Map<string, GpuPalette>()
+  private readonly maps = new Map<MapSlot, { texture: GPUTexture; version: number }>()
+  private mapChannels: Partial<Record<MapSlot, MapChannel>> = {}
+  /** Custom pattern textures by encoded pattern, most recently used last. */
+  private readonly patterns = new Map<string, GPUTexture>()
 
   constructor(private readonly device: GPUDevice) {
     this.emptyPalette = device.createBuffer({
@@ -76,9 +92,65 @@ export class GpuResources {
     return (id && this.palettes.get(id)) || null
   }
 
+  /**
+   * Uploads a map image into a slot (null clears it). `version` must change with every new image.
+   * The caller must make sure no viewer still shows the old texture (maps are only read by passes).
+   */
+  setMap(slot: MapSlot, bitmap: ImageBitmap | null, version: number): void {
+    this.maps.get(slot)?.texture.destroy()
+    this.maps.delete(slot)
+    if (bitmap) this.maps.set(slot, { texture: uploadBitmap(this.device, bitmap, `map ${slot}`), version })
+  }
+
+  /** Which channel of each map is read (packed maps such as ORM). */
+  setMapChannels(channels: Partial<Record<MapSlot, MapChannel>>): void {
+    this.mapChannels = channels
+  }
+
+  /**
+   * Thresholds of a custom pattern image (r32float), or null when the string holds none. A few
+   * recent ones are kept; older ones are freed (WebGPU keeps them alive for submitted work).
+   */
+  customPattern(encoded: string | undefined): GPUTexture | null {
+    if (!encoded) return null
+    let texture = this.patterns.get(encoded)
+    if (texture) {
+      this.patterns.delete(encoded)
+    } else {
+      const pattern = decodePattern(encoded)
+      if (!pattern) return null
+      texture = this.device.createTexture({
+        label: 'custom pattern',
+        size: [pattern.width, pattern.height],
+        format: 'r32float',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      })
+      const data = patternThresholds(pattern.gray)
+      this.device.queue.writeTexture({ texture }, data as Float32Array<ArrayBuffer>, { bytesPerRow: pattern.width * 4 }, [pattern.width, pattern.height])
+    }
+    this.patterns.set(encoded, texture)
+    for (const [key, old] of this.patterns) {
+      if (this.patterns.size <= MAX_PATTERNS) break
+      old.destroy()
+      this.patterns.delete(key)
+    }
+    return texture
+  }
+
+  map(slot: MapSlot): GpuMap | null {
+    const map = this.maps.get(slot)
+    if (!map) return null
+    const channel = this.mapChannels[slot] ?? 'luma'
+    return { texture: map.texture, channel, signature: `${map.version}:${channel}` }
+  }
+
   dispose(): void {
     for (const p of this.palettes.values()) p.buffer.destroy()
     this.palettes.clear()
+    for (const m of this.maps.values()) m.texture.destroy()
+    this.maps.clear()
+    for (const t of this.patterns.values()) t.destroy()
+    this.patterns.clear()
     this.emptyPalette.destroy()
     this.pattern.destroy()
   }

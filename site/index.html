@@ -78,13 +78,14 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--dim);font-siz
   <p class="sub">A non-destructive stack of stages, like adjustment layers. Reorder them, stack them, switch them off, and watch the result update live.</p>
   <div class="grid">
     <div class="card"><h3>Reorderable stage stack</h3><p>Adjust, Downscale, Upscale, Quantize and Dither. Drag them in any order, add the same stage twice, click one to preview the image at that point.</p></div>
-    <div class="card"><h3>Real dithering</h3><p>Bayer, blue noise, halftone, lines, N64 magic square, plus Floyd–Steinberg, Atkinson, Stucki, Sierra and more. Masks decide where it applies.</p></div>
+    <div class="card"><h3>Real dithering</h3><p>Bayer, blue noise, halftone, lines, crosshatch, checker, N64 magic square or your own pattern image, plus Floyd–Steinberg, Atkinson, Stucki, Sierra and more, with serpentine and wrap-around scanning.</p></div>
+    <div class="card"><h3>Masks &amp; maps</h3><p>Decide where the dither goes: edges, shadows, saturation, or your AO, cavity and curvature maps, loaded automatically from <code>_ao</code> / <code>_orm</code> files. Combine, invert and blur masks, and run a different pattern outside them.</p></div>
     <div class="card"><h3>Smart palettes</h3><p>Generate up to 8192 colors in OKLab with median cut, Wu, octree or k-means, start from PICO-8, NES, Game Boy, CGA or C64, import <code>.hex .gpl .pal .act .ase</code>, edit and lock colors, or pick them from the image with the eyedropper.</p></div>
     <div class="card"><h3>Downscale &amp; upscale filters</h3><p>Box, Lanczos, dominant color, edge-preserving, contrast-aware; back up with the N64 3-point filter, Scale2x, sharp bilinear and more.</p></div>
     <div class="card"><h3>Presets</h3><p>PSX 8bpp / 4bpp / 15-bit, N64, NES-ish, Game Boy, Crunchy. Save your own as shareable <code>.4fxpreset</code> files.</p></div>
     <div class="card"><h3>Exact export</h3><p>PNG, TGA or BMP, full color or indexed, with palette order kept and transparency at index 0. No color-space surprises.</p></div>
     <div class="card"><h3>WebGPU speed</h3><p>Every stage is a compute shader with per-stage caching, so tweaking a slider only re-runs what changed.</p></div>
-    <div class="card"><h3>Your workspace</h3><p>Dock, tab, float and resize the panels, switch between built-in workspaces or save your own. Undo covers the stack and palettes; split view and pixel grid for close inspection.</p></div>
+    <div class="card"><h3>Your workspace</h3><p>Dock, tab, float and resize the panels, switch between built-in workspaces or save your own. Undo covers the stack and palettes; split view, pixel grid and a 3×3 tiling view to check seams.</p></div>
   </div>
 </div></section>
 

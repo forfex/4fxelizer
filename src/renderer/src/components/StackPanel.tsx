@@ -16,7 +16,11 @@ export function StackPanel() {
   const palettes = useApp((s) => s.palettes)
   const outputLock = useApp((s) => s.outputLock)
   const previewUid = useApp((s) => s.previewUid)
-  const info = useMemo(() => analyzeStack(image, stages, palettes, outputLock), [image, stages, palettes, outputLock])
+  const maps = useApp((s) => s.maps)
+  const info = useMemo(
+    () => analyzeStack(image, stages, palettes, outputLock, new Set(Object.keys(maps))),
+    [image, stages, palettes, outputLock, maps]
+  )
   const reorder = useReorder(stages)
   const finalSize = stages.length ? info.get(stages[stages.length - 1]!.uid)?.output : image
 

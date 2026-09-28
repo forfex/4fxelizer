@@ -182,10 +182,11 @@ source into the project and Radix supplies only behavior, so every visual detail
    *Status: implemented, verified on Windows, including Wu/octree palette generation, the palette eyedropper
    and TGA/BMP export. Not in yet: per-stage masks (Phase 2).*
 2. **Dither expansion** — line/halftone/error-diffusion dithers, texture-derived masks, imported map slots, mask blending, presets.
-   *Status: error diffusion (8 kernels), lines/halftone/clustered/noise patterns, Knoll mixing, dither saturation,
-   texture-derived masks (edges/flats/tones/saturation, strength + gamma, mask view) and presets are in.
-   Not yet: crosshatch/checker/custom pattern images, serpentine and wrap-around diffusion, imported map
-   slots, mask blur/invert/combining, different patterns inside vs. outside the mask.*
+   *Status: implemented, verified on Windows: error diffusion (8 kernels, serpentine, wrap-around), lines/halftone/
+   clustered/noise/checker/crosshatch patterns and custom pattern images, Knoll mixing, dither saturation, masks built
+   on the GPU (texture-derived and imported map sources, invert, multiply/add/min/max combining, blur, strength +
+   gamma, mask view), a different pattern outside the mask, imported map slots (filename suffixes, ORM/RMA channel
+   unpacking, Maps panel), a 3×3 tiling view and presets.*
 3. **3D** — model import (glTF/FBX/OBJ), viewport, PSX preview shader, UV G-buffer + BVH ray tracing,
    AO/cavity/curvature/edge/thickness baking with edge padding and progressive refinement.
 4. **Mask-driven dithering** using baked maps.

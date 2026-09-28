@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { MapChannel, MapSlot } from '@shared/maps'
 import type { StageSpec } from '@/gpu/plan'
 import type { Palette } from '@/palette/palette'
 import * as docOps from '@/stack/doc'
@@ -9,6 +10,7 @@ import {
   splitAtVisibleCenter,
   splitVisible,
   stepZoom,
+  TILES,
   zoomAt,
   type Size,
   type View
@@ -20,6 +22,19 @@ export interface ImageInfo {
   height: number
   /** Bumped on every load, so effects re-run even for same-named files. */
   version: number
+}
+
+/** An imported map (AO, cavity, …); its pixels live on the GPU (engine). */
+export interface MapInfo {
+  name: string
+  width: number
+  height: number
+  /** Which part of the image is the mask (packed maps such as ORM use one channel each). */
+  channel: MapChannel
+  /** Changes with every load, so cached stages reading the map re-run. */
+  version: number
+  /** Small preview (data URL). */
+  thumbnail: string | null
 }
 
 export type GpuState =
@@ -49,6 +64,8 @@ interface AppState extends Doc {
   canvasSize: Size
   grid: boolean
   split: boolean
+  /** Tiling view: copies of the image around it, to check seams. */
+  tile: boolean
   /** Split divider position as a fraction of the image width (moves with the image). */
   splitPos: number
   cursor: { x: number; y: number } | null
@@ -71,6 +88,8 @@ interface AppState extends Doc {
   picking: boolean
   /** Auto/manual palette generation status by palette id (absent = idle). */
   paletteJobs: Record<string, PaletteJob>
+  /** Imported maps by slot. They belong to the loaded texture, not to the (undoable) document. */
+  maps: Partial<Record<MapSlot, MapInfo>>
 
   past: Doc[]
   future: Doc[]
@@ -85,6 +104,7 @@ interface AppState extends Doc {
   zoomStep(dir: 1 | -1): void
   toggleGrid(): void
   toggleSplit(): void
+  toggleTile(): void
   setSplitPos(pos: number): void
   setCursor(cursor: { x: number; y: number } | null): void
   setMessage(message: Message | null): void
@@ -101,6 +121,9 @@ interface AppState extends Doc {
   selectColor(selection: { paletteId: string; index: number } | null): void
   setPicking(picking: boolean): void
   setPaletteJob(id: string, job: PaletteJob | null): void
+  setMap(slot: MapSlot, map: MapInfo | null): void
+  setMapChannel(slot: MapSlot, channel: MapChannel): void
+  clearMaps(): void
 
   /**
    * Applies an undoable change. `coalesce` merges rapid edits with the same key into one step;
@@ -126,6 +149,9 @@ interface AppState extends Doc {
 
 export const newId = docOps.newId
 
+/** Copies of the image per side the viewer draws (1, or TILES in the tiling view). */
+export const tilesOf = (s: { tile: boolean }): number => (s.tile ? TILES : 1)
+
 const snapshot = (s: Doc): Doc => ({ stages: s.stages, palettes: s.palettes, outputLock: s.outputLock })
 
 const doc0 = docOps.initialDoc()
@@ -138,6 +164,7 @@ export const useApp = create<AppState>()((set, get) => ({
   canvasSize: { width: 0, height: 0 },
   grid: false,
   split: true,
+  tile: false,
   splitPos: 0.5,
   cursor: null,
   message: null,
@@ -152,6 +179,7 @@ export const useApp = create<AppState>()((set, get) => ({
   selectedColor: null,
   picking: false,
   paletteJobs: {},
+  maps: {},
   past: [],
   future: [],
   lastEdit: null,
@@ -159,7 +187,7 @@ export const useApp = create<AppState>()((set, get) => ({
   setGpu: (gpu) => set({ gpu }),
   setImage: (image) => {
     const version = (get().image?.version ?? 0) + 1
-    set({ image: { ...image, version }, view: fitView(image, get().canvasSize) })
+    set({ image: { ...image, version }, view: fitView(image, get().canvasSize, undefined, tilesOf(get())) })
   },
   setView: (view) => set({ view }),
   setCanvasSize: (canvasSize) => {
@@ -173,11 +201,11 @@ export const useApp = create<AppState>()((set, get) => ({
     }
     const image = get().image
     const firstLayout = prev.width === 0 && image
-    set({ canvasSize, view: firstLayout ? fitView(image, canvasSize) : shifted })
+    set({ canvasSize, view: firstLayout ? fitView(image, canvasSize, undefined, tilesOf(get())) : shifted })
   },
   zoomFit: () => {
     const { image, canvasSize } = get()
-    if (image) set({ view: fitView(image, canvasSize) })
+    if (image) set({ view: fitView(image, canvasSize, undefined, tilesOf(get())) })
   },
   zoomActual: () => {
     const { image, canvasSize } = get()
@@ -193,10 +221,18 @@ export const useApp = create<AppState>()((set, get) => ({
     const { split, image, view, canvasSize, splitPos } = get()
     // Turning the split on with the divider off-screen: bring it to the middle of what's visible.
     if (!split && image && !splitVisible(view, image, canvasSize, splitPos)) {
-      set({ split: true, splitPos: splitAtVisibleCenter(view, image, canvasSize) })
+      set({ split: true, splitPos: splitAtVisibleCenter(view, image, canvasSize, tilesOf(get())) })
     } else set({ split: !split })
   },
-  setSplitPos: (splitPos) => set({ splitPos: Math.min(Math.max(splitPos, 0), 1) }),
+  toggleTile: () => {
+    const tile = !get().tile
+    // The divider may sit on a copy; bring it back onto the image when the copies go away.
+    set(tile ? { tile } : { tile, splitPos: Math.min(Math.max(get().splitPos, 0), 1) })
+  },
+  setSplitPos: (splitPos) => {
+    const side = (tilesOf(get()) - 1) / 2
+    set({ splitPos: Math.min(Math.max(splitPos, -side), 1 + side) })
+  },
   setCursor: (cursor) => set({ cursor }),
   setMessage: (message) => set({ message }),
   setDiagnosticsOpen: (diagnosticsOpen) => set({ diagnosticsOpen }),
@@ -220,6 +256,18 @@ export const useApp = create<AppState>()((set, get) => ({
     else delete jobs[id]
     set({ paletteJobs: jobs })
   },
+
+  setMap: (slot, map) => {
+    const maps = { ...get().maps }
+    if (map) maps[slot] = map
+    else delete maps[slot]
+    set({ maps })
+  },
+  setMapChannel: (slot, channel) => {
+    const map = get().maps[slot]
+    if (map) set({ maps: { ...get().maps, [slot]: { ...map, channel } } })
+  },
+  clearMaps: () => set({ maps: {} }),
 
   edit: (change, opts = {}) => {
     const s = get()

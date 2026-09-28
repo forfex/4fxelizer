@@ -1,7 +1,8 @@
 // 2D viewer: draws the before/after textures into the canvas with zoom, pan,
 // split view, pixel grid and an alpha checkerboard. All positions are device pixels.
 // Both textures are stretched over the same on-screen rect (the source extent), so a
-// downscaled result lines up with its source in split view.
+// downscaled result lines up with its source in split view. The tiling view repeats that rect
+// around itself (tiles × tiles copies) so seams show.
 
 struct View {
   canvasSize: vec2f,
@@ -12,7 +13,7 @@ struct View {
   gridMin: f32,       // minimum on-screen texel size for the grid; 0 disables it
   checkerSize: f32,
   hasImage: f32,
-  _pad: f32,
+  tiles: f32,        // copies per side, the image in the middle
   background: vec4f,
   checkerA: vec4f,
   checkerB: vec4f,
@@ -55,10 +56,11 @@ fn onGrid(t: texture_2d<f32>, uv: vec2f) -> bool {
 @fragment
 fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let img = (pos.xy - view.offset) / view.zoom;
-  if (view.hasImage < 0.5 || any(img < vec2f(0.0)) || any(img >= view.imageSize)) {
+  let side = (max(view.tiles, 1.0) - 1.0) * 0.5;
+  if (view.hasImage < 0.5 || any(img < -side * view.imageSize) || any(img >= (1.0 + side) * view.imageSize)) {
     return view.background;
   }
-  let uv = img / view.imageSize;
+  let uv = fract(img / view.imageSize);
   let useBefore = pos.x < view.splitX;
 
   var c: vec4f;

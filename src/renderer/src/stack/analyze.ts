@@ -2,7 +2,10 @@
 
 import type { Size } from '@/gpu/pass'
 import type { StageSpec } from '@/gpu/plan'
-import { DITHER_PATTERNS, ditherPeriod, type DitherParams } from '@/gpu/passes/dither'
+import { MAP_SLOTS } from '@shared/maps'
+import { maskMaps } from '@/gpu/mask'
+import { decodePattern } from '@/dither/customPattern'
+import { ditherMask, ditherTiling, usesPattern, type DitherParams } from '@/gpu/passes/dither'
 import { downscaleSize, type DownscaleParams } from '@/gpu/passes/downscale'
 import { upscaleSize, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
@@ -56,11 +59,16 @@ function paletteRef(s: StageSpec): string | null | undefined {
   return undefined
 }
 
+/**
+ * @param loadedMaps  Map slots with an imported map; when given, stages whose mask reads a missing
+ *                    map get a warning.
+ */
 export function analyzeStack(
   source: Size | null,
   stages: StageSpec[],
   palettes: Palette[],
-  lock: OutputLock
+  lock: OutputLock,
+  loadedMaps?: ReadonlySet<string>
 ): Map<string, StageInfo> {
   const info = new Map<string, StageInfo>()
   let size = source ?? { width: 0, height: 0 }
@@ -96,12 +104,14 @@ export function analyzeStack(
         if (p.mode === 'pattern' && !later.some(snapsColors) && !(lock.enabled && lock.paletteId)) {
           warnings.push('"Pattern only" adds the pattern without reducing colors. Add a Quantize after it.')
         }
-        const period = ditherPeriod(p)
-        if (period === 0) {
-          const name = DITHER_PATTERNS.find((d) => d.id === p.pattern)?.label ?? p.pattern
-          warnings.push(`${name} doesn't repeat, so the texture won't tile seamlessly. Use an ordered pattern for tiling textures.`)
-        } else if (source && (input.width % period !== 0 || input.height % period !== 0)) {
-          warnings.push(`The ${period}px pattern doesn't divide ${input.width}×${input.height}, so the texture won't tile seamlessly.`)
+        if (usesPattern(p, 'custom') && !decodePattern(p.customPattern)) warnings.push('Load a pattern image for the custom pattern.')
+        const tiling = ditherTiling(p, input)
+        if (tiling && source) warnings.push(tiling)
+        const mask = ditherMask(p)
+        for (const slot of mask && loadedMaps ? maskMaps(mask) : []) {
+          if (loadedMaps!.has(slot)) continue
+          const label = MAP_SLOTS.find((m) => m.id === slot)?.label ?? slot
+          warnings.push(`No ${label} map is loaded, so the mask ignores it. Load one in the Maps panel.`)
         }
       }
     }

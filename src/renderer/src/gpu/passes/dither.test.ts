@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DITHER, DITHER_PATTERNS, diffusionKernel, dither, ditherMixing, ditherPeriod, isDiffusion } from './dither'
+import { encodePattern } from '@/dither/customPattern'
+import { DEFAULT_DITHER, DITHER_PATTERNS, diffusionKernel, dither, ditherMask, ditherMixing, ditherPeriod, ditherTiles, isDiffusion, outsidePattern } from './dither'
 
 describe('dither', () => {
   it('keeps the original patterns at their shader indices', () => {
@@ -27,12 +28,59 @@ describe('dither', () => {
     expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'bayer8', scale: 2 })).toBe(16)
     expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'white-noise' })).toBe(0)
     expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'atkinson', scale: 3 })).toBe(0)
+    expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'checker' })).toBe(2)
+    expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'crosshatch', scale: 2 })).toBe(16)
     expect(ditherMixing({ ...DEFAULT_DITHER, twoNearest: true })).toBe('two-nearest')
     expect(ditherMixing({ ...DEFAULT_DITHER, twoNearest: true, mixing: 'knoll' })).toBe('knoll')
   })
 
-  it('packs params to match the WGSL struct (16 scalars + 3 vec4f)', () => {
+  it('tiles: ordered when the period divides the size, diffusion only with wrap-around', () => {
+    const size = { width: 72, height: 64 }
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'bayer8' }, size)).toBe(true)
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'bayer16' }, size)).toBe(false)
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'ign' }, size)).toBe(false)
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'jarvis' }, size)).toBe(false)
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'jarvis', wrap: true }, { width: 7, height: 5 })).toBe(true)
+  })
+
+  it('tiles custom pattern images by their width and height', () => {
+    const custom = { ...DEFAULT_DITHER, pattern: 'custom' as const, customPattern: encodePattern({ width: 3, height: 2, gray: new Uint8Array(6) }) }
+    expect(ditherTiles(custom, { width: 9, height: 4 })).toBe(true)
+    expect(ditherTiles(custom, { width: 8, height: 4 })).toBe(false)
+    expect(ditherTiles({ ...custom, scale: 2 }, { width: 12, height: 8 })).toBe(true)
+    expect(dither.resources!(custom).pattern).toBe(custom.customPattern)
+    expect(dither.resources!(DEFAULT_DITHER).pattern).toBeUndefined()
+  })
+
+  it('splits the one-thread scan (serpentine, wrap-around) into bounded dispatches', () => {
+    const fs = { ...DEFAULT_DITHER, pattern: 'floyd-steinberg' as const }
+    expect(dither.serialSteps!(fs, { width: 2048, height: 2048 })).toBe(1) // parallel wavefront
+    expect(dither.serialSteps!({ ...fs, serpentine: true }, { width: 256, height: 256 })).toBe(1)
+    expect(dither.serialSteps!({ ...fs, serpentine: true }, { width: 2048, height: 2048 })).toBe(64)
+    expect(dither.serialSteps!({ ...fs, wrap: true }, { width: 2048, height: 2048 })).toBe(65) // + 32 warm-up rows
+  })
+
+  it('packs params to match the WGSL struct (20 scalars + 6 vec4f)', () => {
     const data = dither.pack!(DEFAULT_DITHER) as ArrayBuffer
-    expect(data.byteLength).toBe(112)
+    expect(data.byteLength).toBe(176)
+  })
+
+  it('builds a mask from one or two sources, and reads the maps they use', () => {
+    expect(ditherMask(DEFAULT_DITHER)).toBeNull()
+    expect(dither.mask!(DEFAULT_DITHER)).toBeNull()
+    const second = { ...DEFAULT_DITHER, mask2: 'map-ao' as const, mask2Invert: true, maskBlur: 3 }
+    expect(ditherMask(second)).toMatchObject({ a: 'map-ao', aInvert: true, b: 'none', blur: 3 })
+    const both = { ...second, mask: 'edges' as const, maskCombine: 'max' as const }
+    expect(ditherMask(both)).toMatchObject({ a: 'edges', b: 'map-ao', bInvert: true, combine: 'max' })
+    expect(dither.resources!(both).maps).toEqual(['ao'])
+  })
+
+  it('uses the outside pattern only with a mask, and runs serially when it diffuses', () => {
+    const outside = { ...DEFAULT_DITHER, outsidePattern: 'atkinson' as const }
+    expect(outsidePattern(outside)).toBeNull()
+    expect(dither.serial!(outside)).toBe(false)
+    const masked = { ...outside, mask: 'shadows' as const }
+    expect(outsidePattern(masked)).toBe('atkinson')
+    expect(dither.serial!(masked)).toBe(true)
   })
 })

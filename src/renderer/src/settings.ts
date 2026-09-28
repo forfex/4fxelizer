@@ -32,6 +32,6 @@ export function saveSettings(patch: Partial<UserSettings>): void {
 
 /** Applies saved view settings to the store and saves them whenever they change. */
 export function startSettingsSync(): () => void {
-  useApp.setState({ grid: current.grid, split: current.split })
-  return useApp.subscribe((s) => saveSettings({ grid: s.grid, split: s.split }))
+  useApp.setState({ grid: current.grid, split: current.split, tile: current.tile })
+  return useApp.subscribe((s) => saveSettings({ grid: s.grid, split: s.split, tile: s.tile }))
 }

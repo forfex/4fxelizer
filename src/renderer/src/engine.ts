@@ -13,6 +13,7 @@ import { readTexelRgba8, readTextureRgba8, uploadBitmap } from '@/gpu/textureIO'
 import { ViewerRenderer, type ViewerFrame } from '@/gpu/viewer'
 import type { RgbaImage } from '@/image/png'
 import type { Palette } from '@/palette/palette'
+import type { MapChannel, MapSlot } from '@shared/maps'
 import type { OutputLock } from '@/stack/analyze'
 
 export const LOCK_UID = '__output-lock'
@@ -25,6 +26,8 @@ export interface ProcessInput {
   previewUid: string | null
   /** Stage whose dither mask to show instead (overrides previewUid); null = none. */
   maskUid?: string | null
+  /** Channel read from each loaded map. */
+  mapChannels?: Partial<Record<MapSlot, MapChannel>>
 }
 
 /** The output palette lock as a trailing Quantize stage (reuses the stage cache). */
@@ -87,10 +90,16 @@ export class Engine {
     previous?.texture.destroy()
   }
 
+  /** Uploads an imported map into a slot (null clears it); `version` must be new for every image. */
+  loadMap(slot: MapSlot, bitmap: ImageBitmap | null, version: number): void {
+    this.resources.setMap(slot, bitmap, version)
+  }
+
   /** Runs the stack (only stages whose inputs changed) and points the viewer at the result. */
   process(input: ProcessInput): void {
     if (!this.source) return
     this.resources.syncPalettes(input.palettes)
+    this.resources.setMapChannels(input.mapChannels ?? {})
     const { output, plan } = this.chain.run(this.source, withOutputLock(input.stages, input.outputLock))
     this.output = output
     this.lastPlan = plan
@@ -105,26 +114,14 @@ export class Engine {
     const old = this.mask
     this.mask = null
     const planned = uid ? plan.stages.find((s) => s.stage.uid === uid) : undefined
-    const def = planned && (PASSES.get(planned.stage.passId) as PassDef<unknown> | undefined)
     const input = planned && this.textureForKey(planned.inputKey)
-    if (planned && def && input) {
+    if (planned && input && PASSES.has(planned.stage.passId)) {
       const params = { ...(planned.stage.params as object), showMask: true }
-      const size = def.outputSize?.(input, params, { source: this.source!.texture }) ?? input
-      const texture = this.gpu.device.createTexture({
-        label: 'mask view',
-        size: [Math.max(1, size.width), Math.max(1, size.height)],
-        format: WORK_FORMAT,
-        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
-      })
-      const uniforms = this.runner.createUniforms(def, params, DEFAULT_BLEND, 0)
       const encoder = this.gpu.device.createCommandEncoder({ label: 'mask view' })
-      this.runner.encode(encoder, def as PassDef<never>, input, texture, uniforms, {
-        palette: this.resources.emptyPalette,
-        paletteCount: 0,
-        pattern: this.resources.pattern
-      })
+      const run = this.chain.encodeStage(encoder, planned.stage.passId, params, DEFAULT_BLEND, input, this.source!.texture, 'mask view')
       this.gpu.device.queue.submit([encoder.finish()])
-      this.mask = { texture, uniforms }
+      run.release()
+      this.mask = { texture: run.texture, uniforms: run.uniforms }
     }
     // The viewer must drop the old texture before it's destroyed; process() rebinds right after.
     if (old) {

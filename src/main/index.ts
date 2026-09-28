@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { IPC, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
+import { siblingMaps } from '@shared/maps'
 import type { MenuRole } from '@shared/menu'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
@@ -45,7 +46,25 @@ async function openFile(win: BrowserWindow, filters: FileFilter[]) {
   const result = await dialog.showOpenDialog(win, { properties: ['openFile'], filters })
   const path = result.filePaths[0]
   if (result.canceled || !path) return null
-  return { name: basename(path), bytes: new Uint8Array(await readFile(path)) }
+  return { name: basename(path), bytes: new Uint8Array(await readFile(path)), path }
+}
+
+/** Most map files read for one texture. */
+const MAX_MAP_FILES = 16
+
+/** Map files next to a texture (same base name plus a map suffix such as _ao). */
+async function findMaps(texturePath: string) {
+  if (typeof texturePath !== 'string' || !texturePath) return []
+  const dir = dirname(texturePath)
+  const files = await readdir(dir).catch(() => [] as string[])
+  const maps = siblingMaps(basename(texturePath), files).slice(0, MAX_MAP_FILES)
+  const read = await Promise.all(
+    maps.map(async (name) => {
+      const path = join(dir, name)
+      return readFile(path).then((bytes) => ({ name, bytes: new Uint8Array(bytes), path }), () => null)
+    })
+  )
+  return read.filter((f) => f !== null)
 }
 
 function registerIpc(): void {
@@ -56,6 +75,8 @@ function registerIpc(): void {
   ipcMain.handle(IPC.openFile, (event, filters: FileFilter[]) =>
     openFile(BrowserWindow.fromWebContents(event.sender)!, filters)
   )
+
+  ipcMain.handle(IPC.findMaps, (_e, texturePath: string) => findMaps(texturePath))
 
   ipcMain.handle(IPC.saveFile, async (event, defaultName: string, bytes: Uint8Array, filters: FileFilter[]) => {
     const win = BrowserWindow.fromWebContents(event.sender)!

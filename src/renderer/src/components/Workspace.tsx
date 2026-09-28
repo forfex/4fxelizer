@@ -25,6 +25,7 @@ import {
   VIEWER,
   workspaceName
 } from '@/workspace/workspace'
+import { MapsPanel } from './MapsPanel'
 import { GeneratePanel, PalettePanel } from './PalettePanel'
 import { StackPanel } from './StackPanel'
 import { Button } from './ui/button'
@@ -52,7 +53,8 @@ const COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   ),
   stack: StackPanel,
   palettes: PalettePanel,
-  generate: GeneratePanel
+  generate: GeneratePanel,
+  maps: MapsPanel
 }
 
 const TAB_COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelHeaderProps>> = {

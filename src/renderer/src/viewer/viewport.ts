@@ -44,14 +44,18 @@ export function centered(image: Size, canvas: Size, zoom: number): View {
   })
 }
 
+/** Copies of the image per side in the tiling view (the real one in the middle). */
+export const TILES = 3
+
 /**
  * Largest preset zoom that fits the image inside the canvas (with padding).
- * Prefers integer zoom when magnifying so pixel art stays crisp.
+ * Prefers integer zoom when magnifying so pixel art stays crisp. `tiles` fits a tiles×tiles
+ * grid of copies around the image instead (tiling view).
  */
-export function fitView(image: Size, canvas: Size, padding = 24): View {
+export function fitView(image: Size, canvas: Size, padding = 24, tiles = 1): View {
   const available = Math.min(
-    (canvas.width - padding * 2) / image.width,
-    (canvas.height - padding * 2) / image.height
+    (canvas.width - padding * 2) / (image.width * tiles),
+    (canvas.height - padding * 2) / (image.height * tiles)
   )
   const zoom = [...ZOOM_LEVELS].reverse().find((z) => z <= available) ?? MIN_ZOOM
   return centered(image, canvas, zoom)
@@ -69,12 +73,31 @@ export function pan(view: View, dx: number, dy: number): View {
   return snap({ zoom: view.zoom, x: view.x + dx, y: view.y + dy })
 }
 
-/** Canvas device-pixel position → image pixel coordinate (floored), or null when outside. */
-export function pixelAt(view: View, image: Size, point: { x: number; y: number }): { x: number; y: number } | null {
+/** Range of image-width fractions covered by the image and its copies: [0, 1] or, tiled, [-1, 2]. */
+function tileRange(tiles: number): [number, number] {
+  const side = (tiles - 1) / 2
+  return [side ? -side : 0, 1 + side]
+}
+
+const wrap = (v: number, n: number): number => ((v % n) + n) % n
+
+/**
+ * Canvas device-pixel position → image pixel coordinate (floored), or null when outside. With
+ * `tiles` > 1 the copies around the image count too, and map back onto the image.
+ */
+export function pixelAt(view: View, image: Size, point: { x: number; y: number }, tiles = 1): { x: number; y: number } | null {
   const x = Math.floor((point.x - view.x) / view.zoom)
   const y = Math.floor((point.y - view.y) / view.zoom)
-  if (x < 0 || y < 0 || x >= image.width || y >= image.height) return null
-  return { x, y }
+  const [lo, hi] = tileRange(tiles)
+  if (x < lo * image.width || y < lo * image.height || x >= hi * image.width || y >= hi * image.height) return null
+  return { x: wrap(x, image.width), y: wrap(y, image.height) }
+}
+
+/** Position (0–1 across the image) under a canvas device-pixel point, wrapped onto the image when tiled. */
+export function uvAt(view: View, image: Size, point: { x: number; y: number }): { u: number; v: number } {
+  const u = (point.x - view.x) / view.zoom / image.width
+  const v = (point.y - view.y) / view.zoom / image.height
+  return { u: u - Math.floor(u), v: v - Math.floor(v) }
 }
 
 /**
@@ -85,9 +108,13 @@ export function splitScreenX(view: View, image: Size, pos: number): number {
   return Math.round(view.x + Math.round(pos * image.width) * view.zoom)
 }
 
-/** Divider position (fraction of the image width, 0–1) under canvas device-pixel x. */
-export function splitPosAt(view: View, image: Size, x: number): number {
-  return Math.min(Math.max((x - view.x) / (image.width * view.zoom), 0), 1)
+/**
+ * Divider position (fraction of the image width, 0–1) under canvas device-pixel x. In the tiling
+ * view (`tiles` > 1) it can also sit on the copies left and right of the image.
+ */
+export function splitPosAt(view: View, image: Size, x: number, tiles = 1): number {
+  const [lo, hi] = tileRange(tiles)
+  return Math.min(Math.max((x - view.x) / (image.width * view.zoom), lo), hi)
 }
 
 /** True when the divider lies inside the canvas, so it can be seen and grabbed. */
@@ -96,9 +123,10 @@ export function splitVisible(view: View, image: Size, canvas: Size, pos: number)
   return x > 0 && x < canvas.width
 }
 
-/** Divider position at the middle of the visible part of the image. */
-export function splitAtVisibleCenter(view: View, image: Size, canvas: Size): number {
-  const left = Math.max(view.x, 0)
-  const right = Math.min(view.x + image.width * view.zoom, canvas.width)
-  return right > left ? splitPosAt(view, image, (left + right) / 2) : 0.5
+/** Divider position at the middle of the visible part of the image (and its copies when tiled). */
+export function splitAtVisibleCenter(view: View, image: Size, canvas: Size, tiles = 1): number {
+  const [lo, hi] = tileRange(tiles)
+  const left = Math.max(view.x + lo * image.width * view.zoom, 0)
+  const right = Math.min(view.x + hi * image.width * view.zoom, canvas.width)
+  return right > left ? splitPosAt(view, image, (left + right) / 2, tiles) : 0.5
 }

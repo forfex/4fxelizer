@@ -2,6 +2,8 @@
 // writes one texture. The framework owns bindings, dispatch, pipeline caching and the
 // per-stage blend; a pass only supplies a `run` function in WGSL plus its parameter packing.
 
+import type { MapSlot } from '@shared/maps'
+import type { MaskSpec } from './mask'
 import { WGSL_LIB } from './wgslLib'
 
 export interface Size {
@@ -40,6 +42,10 @@ export const DEFAULT_BLEND: StageBlend = { opacity: 1, mode: 'normal' }
 export interface PassResources {
   /** Id of the project palette the pass reads (bound as `palette`, count in `paletteCount()`). */
   palette?: string | null
+  /** Imported map slots the pass reads (through its mask). */
+  maps?: MapSlot[]
+  /** Custom threshold pattern (encoded, see dither/customPattern.ts), bound as `customPattern`. */
+  pattern?: string
 }
 
 /** Stack-wide facts a pass may need beyond its own input. */
@@ -56,8 +62,9 @@ export interface PassDef<P = unknown> {
    *   fn run(p: vec2u, size: vec2u) -> vec4f   // color for output texel p of an output of `size`
    * and, if the pass has parameters, `struct Params { ... }` matching `pack`.
    * In scope: `src` (texture_2d<f32>), `params` (uniform Params), `linearSampler`, `palette`,
-   * `pattern` (blue noise), `scratch` (read-write storage, see `scratchBytes`) and the helpers in
-   * wgslLib.ts.
+   * `pattern` (blue noise), `customPattern` (thresholds of a custom pattern image, r32float),
+   * `scratch` (read-write storage, see `scratchBytes`), the stage mask
+   * (`maskAt(p, size)`, see `mask`) and the helpers in wgslLib.ts.
    *
    * A pass whose pixels depend on each other (error diffusion) can also define
    *   fn runRows(thread: u32, size: vec2u)      // one workgroup of ROW_THREADS threads
@@ -75,6 +82,14 @@ export interface PassDef<P = unknown> {
   serial?(params: P): boolean
   /** Bytes of zeroed `scratch` storage the serial path needs for an output of `size`. */
   scratchBytes?(size: Size, params: P): number
+  /**
+   * Number of times the serial `runRows` entry is dispatched (default 1); `stage.step` tells each
+   * dispatch which one it is. Long serial work is split so no single dispatch runs long enough for
+   * the OS to reset the GPU; `scratch` and the output persist between steps.
+   */
+  serialSteps?(params: P, size: Size): number
+  /** The mask to build before the pass runs (read with `maskAt`); null = none (maskAt is 1). */
+  mask?(params: P): MaskSpec | null
 }
 
 export function definePass<P>(def: PassDef<P>): PassDef<P> {
@@ -105,7 +120,7 @@ function shaderSource(def: PassDef<never>): string {
   const hasParams = /\bstruct\s+Params\b/.test(def.wgsl)
   return /* wgsl */ `
 ${hasParams ? '' : 'struct Params { _unused: vec4f }'}
-struct Stage { opacity: f32, blendMode: u32, paletteCount: u32, _pad: u32 }
+struct Stage { opacity: f32, blendMode: u32, paletteCount: u32, step: u32 }
 struct PaletteEntry { color: vec4f, lab: vec4f }
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -116,6 +131,8 @@ struct PaletteEntry { color: vec4f, lab: vec4f }
 @group(0) @binding(5) var pattern: texture_2d<f32>;
 @group(0) @binding(6) var<uniform> stage: Stage;
 @group(0) @binding(7) var<storage, read_write> scratch: array<vec4f>;
+@group(0) @binding(8) var maskTex: texture_2d<f32>;
+@group(0) @binding(9) var customPattern: texture_2d<f32>;
 
 const ROW_THREADS = ${ROW_THREADS}u;
 
@@ -161,6 +178,10 @@ export interface PassBindings {
   serial?: boolean
   /** Zeroed storage for the serial path; defaults to a tiny placeholder. */
   scratch?: GPUBuffer | null
+  /** The stage mask (see PassDef.mask); defaults to white (no mask). */
+  mask?: GPUTexture | null
+  /** Custom pattern thresholds (r32float); defaults to a single 0.5. */
+  customPattern?: GPUTexture | null
 }
 
 export class PassRunner {
@@ -170,6 +191,8 @@ export class PassRunner {
   private readonly pipelines = new Map<string, GPUComputePipeline>()
   private readonly modules = new Map<string, GPUShaderModule>()
   private readonly emptyScratch: GPUBuffer
+  private readonly noMask: GPUTexture
+  private readonly noPattern: GPUTexture
 
   constructor(private readonly device: GPUDevice) {
     const compute = GPUShaderStage.COMPUTE
@@ -183,10 +206,16 @@ export class PassRunner {
         { binding: 4, visibility: compute, buffer: { type: 'read-only-storage' } },
         { binding: 5, visibility: compute, texture: { sampleType: 'float' } },
         { binding: 6, visibility: compute, buffer: { type: 'uniform' } },
-        { binding: 7, visibility: compute, buffer: { type: 'storage' } }
+        { binding: 7, visibility: compute, buffer: { type: 'storage' } },
+        { binding: 8, visibility: compute, texture: { sampleType: 'float' } },
+        { binding: 9, visibility: compute, texture: { sampleType: 'unfilterable-float' } }
       ]
     })
     this.emptyScratch = device.createBuffer({ label: 'empty scratch', size: 16, usage: GPUBufferUsage.STORAGE })
+    this.noMask = device.createTexture({ label: 'no mask', size: [1, 1], format: 'r8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST })
+    device.queue.writeTexture({ texture: this.noMask }, new Uint8Array([255]), { bytesPerRow: 1 }, [1, 1])
+    this.noPattern = device.createTexture({ label: 'no pattern', size: [1, 1], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST })
+    device.queue.writeTexture({ texture: this.noPattern }, new Float32Array([0.5]), { bytesPerRow: 4 }, [1, 1])
     this.pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [this.layout] })
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
   }
@@ -246,16 +275,18 @@ export class PassRunner {
     return buffer
   }
 
-  /** Uniform buffers for one stage run: the pass's params and the framework's stage block. */
-  createUniforms<P>(def: PassDef<P>, params: P, blend: StageBlend, paletteCount: number): GPUBuffer[] {
+  /**
+   * Uniform buffers for one stage run: the pass's params, then the framework's stage block once per
+   * serial step (see PassDef.serialSteps).
+   */
+  createUniforms<P>(def: PassDef<P>, params: P, blend: StageBlend, paletteCount: number, steps = 1): GPUBuffer[] {
     const mode = BLEND_MODES.findIndex((m) => m.id === blend.mode)
-    return [
-      this.uniform(`${def.id} params`, def.pack?.(params) ?? new Float32Array(4)),
+    const stage = (step: number): GPUBuffer =>
       this.uniform(
         `${def.id} stage`,
-        packStruct(['f', Math.min(Math.max(blend.opacity, 0), 1)], ['u', Math.max(mode, 0)], ['u', paletteCount], ['u', 0])
+        packStruct(['f', Math.min(Math.max(blend.opacity, 0), 1)], ['u', Math.max(mode, 0)], ['u', paletteCount], ['u', step])
       )
-    ]
+    return [this.uniform(`${def.id} params`, def.pack?.(params) ?? new Float32Array(4)), ...Array.from({ length: Math.max(1, steps) }, (_, i) => stage(i))]
   }
 
   encode(
@@ -266,25 +297,32 @@ export class PassRunner {
     uniforms: GPUBuffer[],
     bindings: PassBindings
   ): void {
-    const bindGroup = this.device.createBindGroup({
-      layout: this.layout,
-      entries: [
-        { binding: 0, resource: input.createView() },
-        { binding: 1, resource: output.createView() },
-        { binding: 2, resource: { buffer: uniforms[0]! } },
-        { binding: 3, resource: this.sampler },
-        { binding: 4, resource: { buffer: bindings.palette } },
-        { binding: 5, resource: bindings.pattern.createView() },
-        { binding: 6, resource: { buffer: uniforms[1]! } },
-        { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } }
-      ]
-    })
+    const bindGroup = (stage: GPUBuffer): GPUBindGroup =>
+      this.device.createBindGroup({
+        layout: this.layout,
+        entries: [
+          { binding: 0, resource: input.createView() },
+          { binding: 1, resource: output.createView() },
+          { binding: 2, resource: { buffer: uniforms[0]! } },
+          { binding: 3, resource: this.sampler },
+          { binding: 4, resource: { buffer: bindings.palette } },
+          { binding: 5, resource: bindings.pattern.createView() },
+          { binding: 6, resource: { buffer: stage } },
+          { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } },
+          { binding: 8, resource: (bindings.mask ?? this.noMask).createView() },
+          { binding: 9, resource: (bindings.customPattern ?? this.noPattern).createView() }
+        ]
+      })
     const pass = encoder.beginComputePass({ label: def.id })
-    pass.setBindGroup(0, bindGroup)
     if (bindings.serial) {
+      // One dispatch per serial step, each with its own stage block (stage.step).
       pass.setPipeline(this.pipeline(def, 'mainRows'))
-      pass.dispatchWorkgroups(1)
+      for (const stage of uniforms.slice(1)) {
+        pass.setBindGroup(0, bindGroup(stage))
+        pass.dispatchWorkgroups(1)
+      }
     } else {
+      pass.setBindGroup(0, bindGroup(uniforms[1]!))
       pass.setPipeline(this.pipeline(def, 'main'))
       pass.dispatchWorkgroups(Math.ceil(output.width / WORKGROUP), Math.ceil(output.height / WORKGROUP))
     }

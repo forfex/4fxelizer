@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { openDroppedFile, redo, runMenuCommand } from '@/actions'
+import { openDroppedFiles, redo, runMenuCommand } from '@/actions'
 import { startEngine } from '@/engine'
 import { adapterLabel } from '@/gpu/device'
 import { startPaletteController } from '@/palette/controller'
@@ -54,8 +54,10 @@ export function App() {
   const onDrop = async (e: React.DragEvent): Promise<void> => {
     e.preventDefault()
     setDragging(false)
-    const file = e.dataTransfer.files[0]
-    if (file) await openDroppedFile(file.name, new Uint8Array(await file.arrayBuffer()))
+    const files = await Promise.all(
+      [...e.dataTransfer.files].map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()), path: window.fx.pathForFile(f) || undefined }))
+    )
+    if (files.length) await openDroppedFiles(files)
   }
 
   return (

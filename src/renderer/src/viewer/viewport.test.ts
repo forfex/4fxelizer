@@ -10,6 +10,8 @@ import {
   splitScreenX,
   splitVisible,
   stepZoom,
+  TILES,
+  uvAt,
   zoomAt
 } from './viewport'
 
@@ -73,5 +75,23 @@ describe('viewport', () => {
     const view = { zoom: 4, x: -300, y: 0 } // columns 75..125 visible → 75..100
     expect(splitVisible(view, image, canvas, 0.2)).toBe(false)
     expect(splitAtVisibleCenter(view, image, canvas)).toBeCloseTo(0.875)
+  })
+
+  it('tiling view: fits the grid of copies and maps them back onto the image', () => {
+    const image = { width: 64, height: 64 }
+    const view = fitView(image, { width: 1000, height: 700 }, 24, TILES)
+    expect(view.zoom).toBe(3) // 192px grid fits 652px, 4× (768px) would not
+    expect(view.x).toBe(404) // the middle copy is centered
+    const tiled = { zoom: 4, x: 100, y: 100 }
+    expect(pixelAt(tiled, image, { x: 99, y: 100 })).toBeNull()
+    expect(pixelAt(tiled, image, { x: 99, y: 100 }, TILES)).toEqual({ x: 63, y: 0 })
+    expect(pixelAt(tiled, image, { x: 100 + 64 * 4 * 2 - 1, y: 100 }, TILES)).toEqual({ x: 63, y: 0 })
+    expect(pixelAt(tiled, image, { x: 100 + 64 * 4 * 2, y: 100 }, TILES)).toBeNull()
+    expect(pixelAt(tiled, image, { x: 100 - 64 * 4 - 1, y: 100 }, TILES)).toBeNull()
+    expect(uvAt(tiled, image, { x: 100 - 32 * 4, y: 100 + 64 * 4 + 16 * 4 }).u).toBeCloseTo(0.5)
+    expect(uvAt(tiled, image, { x: 100 - 32 * 4, y: 100 + 64 * 4 + 16 * 4 }).v).toBeCloseTo(0.25)
+    // The divider can move onto the copies left and right of the image.
+    expect(splitPosAt(tiled, image, 0, TILES)).toBeCloseTo(-100 / 256)
+    expect(splitPosAt(tiled, image, 5000, TILES)).toBe(2)
   })
 })

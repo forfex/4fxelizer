@@ -17,9 +17,10 @@ export function Toolbar() {
   const zoom = useApp((s) => s.view.zoom)
   const grid = useApp((s) => s.grid)
   const split = useApp((s) => s.split)
+  const tile = useApp((s) => s.tile)
   const canUndo = useApp((s) => s.past.length > 0)
   const canRedo = useApp((s) => s.future.length > 0)
-  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, setDiagnosticsOpen, setExportOpen } = useApp.getState()
+  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setDiagnosticsOpen, setExportOpen } = useApp.getState()
   const redoKey = window.fx.platform === 'darwin' ? '⇧⌘Z' : 'Ctrl+Y'
 
   return (
@@ -63,6 +64,9 @@ export function Toolbar() {
       </Button>
       <Button aria-pressed={split} onClick={toggleSplit} title={`Before/after split (${mod}\\)`}>
         Split
+      </Button>
+      <Button aria-pressed={tile} onClick={toggleTile} title={`Tiling view: copies around the texture to check its seams (${mod}T)`}>
+        Tile
       </Button>
 
       <div className="flex-1" />

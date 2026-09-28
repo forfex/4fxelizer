@@ -74,7 +74,24 @@ describe('analyzeStack', () => {
     const w = warningsOf([stage('dither', { pattern: 'bayer8' })], noLock, { width: 100, height: 100 })
     expect(w[0]!.some((m) => /won't tile/.test(m))).toBe(true)
     const fs = warningsOf([stage('dither', { pattern: 'floyd-steinberg' })], noLock, { width: 64, height: 64 })
-    expect(fs[0]!.some((m) => /Floyd–Steinberg doesn't repeat/.test(m))).toBe(true)
+    expect(fs[0]!.some((m) => /Floyd–Steinberg won't tile.*Wrap edges/.test(m))).toBe(true)
+    const wrapped = warningsOf([stage('dither', { pattern: 'floyd-steinberg', wrap: true })], noLock, { width: 63, height: 17 })
+    expect(wrapped[0]!.some((m) => /tile/.test(m))).toBe(false)
+    const noise = warningsOf([stage('dither', { pattern: 'white-noise' })], noLock, { width: 64, height: 64 })
+    expect(noise[0]!.some((m) => /doesn't repeat/.test(m))).toBe(true)
+    const blurred = warningsOf([stage('dither', { pattern: 'bayer4', mask: 'shadows', maskBlur: 2 })], noLock, { width: 64, height: 64 })
+    expect(blurred[0]!.some((m) => /mask stops at the image edges/.test(m))).toBe(true)
+    const outside = warningsOf([stage('dither', { pattern: 'bayer4', mask: 'shadows', outsidePattern: 'atkinson', wrap: false })], noLock, { width: 64, height: 64 })
+    expect(outside[0]!.some((m) => /Atkinson won't tile/.test(m))).toBe(true)
+  })
+
+  it('warns when a mask reads a map that is not loaded', () => {
+    const stages = [stage('dither', { mask: 'map-ao', mask2: 'map-cavity' })]
+    const w = (maps?: Set<string>): string[] => analyzeStack({ width: 64, height: 64 }, stages, [palette], noLock, maps).get(stages[0]!.uid)!.warnings
+    expect(w().some((m) => /map is loaded/.test(m))).toBe(false)
+    expect(w(new Set(['ao'])).filter((m) => /map is loaded/.test(m))).toEqual([
+      'No Cavity map is loaded, so the mask ignores it. Load one in the Maps panel.'
+    ])
   })
 
   it('ignores disabled stages', () => {

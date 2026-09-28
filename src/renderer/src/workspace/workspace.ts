@@ -22,7 +22,8 @@ export interface PanelDef {
 export const PANELS: PanelDef[] = [
   { id: 'stack', title: 'Stack', minWidth: 240 },
   { id: 'palettes', title: 'Palettes', minWidth: 220 },
-  { id: 'generate', title: 'Generate', minWidth: 220 }
+  { id: 'generate', title: 'Generate', minWidth: 220 },
+  { id: 'maps', title: 'Maps', minWidth: 240 }
 ]
 
 interface BuiltinWorkspace {
@@ -74,12 +75,13 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   {
     id: 'essentials',
     name: 'Essentials',
-    hint: 'Stack on the left, palettes and generator on the right.',
+    hint: 'Stack on the left; palettes, generator and maps on the right.',
     build(api) {
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'left', 320)
       addTool(api, 'palettes', VIEWER, 'right', 300)
       addTool(api, 'generate', 'palettes', 'below', 330)
+      addTool(api, 'maps', 'generate', 'within')
     }
   },
   {
@@ -91,16 +93,18 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'stack', VIEWER, 'right', 330)
       addTool(api, 'palettes', 'stack', 'below')
       addTool(api, 'generate', 'palettes', 'within')
+      addTool(api, 'maps', 'palettes', 'within')
     }
   },
   {
     id: 'palette-focus',
     name: 'Palette editing',
-    hint: 'A wide palette panel, with the stack and generator tabbed on the left.',
+    hint: 'A wide palette panel, with the stack, generator and maps tabbed on the left.',
     build(api) {
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'left', 300)
       addTool(api, 'generate', 'stack', 'within')
+      addTool(api, 'maps', 'stack', 'within')
       addTool(api, 'palettes', VIEWER, 'right', 400)
     }
   },
@@ -117,6 +121,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       float('stack', 12, 12, 320, 560)
       float('palettes', Math.max(width - 312, 344), 12, 300, 330)
       float('generate', Math.max(width - 312, 344), 356, 300, 330)
+      addTool(api, 'maps', 'generate', 'within')
     }
   }
 ]
