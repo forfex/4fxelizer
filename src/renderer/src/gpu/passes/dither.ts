@@ -234,7 +234,7 @@ fn threshold(p: vec2u) -> f32 {
     case 11u: { return (LINE4[q.x % 4u] + 0.5) / 4.0; }
     case 12u: { return (LINE4[(q.x + q.y) % 4u] + 0.5) / 4.0; }
     case 21u: { return (f32(MAGIC4[(q.y % 4u) * 4u + q.x % 4u]) + 0.5) / 8.0; }
-    default: { return blueNoise(p); }
+    default: { return blueNoise(q); }
   }
 }
 
