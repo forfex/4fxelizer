@@ -1,4 +1,4 @@
-import { exportImage, openImage } from '@/actions'
+import { openImage, redo, undo } from '@/actions'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
 import { Led, Lcd } from './ui/retro'
@@ -15,7 +15,10 @@ export function Toolbar() {
   const zoom = useApp((s) => s.view.zoom)
   const grid = useApp((s) => s.grid)
   const split = useApp((s) => s.split)
-  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, setDiagnosticsOpen } = useApp.getState()
+  const canUndo = useApp((s) => s.past.length > 0)
+  const canRedo = useApp((s) => s.future.length > 0)
+  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, setDiagnosticsOpen, setExportOpen } = useApp.getState()
+  const redoKey = window.fx.platform === 'darwin' ? '⇧⌘Z' : 'Ctrl+Y'
 
   return (
     <header className="bevel-raised flex h-10 shrink-0 items-center gap-1 bg-panel px-2">
@@ -23,8 +26,16 @@ export function Toolbar() {
       <Button onClick={openImage} disabled={gpu.status !== 'ready'} title={`Open image (${mod}O)`}>
         Open…
       </Button>
-      <Button onClick={exportImage} disabled={!hasImage} title={`Export PNG (${mod}E)`}>
-        Export PNG
+      <Button onClick={() => setExportOpen(true)} disabled={!hasImage} title={`Export PNG (${mod}E)`}>
+        Export…
+      </Button>
+
+      <Separator />
+      <Button size="icon" onClick={undo} disabled={!canUndo} title={`Undo (${mod}Z)`}>
+        ↶
+      </Button>
+      <Button size="icon" onClick={redo} disabled={!canRedo} title={`Redo (${redoKey})`}>
+        ↷
       </Button>
 
       <Separator />

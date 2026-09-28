@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { openImage } from '@/actions'
 import { getEngine } from '@/engine'
 import { cssColor } from '@/lib/pixelSnap'
+import { stageLabel } from '@/gpu/passes'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
 import { pan, pixelAt, stepZoom, zoomAt } from '@/viewer/viewport'
@@ -17,6 +18,10 @@ export function Viewer() {
   const hasImage = useApp((s) => s.image !== null)
   const split = useApp((s) => s.split && s.image !== null)
   const splitPos = useApp((s) => s.splitPos)
+  const previewLabel = useApp((s) => {
+    const i = s.stages.findIndex((st) => st.uid === s.previewUid)
+    return i < 0 ? null : `After ${i + 1}. ${stageLabel(s.stages[i]!.passId)}`
+  })
 
   // Canvas ↔ engine, sizing and the render loop.
   useEffect(() => {
@@ -30,15 +35,16 @@ export function Viewer() {
       checkerA: cssColor('--fx-checker-a'),
       checkerB: cssColor('--fx-checker-b')
     }
-    let processed: { stages: unknown; version: number | undefined } | null = null
+    let processed: unknown[] | null = null
 
     // Processing happens inside the frame, so dragging a slider runs the stack at most once per frame.
     const frame = (): void => {
       const s = useApp.getState()
-      if (s.image && (processed?.stages !== s.stages || processed.version !== s.image.version)) {
-        processed = { stages: s.stages, version: s.image.version }
+      const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid]
+      if (s.image && (!processed || inputs.some((v, i) => v !== processed![i]))) {
+        processed = inputs
         try {
-          engine.process(s.stages)
+          engine.process({ stages: s.stages, palettes: s.palettes, outputLock: s.outputLock, previewUid: s.previewUid })
         } catch (e) {
           s.setMessage({ kind: 'error', text: `Processing failed: ${(e as Error).message}` })
         }
@@ -146,13 +152,14 @@ export function Viewer() {
         onPointerLeave={() => useApp.getState().setCursor(null)}
         onAuxClick={(e) => e.preventDefault()}
       />
-      {split && <SplitHandle pos={splitPos} />}
+      {split && <SplitHandle pos={splitPos} afterLabel={previewLabel ?? 'After'} />}
+      {!split && previewLabel && <ViewerLabel className="right-2 text-accent">{previewLabel}</ViewerLabel>}
       {!hasImage && <EmptyState />}
     </div>
   )
 }
 
-function SplitHandle({ pos }: { pos: number }) {
+function SplitHandle({ pos, afterLabel }: { pos: number; afterLabel: string }) {
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
     e.currentTarget.setPointerCapture(e.pointerId)
   }
@@ -175,7 +182,7 @@ function SplitHandle({ pos }: { pos: number }) {
         <div className="h-full w-(--px) bg-accent" />
       </div>
       <ViewerLabel className="left-2">Before</ViewerLabel>
-      <ViewerLabel className="right-2">After</ViewerLabel>
+      <ViewerLabel className="right-2">{afterLabel}</ViewerLabel>
     </>
   )
 }

@@ -45,6 +45,11 @@
   border-right-width: var(--px);
 }
 
+@utility outline-px {
+  outline-style: solid;
+  outline-width: var(--px);
+}
+
 @utility bevel-raised {
   box-shadow:
     inset var(--px) var(--px) 0 var(--fx-bevel-light),
@@ -62,6 +67,10 @@
   body,
   #root {
     height: 100%;
+  }
+  html {
+    /* Dark native scrollbars and form widgets. */
+    color-scheme: dark;
   }
   body {
     margin: 0;

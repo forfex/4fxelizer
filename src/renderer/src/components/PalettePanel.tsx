@@ -1,0 +1,349 @@
+import { useEffect, useState } from 'react'
+import { extractPaletteFromOutput, importPalette, savePalette } from '@/actions'
+import { stageLabel } from '@/gpu/passes'
+import { cn } from '@/lib/utils'
+import { BUILTIN_PALETTES } from '@/palette/builtins'
+import { generatePaletteNow } from '@/palette/controller'
+import type { PaletteExportFormat } from '@/palette/formats'
+import {
+  DEFAULT_GENERATOR,
+  MAX_PALETTE,
+  normalizeHex,
+  snapHexTo15bit,
+  sortColors,
+  type GeneratorSettings,
+  type Palette,
+  type PaletteColor
+} from '@/palette/palette'
+import { useApp } from '@/store'
+import { Button } from './ui/button'
+import { Checkbox, Field, ParamSlider, Segmented } from './ui/controls'
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
+import { GroupBox, Led } from './ui/retro'
+import { Select } from './ui/select'
+
+export function PalettePanel() {
+  const palettes = useApp((s) => s.palettes)
+  const selectedId = useApp((s) => s.selectedPaletteId)
+  const palette = palettes.find((p) => p.id === selectedId) ?? palettes[0]
+
+  return (
+    <aside className="bevel-raised flex w-72 shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-panel p-3">
+      <GroupBox title="Palettes">
+        <div className="flex gap-1">
+          <Select
+            className="flex-1"
+            value={palette?.id ?? null}
+            placeholder="No palettes"
+            onValueChange={(id) => useApp.getState().selectPalette(id)}
+            options={palettes.map((p) => ({ value: p.id, label: `${p.name} (${p.colors.length})` }))}
+          />
+          <PaletteMenu palette={palette} />
+        </div>
+        {palette && <NameField key={palette.id} palette={palette} />}
+      </GroupBox>
+      {palette && <PaletteEditor key={palette.id} palette={palette} />}
+      {palette && <GeneratorBox palette={palette} />}
+    </aside>
+  )
+}
+
+function PaletteMenu({ palette }: { palette: Palette | undefined }) {
+  const { addPalette, removePalette } = useApp.getState()
+  const exportAs = (format: PaletteExportFormat) => () => palette && savePalette(palette.id, format)
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <Button size="icon" className="h-6 w-6" title="Palette actions">
+          ⋯
+        </Button>
+      </MenuTrigger>
+      <MenuContent align="end">
+        <MenuItem onSelect={() => addPalette({ name: 'New palette', colors: [] })}>New empty</MenuItem>
+        <MenuItem onSelect={() => addPalette({ name: 'Generated', colors: [], generator: { ...DEFAULT_GENERATOR } })}>
+          New generated
+        </MenuItem>
+        <MenuSub>
+          <MenuSubTrigger>New from built-in</MenuSubTrigger>
+          <MenuSubContent>
+            {BUILTIN_PALETTES.map((b) => (
+              <MenuItem key={b.name} onSelect={() => addPalette({ name: b.name, colors: b.colors.map((hex) => ({ hex })) })}>
+                {b.name}
+                <span className="ml-auto pl-3 font-mono text-small opacity-70">{b.colors.length}</span>
+              </MenuItem>
+            ))}
+          </MenuSubContent>
+        </MenuSub>
+        <MenuItem onSelect={importPalette}>Import…</MenuItem>
+        <MenuSeparator />
+        <MenuLabel>This palette</MenuLabel>
+        <MenuItem
+          disabled={!palette}
+          onSelect={() => palette && addPalette({ ...structuredClone(palette), name: `${palette.name} copy` })}
+        >
+          Duplicate
+        </MenuItem>
+        <MenuSub>
+          <MenuSubTrigger disabled={!palette?.colors.length}>Export as</MenuSubTrigger>
+          <MenuSubContent>
+            <MenuItem onSelect={exportAs('gpl')}>GIMP / Aseprite (.gpl)</MenuItem>
+            <MenuItem onSelect={exportAs('hex')}>Lospec hex (.hex)</MenuItem>
+            <MenuItem onSelect={exportAs('pal')}>JASC (.pal)</MenuItem>
+            <MenuItem onSelect={exportAs('act')}>Adobe color table (.act)</MenuItem>
+          </MenuSubContent>
+        </MenuSub>
+        <MenuItem disabled={!palette} onSelect={() => palette && removePalette(palette.id)}>
+          Delete
+        </MenuItem>
+      </MenuContent>
+    </Menu>
+  )
+}
+
+function NameField({ palette }: { palette: Palette }) {
+  const [name, setName] = useState(palette.name)
+  useEffect(() => setName(palette.name), [palette.name])
+  const commit = (): void => {
+    const trimmed = name.trim()
+    if (trimmed && trimmed !== palette.name) useApp.getState().updatePalette(palette.id, { name: trimmed })
+    else setName(palette.name)
+  }
+  return (
+    <input
+      className="bevel-sunken mt-1.5 h-6 w-full rounded-fx bg-well px-1.5 outline-none"
+      value={name}
+      aria-label="Palette name"
+      onChange={(e) => setName(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+    />
+  )
+}
+
+function PaletteEditor({ palette }: { palette: Palette }) {
+  const [selected, setSelected] = useState<number | null>(null)
+  const hasImage = useApp((s) => s.image !== null)
+  const current = selected !== null ? palette.colors[selected] : undefined
+  const setColors = (colors: PaletteColor[], coalesce?: string): void =>
+    useApp.getState().updatePalette(palette.id, { colors }, coalesce ? { coalesce } : undefined)
+  const patchColor = (i: number, patch: Partial<PaletteColor>, coalesce?: string): void =>
+    setColors(palette.colors.map((c, j) => (j === i ? { ...c, ...patch } : c)), coalesce)
+
+  const addColor = (): void => {
+    if (palette.colors.length >= MAX_PALETTE) return
+    setColors([...palette.colors, { hex: current?.hex ?? '#808080' }])
+    setSelected(palette.colors.length)
+  }
+  const removeColor = (i: number): void => {
+    setColors(palette.colors.filter((_, j) => j !== i))
+    setSelected(palette.colors.length > 1 ? Math.min(i, palette.colors.length - 2) : null)
+  }
+
+  return (
+    <GroupBox title={`Colors · ${palette.colors.length}`}>
+      <div className="flex flex-col gap-2">
+        {palette.colors.length > 0 ? (
+          <div className="bevel-sunken grid grid-cols-8 gap-px bg-well p-px">
+            {palette.colors.map((c, i) => (
+              <button
+                key={i}
+                type="button"
+                className={cn(
+                  'relative aspect-square min-w-0',
+                  selected === i && 'z-10 outline-px outline-offset-1 outline-accent'
+                )}
+                style={{ backgroundColor: c.hex }}
+                title={`${i}: ${c.hex}${c.locked ? ' (locked)' : ''}`}
+                onClick={() => setSelected(selected === i ? null : i)}
+              >
+                {c.locked && <span className="absolute right-0 bottom-0 size-1.5 bg-bevel-dark shadow-[0_0_0_var(--px)_var(--fx-bevel-light)]" />}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-dim">
+            {palette.generator ? 'Load an image to generate colors.' : 'No colors yet. Add some, import, or extract them.'}
+          </p>
+        )}
+
+        {current && selected !== null && (
+          <ColorEditor
+            key={selected}
+            color={current}
+            index={selected}
+            onChange={(patch, coalesce) => patchColor(selected, patch, coalesce)}
+            onRemove={() => removeColor(selected)}
+          />
+        )}
+
+        <div className="flex flex-wrap gap-1">
+          <Button size="sm" onClick={addColor} disabled={palette.colors.length >= MAX_PALETTE}>
+            + Color
+          </Button>
+          <Menu>
+            <MenuTrigger asChild>
+              <Button size="sm" disabled={palette.colors.length < 2}>Sort ▾</Button>
+            </MenuTrigger>
+            <MenuContent>
+              <MenuItem onSelect={() => setColors(sortColors(palette.colors, 'lightness'))}>By lightness</MenuItem>
+              <MenuItem onSelect={() => setColors(sortColors(palette.colors, 'hue'))}>By hue</MenuItem>
+              <MenuItem onSelect={() => setColors(sortColors(palette.colors, 'chroma'))}>By saturation</MenuItem>
+              <MenuItem onSelect={() => setColors([...palette.colors].reverse())}>Reverse</MenuItem>
+            </MenuContent>
+          </Menu>
+          <Button
+            size="sm"
+            disabled={!palette.colors.length}
+            title="Snap every color to PSX 15-bit color (5 bits per channel)"
+            onClick={() => setColors(palette.colors.map((c) => ({ ...c, hex: snapHexTo15bit(c.hex) })))}
+          >
+            15-bit
+          </Button>
+          <Button
+            size="sm"
+            disabled={!hasImage}
+            title="Replace the colors with the distinct colors of the current output (up to 256)"
+            onClick={() => extractPaletteFromOutput(palette.id)}
+          >
+            Extract
+          </Button>
+        </div>
+      </div>
+    </GroupBox>
+  )
+}
+
+function ColorEditor({
+  color,
+  index,
+  onChange,
+  onRemove
+}: {
+  color: PaletteColor
+  index: number
+  onChange(patch: Partial<PaletteColor>, coalesce?: string): void
+  onRemove(): void
+}) {
+  const [text, setText] = useState(color.hex)
+  useEffect(() => setText(color.hex), [color.hex])
+  const commit = (): void => {
+    const hex = normalizeHex(text)
+    if (hex && hex !== color.hex) onChange({ hex })
+    else setText(color.hex)
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="w-6 font-mono text-small text-dim">#{index}</span>
+      <label className="bevel-sunken relative size-6 shrink-0 cursor-pointer p-px" title="Pick a color">
+        <span className="block size-full" style={{ backgroundColor: color.hex }} />
+        <input
+          type="color"
+          className="absolute inset-0 size-full cursor-pointer opacity-0"
+          value={color.hex}
+          onChange={(e) => onChange({ hex: e.target.value }, `color:${index}`)}
+        />
+      </label>
+      <input
+        className="bevel-sunken h-6 w-20 rounded-fx bg-lcd px-1.5 font-mono text-lcd-text outline-none"
+        value={text}
+        aria-label="Hex color"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      />
+      <Checkbox
+        checked={!!color.locked}
+        onCheckedChange={(locked) => onChange({ locked })}
+        label="Lock"
+        hint="Locked colors are kept when the palette is regenerated."
+      />
+      <Button size="icon" className="ml-auto size-6" title="Remove this color" onClick={onRemove}>
+        ×
+      </Button>
+    </div>
+  )
+}
+
+function GeneratorBox({ palette }: { palette: Palette }) {
+  const job = useApp((s) => s.paletteJobs[palette.id])
+  const stages = useApp((s) => s.stages)
+  const hasImage = useApp((s) => s.image !== null)
+  const gen = palette.generator
+
+  if (!gen) {
+    return (
+      <GroupBox title="Generate">
+        <p className="mb-2 text-small text-dim">Build this palette from the image with median cut or k-means.</p>
+        <Button
+          size="sm"
+          onClick={() =>
+            useApp.getState().updatePalette(palette.id, {
+              generator: { ...DEFAULT_GENERATOR, auto: false, count: Math.max(palette.colors.length, 2) }
+            })
+          }
+        >
+          Set up generator
+        </Button>
+      </GroupBox>
+    )
+  }
+
+  const set = (patch: Partial<GeneratorSettings>): void =>
+    useApp.getState().updatePalette(palette.id, { generator: { ...gen, ...patch } }, { coalesce: `gen:${palette.id}:${Object.keys(patch)}` })
+  const fromValue = gen.from.kind === 'source' ? 'source' : gen.from.uid
+  const lockedCount = palette.colors.filter((c) => c.locked).length
+
+  return (
+    <GroupBox title="Generate">
+      <div className="flex flex-col gap-1.5">
+        <Field label="From" hint="Which image the colors come from.">
+          <Select
+            className="flex-1"
+            value={fromValue}
+            onValueChange={(v) => set({ from: v === 'source' ? { kind: 'source' } : { kind: 'stage', uid: v } })}
+            options={[
+              { value: 'source', label: 'Source image' },
+              ...stages.map((s, i) => ({ value: s.uid, label: `Input of ${i + 1}. ${stageLabel(s.passId)}` }))
+            ]}
+          />
+        </Field>
+        <Field label="Method">
+          <Segmented
+            className="flex-1"
+            value={gen.method}
+            onChange={(method) => set({ method })}
+            options={[
+              { value: 'median-cut', label: 'Median cut', hint: 'Fast, splits the color space evenly.' },
+              { value: 'kmeans', label: 'K-means', hint: 'Refines median cut; closer to the image, slower.' }
+            ]}
+          />
+        </Field>
+        <ParamSlider label="Colors" value={gen.count} min={2} max={MAX_PALETTE} onChange={(count) => set({ count })} />
+        {gen.method === 'kmeans' && (
+          <ParamSlider label="Quality" hint="K-means iterations." value={gen.quality} min={1} max={32} onChange={(quality) => set({ quality })} />
+        )}
+        <ParamSlider label="Light weight" hint="Above 1 keeps more light/dark steps." value={gen.lumaWeight} min={0.25} max={3} step={0.05} onChange={(lumaWeight) => set({ lumaWeight })} />
+        <ParamSlider label="Hue weight" hint="Above 1 keeps more distinct hues." value={gen.chromaWeight} min={0.25} max={3} step={0.05} onChange={(chromaWeight) => set({ chromaWeight })} />
+        {lockedCount > 0 && (
+          <p className="text-small text-dim">
+            {lockedCount} locked color{lockedCount > 1 ? 's' : ''} kept; {Math.max(gen.count - lockedCount, 0)} generated.
+          </p>
+        )}
+        <div className="flex items-center gap-2">
+          <Checkbox checked={gen.auto} onCheckedChange={(auto) => set({ auto })} label="Auto" hint="Regenerate whenever the image or these settings change." />
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+            {job && (
+              <span className="flex min-w-0 items-center gap-1 text-small" title={'message' in job ? job.message : undefined}>
+                <Led state={job.status === 'running' ? 'warn' : 'error'} />
+                <span className="truncate text-dim">{job.status === 'running' ? 'Working…' : job.message}</span>
+              </span>
+            )}
+            <Button size="sm" disabled={!hasImage || job?.status === 'running'} onClick={() => generatePaletteNow(palette.id)}>
+              Generate
+            </Button>
+          </div>
+        </div>
+      </div>
+    </GroupBox>
+  )
+}
