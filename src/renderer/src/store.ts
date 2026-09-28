@@ -3,7 +3,16 @@ import type { StageSpec } from '@/gpu/plan'
 import type { Palette } from '@/palette/palette'
 import * as docOps from '@/stack/doc'
 import type { Doc } from '@/stack/doc'
-import { centered, fitView, stepZoom, zoomAt, type Size, type View } from '@/viewer/viewport'
+import {
+  centered,
+  fitView,
+  splitAtVisibleCenter,
+  splitVisible,
+  stepZoom,
+  zoomAt,
+  type Size,
+  type View
+} from '@/viewer/viewport'
 
 export interface ImageInfo {
   name: string
@@ -40,7 +49,7 @@ interface AppState extends Doc {
   canvasSize: Size
   grid: boolean
   split: boolean
-  /** Split divider position as a fraction of the canvas width. */
+  /** Split divider position as a fraction of the image width (moves with the image). */
   splitPos: number
   cursor: { x: number; y: number } | null
   message: Message | null
@@ -168,7 +177,13 @@ export const useApp = create<AppState>()((set, get) => ({
     set({ view: zoomAt(view, stepZoom(view.zoom, dir), center) })
   },
   toggleGrid: () => set({ grid: !get().grid }),
-  toggleSplit: () => set({ split: !get().split }),
+  toggleSplit: () => {
+    const { split, image, view, canvasSize, splitPos } = get()
+    // Turning the split on with the divider off-screen: bring it to the middle of what's visible.
+    if (!split && image && !splitVisible(view, image, canvasSize, splitPos)) {
+      set({ split: true, splitPos: splitAtVisibleCenter(view, image, canvasSize) })
+    } else set({ split: !split })
+  },
   setSplitPos: (splitPos) => set({ splitPos: Math.min(Math.max(splitPos, 0), 1) }),
   setCursor: (cursor) => set({ cursor }),
   setMessage: (message) => set({ message }),
