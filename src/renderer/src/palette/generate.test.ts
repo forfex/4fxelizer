@@ -40,7 +40,7 @@ describe('generatePalette', () => {
     [20, 20, 20, 255]
   ])
 
-  for (const method of ['median-cut', 'kmeans'] as const) {
+  for (const method of ['median-cut', 'wu', 'octree', 'kmeans'] as const) {
     it(`${method} recovers the exact colors of a 4-color image`, () => {
       const out = generatePalette(four, { method, count: 4, quality: 8, lumaWeight: 1, chromaWeight: 1, locked: [] })
       expect(new Set(out)).toEqual(new Set(['#ff0000', '#00ff00', '#0000ff', '#141414']))
@@ -137,6 +137,25 @@ describe('large palettes', () => {
       expect(index.nearest(p)).toBe(best)
     }
   })
+
+  for (const method of ['median-cut', 'wu', 'octree'] as const) {
+    it(`${method} fills (nearly) every slot with distinct colors`, () => {
+      const out = generatePalette(noiseImage(128, 128), { method, count: 64, quality: 0, lumaWeight: 1, chromaWeight: 1, locked: [] })
+      expect(out.length).toBeLessThanOrEqual(64)
+      expect(out.length).toBeGreaterThan(56)
+      expect(new Set(out).size).toBe(out.length)
+    })
+  }
+
+  it('wu and octree generate thousands of colors in reasonable time', () => {
+    const rgba = noiseImage(512, 512)
+    for (const method of ['wu', 'octree'] as const) {
+      const t = performance.now()
+      const out = generatePalette(rgba, { method, count: 4096, quality: 0, lumaWeight: 1, chromaWeight: 1, locked: [] })
+      expect(out.length).toBeGreaterThan(3000)
+      expect(performance.now() - t).toBeLessThan(10_000)
+    }
+  }, 30_000)
 
   it('generates thousands of colors in reasonable time', () => {
     const rgba = noiseImage(512, 512)

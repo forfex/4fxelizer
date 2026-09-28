@@ -8,6 +8,7 @@ import { generatePaletteNow } from '@/palette/controller'
 import type { PaletteExportFormat } from '@/palette/formats'
 import {
   DEFAULT_GENERATOR,
+  GENERATE_METHODS,
   MAX_INDEXED,
   MAX_PALETTE,
   normalizeHex,
@@ -19,7 +20,7 @@ import {
 } from '@/palette/palette'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
-import { Checkbox, Field, ParamSlider, Segmented } from './ui/controls'
+import { Checkbox, Field, ParamSlider } from './ui/controls'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { GroupBox, Led } from './ui/retro'
 import { Select } from './ui/select'
@@ -364,7 +365,7 @@ function GeneratorBox({ palette }: { palette: Palette }) {
   if (!gen) {
     return (
       <GroupBox title="Generate">
-        <p className="mb-2 text-small text-dim">Build this palette from the image with median cut or k-means.</p>
+        <p className="mb-2 text-small text-dim">Build this palette from the image.</p>
         <Button
           size="sm"
           onClick={() =>
@@ -405,15 +406,12 @@ function GeneratorBox({ palette }: { palette: Palette }) {
             />
           </Field>
         )}
-        <Field label="Method">
-          <Segmented
+        <Field label="Method" hint={GENERATE_METHODS.find((m) => m.id === gen.method)?.hint}>
+          <Select
             className="flex-1"
             value={gen.method}
-            onChange={(method) => set({ method })}
-            options={[
-              { value: 'median-cut', label: 'Median cut', hint: 'Fast, splits the color space evenly.' },
-              { value: 'kmeans', label: 'K-means', hint: 'Refines median cut; closer to the image, slower.' }
-            ]}
+            onValueChange={(method) => set({ method })}
+            options={GENERATE_METHODS.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
           />
         </Field>
         <ParamSlider label="Colors" scale="log" value={gen.count} min={2} max={MAX_PALETTE} onChange={(count) => set({ count })} />

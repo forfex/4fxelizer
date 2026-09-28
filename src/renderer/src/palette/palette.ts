@@ -9,7 +9,14 @@ export interface PaletteColor {
   locked?: boolean
 }
 
-export type GenerateMethod = 'median-cut' | 'kmeans'
+export const GENERATE_METHODS = [
+  { id: 'median-cut', label: 'Median cut', hint: 'Fast, splits the color space evenly.' },
+  { id: 'wu', label: 'Wu', hint: 'Fast, splits where it lowers the color error most. Good at small counts.' },
+  { id: 'octree', label: 'Octree', hint: 'Merges similar colors bottom-up. Keeps small, distinct details.' },
+  { id: 'kmeans', label: 'K-means', hint: 'Refines median cut; closest to the image, slower.' }
+] as const
+
+export type GenerateMethod = (typeof GENERATE_METHODS)[number]['id']
 
 export interface GeneratorSettings {
   method: GenerateMethod

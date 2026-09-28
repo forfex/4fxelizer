@@ -16,7 +16,7 @@ import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
 import { MAX_UPSCALE_FACTOR, UPSCALE_METHODS, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { StageSpec } from '@/gpu/plan'
-import { MAX_PALETTE, type GeneratorSettings, type Palette } from '@/palette/palette'
+import { GENERATE_METHODS, MAX_PALETTE, type GeneratorSettings, type Palette } from '@/palette/palette'
 import type { StageInfo } from '@/stack/analyze'
 import { ownedPalette } from '@/stack/doc'
 import { useApp } from '@/store'
@@ -114,15 +114,12 @@ function PaletteSource({ stage, paletteId, set }: { stage: StageSpec; paletteId:
             max={MAX_PALETTE}
             onChange={(count) => updateGen({ count })}
           />
-          <Field label="Method">
-            <Segmented
+          <Field label="Method" hint={GENERATE_METHODS.find((m) => m.id === gen.method)?.hint}>
+            <Select
               className="flex-1"
               value={gen.method}
-              onChange={(method) => updateGen({ method })}
-              options={[
-                { value: 'median-cut', label: 'Median cut', hint: 'Fast, splits the color space evenly.' },
-                { value: 'kmeans', label: 'K-means', hint: 'Refines median cut; closer to the image.' }
-              ]}
+              onValueChange={(method) => updateGen({ method })}
+              options={GENERATE_METHODS.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
             />
           </Field>
           <Field label="" hint="More settings (weights, locked colors) in the palette panel.">
