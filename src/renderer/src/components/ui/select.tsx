@@ -1,5 +1,7 @@
 import { Select as SelectPrimitive } from 'radix-ui'
+import { useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { useWheelArming } from '@/lib/useWheelArming'
 
 export interface SelectOption<T extends string> {
   value: T
@@ -20,7 +22,10 @@ function groupOptions<T extends string>(options: readonly SelectOption<T>[]): { 
   return groups
 }
 
-/** Dropdown select: a sunken field with a beveled drop button, options in a raised panel. */
+/**
+ * Dropdown select: a sunken field with a beveled drop button, options in a raised panel.
+ * Like sliders, the mouse wheel steps through the options once the field is armed (see useWheelArming).
+ */
 export function Select<T extends string>({
   value,
   onValueChange,
@@ -38,13 +43,28 @@ export function Select<T extends string>({
   title?: string
   placeholder?: string
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const wheelReady = useWheelArming(
+    triggerRef,
+    (notches) => {
+      const i = options.findIndex((o) => o.value === value)
+      // Wheel down (negative notches) moves to the next option; stop at the ends.
+      const next = options[Math.min(Math.max(i < 0 ? 0 : i - notches, 0), options.length - 1)]
+      if (next && next.value !== value) onValueChange(next.value)
+    },
+    !disabled && options.length > 1
+  )
   return (
     <SelectPrimitive.Root value={value ?? ''} onValueChange={(v) => onValueChange(v as T)} disabled={disabled}>
       <SelectPrimitive.Trigger
-        title={title}
+        ref={triggerRef}
+        title={wheelReady ? `${title ? `${title}
+` : ''}Mouse wheel changes this option` : title}
+        data-wheel={wheelReady ? 'armed' : undefined}
         className={cn(
           'bevel-sunken flex h-6 min-w-0 items-center justify-between gap-1 rounded-fx bg-well pr-0.5 pl-1.5 text-left',
           'disabled:opacity-45 data-placeholder:text-dim',
+          'data-[wheel=armed]:outline-px data-[wheel=armed]:outline-offset-1 data-[wheel=armed]:outline-accent',
           className
         )}
       >
