@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "composite": false,
+    "types": ["node", "vite/client", "@webgpu/types"]
+  },
+  "include": ["src/**/*.test.ts", "src/renderer/src/**/*", "src/shared/**/*", "src/preload/*.d.ts"],
+  "exclude": []
+}

@@ -1,0 +1,43 @@
+/*
+ * Design tokens — the single place to restyle the app.
+ * Placeholder neutral-retro theme until the Figma design lands; Figma variables map 1:1 onto these.
+ */
+:root {
+  /* Surfaces */
+  --fx-bg: #1d1c1a;
+  --fx-panel: #2b2a27;
+  --fx-panel-hi: #37352f;
+  --fx-well: #151413;
+  --fx-edge: #0c0b0a;
+  --fx-bevel-light: #4d4a43;
+  --fx-bevel-dark: #0e0d0c;
+  --fx-viewer-bg: #232220;
+  --fx-checker-a: #3a3936;
+  --fx-checker-b: #2e2d2a;
+
+  /* Text */
+  --fx-text: #e4e0d6;
+  --fx-text-dim: #9a958a;
+
+  /* Accents (used sparingly, like status LEDs) */
+  --fx-accent: #d9a441;
+  --fx-accent-text: #1d1c1a;
+  --fx-led-green: #7cc36a;
+  --fx-led-amber: #e0a33a;
+  --fx-led-red: #d8584a;
+  --fx-led-off: #3d3b36;
+
+  /* LCD readouts */
+  --fx-lcd-bg: #121810;
+  --fx-lcd-text: #9fdc7c;
+
+  /* Shape & type */
+  --fx-radius: 2px;
+  --fx-font-ui: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Ubuntu, 'Noto Sans', sans-serif;
+  --fx-font-mono: 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  --fx-font-size: 13px;
+  --fx-font-size-small: 11px;
+
+  /* Set at runtime by lib/pixelSnap.ts */
+  --px: 1px;
+}

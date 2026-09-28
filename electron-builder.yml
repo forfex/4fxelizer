@@ -1,0 +1,32 @@
+# Placeholder IDs — change appId before the first public release (it can't change afterwards on macOS).
+appId: com.4fx.4fxelizer
+productName: 4FXELIZER
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**
+  - package.json
+# The renderer bundles all its deps; main/preload have no runtime deps.
+npmRebuild: false
+win:
+  target: nsis
+  executableName: 4fxelizer
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${name}-${version}-setup.${ext}
+mac:
+  target: dmg
+  category: public.app-category.graphics-design
+  # Signing + notarization need an Apple Developer account (see PLAN.md risks).
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Graphics
+  maintainer: 4FX
+  artifactName: ${name}-${version}-${arch}.${ext}

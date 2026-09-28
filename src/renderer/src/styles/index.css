@@ -1,0 +1,81 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* Map design tokens (tokens.css) into Tailwind utilities: bg-panel, text-dim, border-edge, … */
+@theme inline {
+  --color-bg: var(--fx-bg);
+  --color-panel: var(--fx-panel);
+  --color-panel-hi: var(--fx-panel-hi);
+  --color-well: var(--fx-well);
+  --color-edge: var(--fx-edge);
+  --color-bevel-light: var(--fx-bevel-light);
+  --color-bevel-dark: var(--fx-bevel-dark);
+  --color-text: var(--fx-text);
+  --color-dim: var(--fx-text-dim);
+  --color-accent: var(--fx-accent);
+  --color-accent-text: var(--fx-accent-text);
+  --color-led-on: var(--fx-led-green);
+  --color-led-warn: var(--fx-led-amber);
+  --color-led-error: var(--fx-led-red);
+  --color-led-off: var(--fx-led-off);
+  --color-lcd: var(--fx-lcd-bg);
+  --color-lcd-text: var(--fx-lcd-text);
+  --radius-fx: var(--fx-radius);
+  --font-ui: var(--fx-font-ui);
+  --font-mono: var(--fx-font-mono);
+  --text-ui: var(--fx-font-size);
+  --text-small: var(--fx-font-size-small);
+}
+
+/* --px is one whole device pixel (or two, three…) in CSS px; see lib/pixelSnap.ts.
+   Using it for borders and bevels keeps them crisp at 125% / 150% / Retina. */
+@utility border-px {
+  border-width: var(--px);
+}
+@utility border-t-px {
+  border-top-width: var(--px);
+}
+@utility border-b-px {
+  border-bottom-width: var(--px);
+}
+@utility border-l-px {
+  border-left-width: var(--px);
+}
+@utility border-r-px {
+  border-right-width: var(--px);
+}
+
+@utility bevel-raised {
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--fx-bevel-light),
+    inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--fx-bevel-dark);
+}
+
+@utility bevel-sunken {
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--fx-bevel-dark),
+    inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--fx-bevel-light);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--fx-bg);
+    color: var(--fx-text);
+    font-family: var(--fx-font-ui);
+    font-size: var(--fx-font-size);
+    line-height: 1.35;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    overflow: hidden;
+  }
+  :focus-visible {
+    outline: var(--px) dotted var(--fx-accent);
+    outline-offset: 1px;
+  }
+}
