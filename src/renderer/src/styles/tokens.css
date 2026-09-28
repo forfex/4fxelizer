@@ -37,6 +37,13 @@
   --fx-titlebar-text: var(--fx-text-dim);
   --fx-titlebar-symbol: var(--fx-text);
 
+  /* Dockable panels */
+  --fx-dock-gap: 4px;
+  --fx-dock-tab-height: 24px;
+  --fx-dock-tab-padding: 10px;
+  --fx-dock-float-grip-height: 10px;
+  --fx-dock-float-shadow: 0 4px 14px rgb(0 0 0 / 45%);
+
   /* Scrollbars: sunken track, raised bevel thumb */
   --fx-scrollbar-size: 12px;
   --fx-scrollbar-track: var(--fx-well);

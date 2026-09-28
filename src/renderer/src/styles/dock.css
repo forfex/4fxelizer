@@ -6,7 +6,7 @@
 .dockview-theme-fx {
   --dv-group-view-background-color: var(--fx-panel);
   --dv-tabs-and-actions-container-background-color: var(--fx-bg);
-  --dv-tabs-and-actions-container-height: 24px;
+  --dv-tabs-and-actions-container-height: var(--fx-dock-tab-height);
   --dv-tabs-and-actions-container-font-size: var(--fx-font-size-small);
   --dv-tab-font-size: var(--fx-font-size-small);
   --dv-tab-margin: 0;
@@ -34,12 +34,12 @@
   --dv-dnd-compass-cell-color: var(--fx-panel-hi);
   --dv-dnd-compass-active-cell-color: var(--fx-accent);
   --dv-dnd-compass-edge-cell-color: var(--fx-panel);
-  --dv-floating-box-shadow: 0 4px 14px rgb(0 0 0 / 45%);
+  --dv-floating-box-shadow: var(--fx-dock-float-shadow);
   --dv-floating-group-border: var(--px) solid var(--fx-edge);
   --dv-floating-border: var(--px) solid var(--fx-edge);
   --dv-floating-titlebar-background-color: var(--fx-panel-hi);
   --dv-floating-titlebar-border-bottom: var(--px) solid var(--fx-bevel-dark);
-  --dv-floating-titlebar-height: 10px;
+  --dv-floating-titlebar-height: var(--fx-dock-float-grip-height);
   --dv-icon-hover-background-color: var(--fx-panel-hi);
   --dv-context-menu-background-color: var(--fx-panel);
   --dv-context-menu-color: var(--fx-text);
@@ -62,7 +62,7 @@
 
 /* Tabs: small raised buttons; the visible one merges into its panel. */
 .dockview-theme-fx .dv-tab {
-  padding: 0 10px;
+  padding: 0 var(--fx-dock-tab-padding);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -94,7 +94,7 @@
   transition: background-color 0.05s;
 }
 
-/* Floating groups: drag bar in the retro dither style, used sparingly. */
+/* Floating groups keep the small corners. */
 .dockview-theme-fx .dv-resize-container {
   border-radius: var(--fx-radius);
 }
