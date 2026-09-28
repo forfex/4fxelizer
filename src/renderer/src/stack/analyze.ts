@@ -2,7 +2,7 @@
 
 import type { Size } from '@/gpu/pass'
 import type { StageSpec } from '@/gpu/plan'
-import { ditherPeriod, type DitherParams } from '@/gpu/passes/dither'
+import { DITHER_PATTERNS, ditherPeriod, type DitherParams } from '@/gpu/passes/dither'
 import { downscaleSize, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
 import { stageLabel } from '@/gpu/passes'
@@ -94,7 +94,10 @@ export function analyzeStack(
           warnings.push('"Pattern only" adds the pattern without reducing colors. Add a Quantize after it.')
         }
         const period = ditherPeriod(p)
-        if (source && (input.width % period !== 0 || input.height % period !== 0)) {
+        if (period === 0) {
+          const name = DITHER_PATTERNS.find((d) => d.id === p.pattern)?.label ?? p.pattern
+          warnings.push(`${name} doesn't repeat, so the texture won't tile seamlessly. Use an ordered pattern for tiling textures.`)
+        } else if (source && (input.width % period !== 0 || input.height % period !== 0)) {
           warnings.push(`The ${period}px pattern doesn't divide ${input.width}×${input.height}, so the texture won't tile seamlessly.`)
         }
       }

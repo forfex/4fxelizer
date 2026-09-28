@@ -2,7 +2,16 @@
 
 import { BLEND_MODES, type BlendMode } from '@/gpu/pass'
 import { DEFAULT_ADJUST, type AdjustParams } from '@/gpu/passes/adjust'
-import { DITHER_MODES, DITHER_PATTERNS, type DitherParams } from '@/gpu/passes/dither'
+import {
+  DITHER_MASKS,
+  DITHER_MIXING,
+  DITHER_MODES,
+  DITHER_PATTERNS,
+  ditherMixing,
+  isDiffusion,
+  type DitherParams,
+  type DitherPattern
+} from '@/gpu/passes/dither'
 import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
 import type { StageSpec } from '@/gpu/plan'
@@ -296,24 +305,49 @@ function QuantizeEditor({ stage, params: p, set }: EditorProps<QuantizeParams>) 
   )
 }
 
+/** Saturation that fits each kind of algorithm: ordered = brightness only, diffusion = full color. */
+const defaultSaturation = (pattern: DitherPattern): number => (isDiffusion(pattern) ? 1 : 0)
+
 function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
+  const diffusion = isDiffusion(p.pattern)
+  const mixing = ditherMixing(p)
+  const maskShown = useApp((s) => s.maskUid === stage.uid)
+  const { setMaskView } = useApp.getState()
+
+  const setPattern = (pattern: DitherPattern): void => {
+    const patch: Partial<DitherParams> = { pattern }
+    // Switching between ordered and diffusion: carry an untouched saturation over to the new default.
+    if (isDiffusion(pattern) !== diffusion && p.saturation === defaultSaturation(p.pattern)) {
+      patch.saturation = defaultSaturation(pattern)
+    }
+    set(patch)
+  }
+
+  const patterns = DITHER_PATTERNS.filter((d) => p.mode !== 'pattern' || d.kind === 'ordered').map((d) => ({
+    value: d.id,
+    label: d.label,
+    group: d.kind === 'ordered' ? 'Ordered (tiles)' : 'Error diffusion'
+  }))
+
   return (
     <>
       <Field label="Mode" hint={DITHER_MODES.find((m) => m.id === p.mode)?.hint}>
         <Segmented
           className="flex-1"
           value={p.mode}
-          onChange={(mode) => set({ mode })}
+          onChange={(mode) => set(mode === 'pattern' && diffusion ? { mode, pattern: 'bayer4', saturation: 0 } : { mode })}
           options={DITHER_MODES.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
         />
       </Field>
-      <Field label="Pattern">
-        <Select
-          className="flex-1"
-          value={p.pattern}
-          onValueChange={(pattern) => set({ pattern })}
-          options={DITHER_PATTERNS.map((d) => ({ value: d.id, label: d.label }))}
-        />
+      <Field
+        label="Algorithm"
+        hint={
+          diffusion
+            ? 'Error diffusion spreads each pixel\'s rounding error to its neighbors: smooth, organic, but it does not tile.'
+            : 'Ordered patterns compare each pixel with a repeating threshold pattern: crisp, retro, tileable.'
+        }
+      >
+        <Select className="flex-1" value={p.pattern} onValueChange={setPattern} options={patterns} />
       </Field>
       {p.mode === 'palette' && (
         <>
@@ -321,19 +355,91 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
           <Field label="Matching">
             <Segmented className="flex-1" value={p.metric} onChange={(metric) => set({ metric })} options={METRICS} />
           </Field>
-          <Field label="">
-            <Checkbox
-              checked={p.twoNearest}
-              onCheckedChange={(twoNearest) => set({ twoNearest })}
-              label="Two nearest colors only"
-              hint="Mix only the two palette colors closest to each pixel: cleaner, less noisy."
+          {!diffusion && (
+            <Field label="Mixing" hint={DITHER_MIXING.find((m) => m.id === mixing)?.hint}>
+              <Segmented
+                className="flex-1"
+                value={mixing}
+                onChange={(m) => set({ mixing: m, twoNearest: false })}
+                options={DITHER_MIXING.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
+              />
+            </Field>
+          )}
+          {!diffusion && mixing === 'knoll' && (
+            <ParamSlider
+              label="Candidates"
+              hint="Palette colors mixed per pixel. More = finer shades, slower."
+              value={p.knollCount}
+              min={2}
+              max={16}
+              onChange={(knollCount) => set({ knollCount })}
             />
-          </Field>
+          )}
         </>
       )}
       {p.mode === 'levels' && <LevelsSlider value={p.levels} onChange={(levels) => set({ levels })} />}
       <ParamSlider label="Strength" value={p.strength} min={0} max={1} step={0.01} onChange={(strength) => set({ strength })} />
-      <ParamSlider label="Pattern scale" hint="Pixels per pattern cell." value={p.scale} min={1} max={8} ticks={8} onChange={(scale) => set({ scale })} suffix="×" />
+      {(diffusion || p.mode !== 'palette' || mixing === 'offset') && (
+        <ParamSlider
+          label="Saturation"
+          hint={
+            diffusion
+              ? 'How much color error spreads. 0 = only brightness is dithered (hues stay flat), 1 = full color.'
+              : 'Color of the dither. 0 = same pattern on every channel (brightness only), 1 = each channel dithered separately, mixing hues.'
+          }
+          value={p.saturation}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(saturation) => set({ saturation })}
+        />
+      )}
+      {!diffusion && (
+        <ParamSlider label="Pattern scale" hint="Pixels per pattern cell." value={p.scale} min={1} max={8} ticks={8} onChange={(scale) => set({ scale })} suffix="×" />
+      )}
+      <Field label="Mask" hint={DITHER_MASKS.find((m) => m.id === p.mask)?.hint}>
+        <Select
+          className="min-w-0 flex-1"
+          value={p.mask}
+          onValueChange={(mask) => {
+            set({ mask })
+            if (mask === 'none' && maskShown) setMaskView(null)
+          }}
+          options={DITHER_MASKS.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
+        />
+        <Button
+          size="sm"
+          aria-pressed={maskShown}
+          disabled={p.mask === 'none'}
+          title={maskShown ? 'Showing the mask (white = full dither). Click to show the image.' : 'Show the mask in the viewer (white = full dither, black = none)'}
+          onClick={() => setMaskView(maskShown ? null : stage.uid)}
+        >
+          View
+        </Button>
+      </Field>
+      {p.mask !== 'none' && (
+        <>
+          <ParamSlider
+            label="Mask strength"
+            hint="0 = ignore the mask, 1 = dither only where the mask is white."
+            value={p.maskStrength}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={(maskStrength) => set({ maskStrength })}
+          />
+          <ParamSlider
+            label="Mask gamma"
+            hint="Below 1 spreads the mask wider, above 1 keeps it to the strongest areas."
+            value={p.maskGamma}
+            min={0.1}
+            max={10}
+            step={0.01}
+            scale="log"
+            onChange={(maskGamma) => set({ maskGamma })}
+          />
+        </>
+      )}
       <Field label="Alpha">
         <Segmented
           className="flex-1"

@@ -73,6 +73,8 @@ describe('analyzeStack', () => {
     expect(warningsOf([stage('quantize', { paletteId: null })])[0]).toEqual(['Pick a palette.'])
     const w = warningsOf([stage('dither', { pattern: 'bayer8' })], noLock, { width: 100, height: 100 })
     expect(w[0]!.some((m) => /won't tile/.test(m))).toBe(true)
+    const fs = warningsOf([stage('dither', { pattern: 'floyd-steinberg' })], noLock, { width: 64, height: 64 })
+    expect(fs[0]!.some((m) => /Floyd–Steinberg doesn't repeat/.test(m))).toBe(true)
   })
 
   it('ignores disabled stages', () => {
