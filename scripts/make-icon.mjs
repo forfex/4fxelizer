@@ -1,65 +1,62 @@
-// Generates the app icon: a 4x4 Bayer threshold matrix drawn as bevelled cells.
+// Generates the app icon: a pixel "4" of beveled tiles on a 3x3 grid, set in a dark squircle
+// (the 4FXELIZER design system's app-icon.svg, Dark theme colors baked in).
 // Usage: node scripts/make-icon.mjs   (writes build/icon.png, build/icon.ico, site/icon.svg, site/favicon.png,
 // src/renderer/src/assets/icon.svg for the title bar)
 import { deflateSync } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
-const BAYER = [
-  [0, 8, 2, 10],
-  [12, 4, 14, 6],
-  [3, 11, 1, 9],
-  [15, 7, 13, 5]
-]
 const C = {
-  bg: '#1d1c1a',
-  frameHi: '#5a5648',
-  frameLo: '#0e0d0b',
-  off: '#2b2a27',
-  mid: '#7a5a18',
-  on: '#d9a441',
-  onHi: '#f0c878',
-  onLo: '#8f6a1c'
+  bg: '#16121e', // fx-bg
+  off: '#2d2540', // fx-panel-hi: unlit tiles
+  on: '#a978ff', // fx-accent: lit tiles
+  onHi: '#c6a6ff', // fx-accent-hi: their top-left highlight
+  onLo: '#3f1f70' // fx-drop: their bottom-right shade
 }
+// The "4", row by row.
+const LIT = [
+  [1, 0, 1],
+  [1, 1, 1],
+  [0, 0, 1]
+]
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
-const tier = (v) => (v < 5 ? 'on' : v < 10 ? 'mid' : 'off')
 
-// Layout on a 64-unit grid: 2-unit bevelled frame, 5-unit margin, 4x4 cells of 12 units with 2-unit gaps.
+// Layout on a 64-unit grid: a superellipse (n = 5) filling it, tiles of 13 units, 2-unit bevels.
 const U = 64
-const PAD = 5
-const CELL = 12
-const GAP = 2
+const N = 5
+const TILES = [10, 25.5, 41]
+const TILE = 13
+const BEVEL = 2
 
-/** RGBA pixels for a size x size icon, rendered by shading each pixel from the layout above. */
+const inSquircle = (u, v) => Math.abs((u - U / 2) / (U / 2)) ** N + Math.abs((v - U / 2) / (U / 2)) ** N <= 1
+
+/** Tile color at (u, v), or null outside the tiles. Crisp edges, like the SVG's crispEdges. */
+function tileColor(u, v) {
+  const col = TILES.findIndex((t) => u >= t && u < t + TILE)
+  const row = TILES.findIndex((t) => v >= t && v < t + TILE)
+  if (col < 0 || row < 0) return null
+  if (!LIT[row][col]) return C.off
+  const lu = u - TILES[col]
+  const lv = v - TILES[row]
+  // Later rects win in the SVG: shade (bottom, then right) over highlight.
+  if (lu >= TILE - BEVEL) return C.onLo
+  if (lv >= TILE - BEVEL) return C.onLo
+  if (lu < BEVEL || lv < BEVEL) return C.onHi
+  return C.on
+}
+
+/** RGBA pixels for a size x size icon; the squircle's edge is antialiased with 4x4 supersampling. */
 function render(size) {
   const px = Buffer.alloc(size * size * 4)
-  const set = (x, y, hex) => px.set([...rgb(hex), 255], (y * size + x) * 4)
+  const S = 4
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
+      let inside = 0
+      for (let sy = 0; sy < S; sy++)
+        for (let sx = 0; sx < S; sx++) if (inSquircle(((x + (sx + 0.5) / S) / size) * U, ((y + (sy + 0.5) / S) / size) * U)) inside++
       const u = ((x + 0.5) / size) * U
       const v = ((y + 0.5) / size) * U
-      let color = C.bg
-      // outer bevel
-      const e = Math.min(u, v, U - u, U - v)
-      if (e < 2) color = u + v < U ? C.frameHi : C.frameLo
-      else {
-        const cu = u - PAD
-        const cv = v - PAD
-        const step = CELL + GAP
-        const col = Math.floor(cu / step)
-        const row = Math.floor(cv / step)
-        const lu = cu - col * step
-        const lv = cv - row * step
-        if (col >= 0 && col < 4 && row >= 0 && row < 4 && lu < CELL && lv < CELL) {
-          const t = tier(BAYER[row][col])
-          color = C[t]
-          if (t !== 'off') {
-            // raised bevel on lit cells; sunken cells stay flat
-            if (lu < 1.5 || lv < 1.5) color = t === 'on' ? C.onHi : C.on
-            else if (lu > CELL - 1.5 || lv > CELL - 1.5) color = t === 'on' ? C.onLo : C.frameLo
-          }
-        }
-      }
-      set(x, y, color)
+      const color = tileColor(u, v) ?? C.bg
+      px.set([...rgb(color), Math.round((255 * inside) / (S * S))], (y * size + x) * 4)
     }
   }
   return px
@@ -119,28 +116,27 @@ function ico(sizes) {
 }
 
 function svg() {
-  const r = (x, y, w, h, f) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"/>`
-  // frame: light top-left, dark bottom-right (diagonal split), then the background inset
-  const parts = [
-    r(0, 0, U, U, C.frameHi),
-    `<path d="M${U} 0V${U}H0z" fill="${C.frameLo}"/>`,
-    r(2, 2, U - 4, U - 4, C.bg)
-  ]
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 4; col++) {
-      const t = tier(BAYER[row][col])
-      const x = PAD + col * (CELL + GAP)
-      const y = PAD + row * (CELL + GAP)
-      parts.push(r(x, y, CELL, CELL, C[t]))
-      if (t !== 'off') {
-        const hi = t === 'on' ? C.onHi : C.on
-        const lo = t === 'on' ? C.onLo : C.frameLo
-        parts.push(r(x, y, CELL, 1.5, hi), r(x, y, 1.5, CELL, hi))
-        parts.push(r(x, y + CELL - 1.5, CELL, 1.5, lo), r(x + CELL - 1.5, y, 1.5, CELL, lo))
-      }
-    }
+  const f = (n) => n.toFixed(2)
+  const pts = []
+  for (let i = 0; i < 96; i++) {
+    const a = (i / 96) * 2 * Math.PI
+    const c = Math.cos(a)
+    const s = Math.sin(a)
+    pts.push(`${f(U / 2 + (U / 2) * Math.sign(c) * Math.abs(c) ** (2 / N))} ${f(U / 2 + (U / 2) * Math.sign(s) * Math.abs(s) ** (2 / N))}`)
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${U} ${U}" shape-rendering="crispEdges">${parts.join('')}</svg>\n`
+  const r = (x, y, w, h, fill) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`
+  const tiles = []
+  LIT.forEach((row, ri) =>
+    row.forEach((lit, ci) => {
+      const x = TILES[ci]
+      const y = TILES[ri]
+      if (!lit) return tiles.push(r(x, y, TILE, TILE, C.off))
+      tiles.push(r(x, y, TILE, TILE, C.on), r(x, y, TILE, BEVEL, C.onHi), r(x, y, BEVEL, TILE, C.onHi))
+      tiles.push(r(x, y + TILE - BEVEL, TILE, BEVEL, C.onLo), r(x + TILE - BEVEL, y, BEVEL, TILE, C.onLo))
+    })
+  )
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${U} ${U}"><path d="M${pts.join('L')}Z" fill="${C.bg}"/><g shape-rendering="crispEdges">${tiles.join('')}</g></svg>
+`
 }
 
 mkdirSync('build', { recursive: true })
