@@ -107,6 +107,48 @@ export function medianCut(points: Point[], k: number): Vec3[] {
 }
 
 /**
+ * Nearest-center search over centers sorted by their first coordinate (lightness). The squared
+ * lightness difference is a lower bound on the full distance, so the scan stops early in both
+ * directions. Returns exactly what a linear scan would (ties go to the lowest center index).
+ */
+export class CenterIndex {
+  private readonly order: Int32Array
+  private readonly keys: Float64Array
+
+  constructor(private readonly centers: Vec3[]) {
+    this.order = Int32Array.from(centers.keys()).sort((a, b) => centers[a]![0] - centers[b]![0] || a - b)
+    this.keys = Float64Array.from(this.order, (c) => centers[c]![0])
+  }
+
+  nearest(p: Vec3): number {
+    const { order, keys, centers } = this
+    let lo = 0
+    let hi = keys.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (keys[mid]! < p[0]) lo = mid + 1
+      else hi = mid
+    }
+    let best = -1
+    let bestD = Infinity
+    const consider = (j: number): boolean => {
+      const dl = keys[j]! - p[0]
+      if (dl * dl > bestD) return false
+      const c = order[j]!
+      const d = dist2(p, centers[c]!)
+      if (d < bestD || (d === bestD && c < best)) {
+        bestD = d
+        best = c
+      }
+      return true
+    }
+    for (let j = lo; j < keys.length && consider(j); j++);
+    for (let j = lo - 1; j >= 0 && consider(j); j--);
+    return best
+  }
+}
+
+/**
  * Weighted k-means (Lloyd). The first `fixed` centers never move (locked colors).
  * Empty clusters are re-seeded at the point with the largest weighted error.
  */
@@ -118,17 +160,10 @@ export function kmeans(points: Point[], initial: Vec3[], fixed: number, iteratio
   for (let it = 0; it < iterations; it++) {
     let changed = false
     const sums = Array.from({ length: k }, () => [0, 0, 0, 0])
+    const index = new CenterIndex(centers)
     for (let i = 0; i < points.length; i++) {
       const pt = points[i]!
-      let best = 0
-      let bestD = Infinity
-      for (let c = 0; c < k; c++) {
-        const d = dist2(pt.p, centers[c]!)
-        if (d < bestD) {
-          bestD = d
-          best = c
-        }
-      }
+      const best = index.nearest(pt.p)
       if (assign[i] !== best) {
         assign[i] = best
         changed = true

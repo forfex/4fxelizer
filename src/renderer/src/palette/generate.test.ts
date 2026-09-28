@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { oklabToRgb, rgbToOklab } from '@/color/oklab'
-import { generatePalette, histogram } from './generate'
+import { CenterIndex, generatePalette, histogram } from './generate'
 import { mergeGenerated, normalizeHex, snapHexTo15bit, sortColors } from './palette'
 
 /** RGBA8 image made of equal-sized runs of the given colors. */
@@ -101,4 +101,50 @@ describe('palette helpers', () => {
     const sorted = sortColors([{ hex: '#ffffff' }, { hex: '#000000' }, { hex: '#808080' }], 'lightness')
     expect(sorted.map((c) => c.hex)).toEqual(['#000000', '#808080', '#ffffff'])
   })
+})
+
+describe('large palettes', () => {
+  /** Deterministic pseudo-random RGBA noise with smooth structure (lots of distinct colors). */
+  function noiseImage(width: number, height: number): Uint8Array {
+    const out = new Uint8Array(width * height * 4)
+    let s = 12345
+    const rand = (): number => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296)
+    for (let i = 0; i < width * height; i++) {
+      const x = i % width
+      const y = Math.floor(i / width)
+      out.set([(x * 255) / width + rand() * 40, (y * 255) / height + rand() * 40, rand() * 255, 255].map((v) => Math.min(255, v)), i * 4)
+    }
+    return out
+  }
+
+  it('CenterIndex matches a linear scan exactly', () => {
+    let s = 7
+    const rand = (): number => ((s = (Math.imul(s, 48271) + 1) >>> 0) / 4294967296)
+    const centers = Array.from({ length: 500 }, () => [rand(), rand() - 0.5, rand() - 0.5] as [number, number, number])
+    centers.push([...centers[3]!]) // a duplicate: ties must go to the lower index
+    const index = new CenterIndex(centers)
+    for (let n = 0; n < 2000; n++) {
+      const p: [number, number, number] = [rand(), rand() - 0.5, rand() - 0.5]
+      let best = 0
+      let bestD = Infinity
+      centers.forEach((c, i) => {
+        const d = (c[0] - p[0]) ** 2 + (c[1] - p[1]) ** 2 + (c[2] - p[2]) ** 2
+        if (d < bestD) {
+          bestD = d
+          best = i
+        }
+      })
+      expect(index.nearest(p)).toBe(best)
+    }
+  })
+
+  it('generates thousands of colors in reasonable time', () => {
+    const rgba = noiseImage(512, 512)
+    const t = performance.now()
+    const out = generatePalette(rgba, { method: 'kmeans', count: 4096, quality: 8, lumaWeight: 1, chromaWeight: 1, locked: [] })
+    const ms = performance.now() - t
+    expect(out.length).toBeGreaterThan(3500)
+    expect(new Set(out).size).toBe(out.length)
+    expect(ms).toBeLessThan(10_000)
+  }, 20_000)
 })

@@ -55,6 +55,12 @@ fn inputAt(p: vec2u, size: vec2u) -> vec4f {
 fn paletteCount() -> u32 { return stage.paletteCount; }
 fn paletteRgb(i: u32) -> vec3f { return palette[i].color.rgb; }
 
+// The palette buffer holds the colors twice (see gpu/resources.ts): entries [0, n) sorted by OKLab
+// lightness for perceptual matching, entries [n, 2n) sorted by (r+g+b)/√3 for RGB matching. The
+// sort key is in lab.w. Its squared difference is a lower bound on the distance, so searches start
+// at the pixel's key and stop as soon as the bound exceeds the best distance found: exact, and
+// fast even with thousands of colors.
+
 /** Distance in OKLab (metric 0) or RGB (metric 1). */
 fn paletteDist(lab: vec3f, rgb: vec3f, i: u32, metric: u32) -> f32 {
   if (metric == 1u) { let d = rgb - palette[i].color.rgb; return dot(d, d); }
@@ -62,24 +68,68 @@ fn paletteDist(lab: vec3f, rgb: vec3f, i: u32, metric: u32) -> f32 {
   return dot(d, d);
 }
 
-/** Index of the nearest palette color. Callers check paletteCount() > 0 first. */
+fn paletteBase(metric: u32) -> u32 { return select(0u, stage.paletteCount, metric == 1u); }
+
+fn paletteKey(lab: vec3f, rgb: vec3f, metric: u32) -> f32 {
+  return select(lab.x, (rgb.r + rgb.g + rgb.b) * 0.5773502692, metric == 1u);
+}
+
+/** First position in the sorted half whose key is >= key. */
+fn paletteLowerBound(base: u32, key: f32) -> u32 {
+  var lo = 0u;
+  var hi = stage.paletteCount;
+  while (lo < hi) {
+    let mid = (lo + hi) / 2u;
+    if (palette[base + mid].lab.w < key) { lo = mid + 1u; } else { hi = mid; }
+  }
+  return lo;
+}
+
+/** Buffer index of the nearest palette color. Callers check paletteCount() > 0 first. */
 fn nearestIndex(rgb: vec3f, metric: u32) -> u32 {
   let lab = rgbToOklab(rgb);
-  var best = 0u;
+  let n = stage.paletteCount;
+  let base = paletteBase(metric);
+  let key = paletteKey(lab, rgb, metric);
+  let start = paletteLowerBound(base, key);
+  var best = base;
   var bestD = 1e30;
-  for (var i = 0u; i < stage.paletteCount; i++) {
-    let d = paletteDist(lab, rgb, i, metric);
-    if (d < bestD) { bestD = d; best = i; }
+  for (var j = start; j < n; j++) {
+    let dk = palette[base + j].lab.w - key;
+    if (dk * dk > bestD) { break; }
+    let d = paletteDist(lab, rgb, base + j, metric);
+    if (d < bestD) { bestD = d; best = base + j; }
+  }
+  for (var j = i32(start) - 1; j >= 0; j--) {
+    let dk = key - palette[base + u32(j)].lab.w;
+    if (dk * dk > bestD) { break; }
+    let d = paletteDist(lab, rgb, base + u32(j), metric);
+    if (d < bestD) { bestD = d; best = base + u32(j); }
   }
   return best;
 }
 
-/** The two nearest palette colors: (index of nearest, index of second nearest). */
+/** The two nearest palette colors: (buffer index of nearest, of second nearest). */
 fn nearestTwo(rgb: vec3f, metric: u32) -> vec2u {
   let lab = rgbToOklab(rgb);
-  var b0 = 0u; var d0 = 1e30;
-  var b1 = 0u; var d1 = 1e30;
-  for (var i = 0u; i < stage.paletteCount; i++) {
+  let n = stage.paletteCount;
+  let base = paletteBase(metric);
+  let key = paletteKey(lab, rgb, metric);
+  let start = paletteLowerBound(base, key);
+  var b0 = base; var d0 = 1e30;
+  var b1 = base; var d1 = 1e30;
+  for (var j = start; j < n; j++) {
+    let dk = palette[base + j].lab.w - key;
+    if (dk * dk > d1) { break; }
+    let i = base + j;
+    let d = paletteDist(lab, rgb, i, metric);
+    if (d < d0) { b1 = b0; d1 = d0; b0 = i; d0 = d; }
+    else if (d < d1) { b1 = i; d1 = d; }
+  }
+  for (var j = i32(start) - 1; j >= 0; j--) {
+    let dk = key - palette[base + u32(j)].lab.w;
+    if (dk * dk > d1) { break; }
+    let i = base + u32(j);
     let d = paletteDist(lab, rgb, i, metric);
     if (d < d0) { b1 = b0; d1 = d0; b0 = i; d0 = d; }
     else if (d < d1) { b1 = i; d1 = d; }

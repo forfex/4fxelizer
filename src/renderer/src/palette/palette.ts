@@ -33,8 +33,11 @@ export interface Palette {
   generator?: GeneratorSettings
 }
 
-/** Largest palette a stage can use (8-bit indexed export). */
-export const MAX_PALETTE = 256
+/** Largest palette a stage can use (dithering/quantizing works with thousands of colors). */
+export const MAX_PALETTE = 8192
+
+/** Largest palette an indexed PNG (and .act file) can hold. */
+export const MAX_INDEXED = 256
 
 export const DEFAULT_GENERATOR: GeneratorSettings = {
   method: 'kmeans',
@@ -90,9 +93,33 @@ export function sortColors(colors: PaletteColor[], key: SortKey): PaletteColor[]
     .map((x) => x.c)
 }
 
-/** Hash of a palette's colors (what a stage's cache key depends on). */
+const signatures = new WeakMap<PaletteColor[], string>()
+
+/**
+ * Identity of a palette's colors (what a stage's cache key depends on). Cached per colors array:
+ * the store replaces arrays instead of mutating them, and large palettes are thousands of colors.
+ */
 export function paletteSignature(p: Palette): string {
-  return p.colors.map((c) => c.hex.slice(1)).join('')
+  let sig = signatures.get(p.colors)
+  if (sig === undefined) {
+    sig = String(p.colors.length) + ':' + hashColors(p.colors)
+    signatures.set(p.colors, sig)
+  }
+  return sig
+}
+
+/** FNV-1a over the hex digits, as two 32-bit halves (collision-safe enough for cache keys). */
+function hashColors(colors: PaletteColor[]): string {
+  let h1 = 0x811c9dc5
+  let h2 = 0x01000193
+  for (const c of colors) {
+    for (let i = 1; i < 7; i++) {
+      const ch = c.hex.charCodeAt(i)
+      h1 = Math.imul(h1 ^ ch, 0x01000193)
+      h2 = Math.imul(h2 ^ ch, 0x5bd1e995)
+    }
+  }
+  return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36)
 }
 
 /**

@@ -1,5 +1,8 @@
 // GPU copies of project resources that passes read: palettes (storage buffers) and the
 // shared blue-noise pattern.
+//
+// A palette buffer holds each color twice, sorted two ways (see the palette section of
+// wgslLib.ts), so shader palette indices are buffer positions, not palette order.
 
 import { blueNoise64 } from '@/dither/blueNoise'
 import { hexToOklab, hexToRgb8, paletteSignature, type Palette } from '@/palette/palette'
@@ -48,11 +51,17 @@ export class GpuResources {
       if (existing?.signature === signature) continue
       existing?.buffer.destroy()
       const count = p.colors.length
-      const data = new Float32Array(Math.max(count, 1) * (PALETTE_ENTRY_BYTES / 4))
-      p.colors.forEach((c, i) => {
+      const data = new Float32Array(Math.max(count * 2, 1) * (PALETTE_ENTRY_BYTES / 4))
+      const entries = p.colors.map((c) => {
         const [r, g, b] = hexToRgb8(c.hex)
-        data.set([r / 255, g / 255, b / 255, 1, ...hexToOklab(c.hex), 0], i * 8)
+        const rgb = [r / 255, g / 255, b / 255]
+        return { rgb, lab: hexToOklab(c.hex), rgbKey: (rgb[0]! + rgb[1]! + rgb[2]!) / Math.sqrt(3) }
       })
+      // Two sorted copies for the pruned nearest-color search in wgslLib.ts; the sort key goes in lab.w.
+      const byLightness = [...entries].sort((a, b) => a.lab[0] - b.lab[0])
+      const byRgbSum = [...entries].sort((a, b) => a.rgbKey - b.rgbKey)
+      byLightness.forEach((e, i) => data.set([...e.rgb, 1, ...e.lab, e.lab[0]], i * 8))
+      byRgbSum.forEach((e, i) => data.set([...e.rgb, 1, ...e.lab, e.rgbKey], (count + i) * 8))
       const buffer = this.device.createBuffer({
         label: `palette ${p.name}`,
         size: data.byteLength,

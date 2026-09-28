@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { extractPaletteFromOutput, importPalette, savePalette } from '@/actions'
 import { stageLabel } from '@/gpu/passes'
+import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
 import { BUILTIN_PALETTES } from '@/palette/builtins'
 import { generatePaletteNow } from '@/palette/controller'
 import type { PaletteExportFormat } from '@/palette/formats'
 import {
   DEFAULT_GENERATOR,
+  MAX_INDEXED,
   MAX_PALETTE,
   normalizeHex,
   snapHexTo15bit,
@@ -89,7 +91,9 @@ function PaletteMenu({ palette }: { palette: Palette | undefined }) {
             <MenuItem onSelect={exportAs('gpl')}>GIMP / Aseprite (.gpl)</MenuItem>
             <MenuItem onSelect={exportAs('hex')}>Lospec hex (.hex)</MenuItem>
             <MenuItem onSelect={exportAs('pal')}>JASC (.pal)</MenuItem>
-            <MenuItem onSelect={exportAs('act')}>Adobe color table (.act)</MenuItem>
+            <MenuItem disabled={(palette?.colors.length ?? 0) > MAX_INDEXED} onSelect={exportAs('act')}>
+              Adobe color table (.act){(palette?.colors.length ?? 0) > MAX_INDEXED ? ' · max 256' : ''}
+            </MenuItem>
           </MenuSubContent>
         </MenuSub>
         <MenuItem disabled={!palette} onSelect={() => palette && removePalette(palette.id)}>
@@ -143,23 +147,27 @@ function PaletteEditor({ palette }: { palette: Palette }) {
     <GroupBox title={`Colors · ${palette.colors.length}`}>
       <div className="flex flex-col gap-2">
         {palette.colors.length > 0 ? (
-          <div className="bevel-sunken grid grid-cols-8 gap-px bg-well p-px">
-            {palette.colors.map((c, i) => (
-              <button
-                key={i}
-                type="button"
-                className={cn(
-                  'relative aspect-square min-w-0',
-                  selected === i && 'z-10 outline-px outline-offset-1 outline-accent'
-                )}
-                style={{ backgroundColor: c.hex }}
-                title={`${i}: ${c.hex}${c.locked ? ' (locked)' : ''}`}
-                onClick={() => setSelected(selected === i ? null : i)}
-              >
-                {c.locked && <span className="absolute right-0 bottom-0 size-1.5 bg-bevel-dark shadow-[0_0_0_var(--px)_var(--fx-bevel-light)]" />}
-              </button>
-            ))}
-          </div>
+          palette.colors.length <= SWATCH_BUTTONS_MAX ? (
+            <div className="bevel-sunken grid grid-cols-8 gap-px bg-well p-px">
+              {palette.colors.map((c, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={cn(
+                    'relative aspect-square min-w-0',
+                    selected === i && 'z-10 outline-px outline-offset-1 outline-accent'
+                  )}
+                  style={{ backgroundColor: c.hex }}
+                  title={`${i}: ${c.hex}${c.locked ? ' (locked)' : ''}`}
+                  onClick={() => setSelected(selected === i ? null : i)}
+                >
+                  {c.locked && <span className="absolute right-0 bottom-0 size-1.5 bg-bevel-dark shadow-[0_0_0_var(--px)_var(--fx-bevel-light)]" />}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <SwatchCanvas colors={palette.colors} selected={selected} onSelect={(i) => setSelected(selected === i ? null : i)} />
+          )
         ) : (
           <p className="text-dim">
             {palette.generator ? 'Load an image to generate colors.' : 'No colors yet. Add some, import, or extract them.'}
@@ -210,6 +218,79 @@ function PaletteEditor({ palette }: { palette: Palette }) {
         </div>
       </div>
     </GroupBox>
+  )
+}
+
+/** Above this many colors the swatches are drawn on a canvas instead of one button each. */
+const SWATCH_BUTTONS_MAX = 256
+
+/** Compact swatch grid for large palettes (thousands of colors). Click selects a color. */
+function SwatchCanvas({
+  colors,
+  selected,
+  onSelect
+}: {
+  colors: PaletteColor[]
+  selected: number | null
+  onSelect(index: number): void
+}) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  const cols = colors.length <= 1024 ? 32 : 64
+  const rows = Math.ceil(colors.length / cols)
+
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas) return
+    const draw = (): void => {
+      const width = Math.max(1, Math.round(canvas.clientWidth * devicePixelRatio))
+      const cell = width / cols
+      canvas.width = width
+      canvas.height = Math.max(1, Math.round(cell * rows))
+      const ctx = canvas.getContext('2d')!
+      colors.forEach((c, i) => {
+        const x = Math.round((i % cols) * cell)
+        const y = Math.round(Math.floor(i / cols) * cell)
+        ctx.fillStyle = c.hex
+        ctx.fillRect(x, y, Math.round(((i % cols) + 1) * cell) - x, Math.round((Math.floor(i / cols) + 1) * cell) - y)
+      })
+      const token = (name: string): string => `rgb(${cssColor(name).slice(0, 3).map((v) => Math.round(v * 255)).join(',')})`
+      const mark = (i: number, color: string, inset: number): void => {
+        ctx.strokeStyle = color
+        ctx.lineWidth = Math.max(1, Math.round(devicePixelRatio))
+        ctx.strokeRect((i % cols) * cell + inset, Math.floor(i / cols) * cell + inset, cell - inset * 2, cell - inset * 2)
+      }
+      const lockColor = token('--fx-edge')
+      colors.forEach((c, i) => c.locked && mark(i, lockColor, 1))
+      if (selected !== null && selected < colors.length) mark(selected, token('--fx-accent'), 0.5)
+    }
+    draw()
+    const observer = new ResizeObserver(draw)
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [colors, selected, cols, rows])
+
+  const indexAt = (e: React.MouseEvent<HTMLCanvasElement>): number => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const cell = rect.width / cols
+    return Math.floor((e.clientY - rect.top) / cell) * cols + Math.floor((e.clientX - rect.left) / cell)
+  }
+
+  return (
+    <div className="bevel-sunken bg-well p-px">
+      <canvas
+        ref={ref}
+        className="block w-full cursor-pointer"
+        style={{ aspectRatio: `${cols} / ${rows}` }}
+        onClick={(e) => {
+          const i = indexAt(e)
+          if (i < colors.length) onSelect(i)
+        }}
+        onMouseMove={(e) => {
+          const i = indexAt(e)
+          e.currentTarget.title = i < colors.length ? `${i}: ${colors[i]!.hex}${colors[i]!.locked ? ' (locked)' : ''}` : ''
+        }}
+      />
+    </div>
   )
 }
 
@@ -318,7 +399,7 @@ function GeneratorBox({ palette }: { palette: Palette }) {
             ]}
           />
         </Field>
-        <ParamSlider label="Colors" value={gen.count} min={2} max={MAX_PALETTE} onChange={(count) => set({ count })} />
+        <ParamSlider label="Colors" scale="log" value={gen.count} min={2} max={MAX_PALETTE} onChange={(count) => set({ count })} />
         {gen.method === 'kmeans' && (
           <ParamSlider label="Quality" hint="K-means iterations." value={gen.quality} min={1} max={32} onChange={(quality) => set({ quality })} />
         )}

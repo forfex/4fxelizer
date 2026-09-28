@@ -2,7 +2,7 @@
 // Export: .hex, .gpl, .act, .pal (JASC).
 
 import { oklabToRgb } from '@/color/oklab'
-import { MAX_PALETTE, normalizeHex, rgb8ToHex, hexToRgb8 } from './palette'
+import { MAX_INDEXED, MAX_PALETTE, normalizeHex, rgb8ToHex, hexToRgb8 } from './palette'
 
 export interface ParsedPalette {
   name?: string
@@ -163,10 +163,12 @@ export function exportPalette(name: string, colors: string[], format: PaletteExp
         `JASC-PAL\r\n0100\r\n${colors.length}\r\n` + colors.map((c) => hexToRgb8(c).join(' ')).join('\r\n') + '\r\n'
       )
     case 'act': {
+      // The format holds at most 256 colors; callers warn before truncating.
+      const kept = colors.slice(0, MAX_INDEXED)
       const out = new Uint8Array(772)
-      colors.slice(0, 256).forEach((c, i) => out.set(hexToRgb8(c), i * 3))
-      out[768] = (colors.length >> 8) & 0xff
-      out[769] = colors.length & 0xff
+      kept.forEach((c, i) => out.set(hexToRgb8(c), i * 3))
+      out[768] = (kept.length >> 8) & 0xff
+      out[769] = kept.length & 0xff
       out[770] = 0xff // no transparent index
       out[771] = 0xff
       return out
