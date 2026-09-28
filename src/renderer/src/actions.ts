@@ -1,6 +1,8 @@
 import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile } from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
+import { encodePattern, patternFromRgba } from '@/dither/customPattern'
 import { getEngine } from '@/engine'
+import type { DitherParams } from '@/gpu/passes/dither'
 import { decodeImage } from '@/image/decode'
 import { bmpBitDepth, encodeBmp, encodeIndexedBmp } from '@/image/bmp'
 import { countColors, hasTranslucency, hasTransparency, toIndexed } from '@/image/indexed'
@@ -69,6 +71,29 @@ export async function openDroppedFiles(files: OpenedFile[]): Promise<void> {
       const image = useApp.getState().image
       useApp.getState().setMessage({ kind: 'info', text: `Loaded the ${mapList(loaded)} maps${texture && image ? ` for ${image.name}` : ''}` })
     }
+  }
+}
+
+// ── Custom dither patterns ─────────────────────────────────────────────────
+
+/** Asks for a small image to use as a dither pattern and stores it in a Dither stage. */
+export async function loadPatternImage(uid: string): Promise<void> {
+  const { setMessage } = useApp.getState()
+  const file = await window.fx.openFile([{ name: 'Images', extensions: MAP_IMAGE_EXTENSIONS }])
+  if (!file) return
+  try {
+    const bitmap = await decodeImage(file.name, file.bytes)
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Could not read the image.')
+    ctx.drawImage(bitmap, 0, 0)
+    bitmap.close()
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const pattern = patternFromRgba({ width, height, data: new Uint8Array(data.buffer) })
+    useApp.getState().updateParams<DitherParams>(uid, { customPattern: encodePattern(pattern), customPatternName: file.name })
+    setMessage({ kind: 'info', text: `Using ${file.name} (${width}×${height}) as the dither pattern` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't use ${file.name} as a pattern: ${errorText(e)}` })
   }
 }
 

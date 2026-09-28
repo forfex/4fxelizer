@@ -79,7 +79,8 @@ export class PassChain {
       format: WORK_FORMAT,
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
     })
-    const palette = this.resources.palette(def.resources?.(params).palette)
+    const res = def.resources?.(params)
+    const palette = this.resources.palette(res?.palette)
     const uniforms = this.runner.createUniforms(def, params, blend, palette?.count ?? 0)
     const scratch = this.runner.createScratch(def, params, texture)
     const maskSpec = def.mask?.(params)
@@ -90,7 +91,8 @@ export class PassChain {
       pattern: this.resources.pattern,
       serial: def.serial?.(params) ?? false,
       scratch,
-      mask: mask?.texture
+      mask: mask?.texture,
+      customPattern: this.resources.customPattern(res?.pattern)
     })
     return {
       texture,

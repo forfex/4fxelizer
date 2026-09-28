@@ -1,5 +1,6 @@
 // Settings UI for each stage type, plus the shared blend row.
 
+import { useEffect, useMemo, useRef } from 'react'
 import { BLEND_MODES, type BlendMode } from '@/gpu/pass'
 import { DEFAULT_ADJUST, type AdjustParams } from '@/gpu/passes/adjust'
 import {
@@ -10,11 +11,14 @@ import {
   ditherMask,
   ditherMixing,
   isDiffusion,
+  usesPattern,
   type DitherMask,
   type DitherParams,
   type DitherPattern
 } from '@/gpu/passes/dither'
 import { MASK_COMBINE, maskMapSlot, MAX_MASK_BLUR } from '@/gpu/mask'
+import { decodePattern } from '@/dither/customPattern'
+import { loadPatternImage } from '@/actions'
 import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
 import { MAX_UPSCALE_FACTOR, UPSCALE_METHODS, type UpscaleParams } from '@/gpu/passes/upscale'
@@ -458,6 +462,7 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
       {!diffusion && (
         <ParamSlider label="Pattern scale" hint="Pixels per pattern cell." value={p.scale} min={1} max={8} ticks={8} onChange={(scale) => set({ scale })} suffix="×" />
       )}
+      {usesPattern(p, 'custom') && <PatternImageField stage={stage} params={p} />}
       <Field label="Tiling">
         <Checkbox
           checked={p.wrap}
@@ -482,6 +487,35 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
         />
       </Field>
     </>
+  )
+}
+
+/** Custom dither pattern: a preview of the image and a button to load another. */
+function PatternImageField({ stage, params: p }: { stage: StageSpec; params: DitherParams }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const pattern = useMemo(() => decodePattern(p.customPattern), [p.customPattern])
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx || !pattern) return
+    canvas.width = pattern.width
+    canvas.height = pattern.height
+    const pixels = ctx.createImageData(pattern.width, pattern.height)
+    pattern.gray.forEach((v, i) => pixels.data.set([v, v, v, 255], i * 4))
+    ctx.putImageData(pixels, 0, 0)
+  }, [pattern])
+  return (
+    <Field label="Pattern" hint="Any small grayscale image: darker pixels turn dark first. It repeats across the image.">
+      <div className="bevel-sunken flex size-8 shrink-0 items-center justify-center overflow-hidden bg-well">
+        {pattern ? <canvas ref={canvasRef} className="size-full [image-rendering:pixelated]" /> : <span className="text-small text-dim">—</span>}
+      </div>
+      <span className="min-w-0 flex-1 truncate text-small text-dim" title={p.customPatternName}>
+        {pattern ? `${p.customPatternName || 'Pattern'} · ${pattern.width}×${pattern.height}` : 'No image loaded'}
+      </span>
+      <Button size="sm" onClick={() => void loadPatternImage(stage.uid)}>
+        Load…
+      </Button>
+    </Field>
   )
 }
 

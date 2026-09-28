@@ -1,5 +1,6 @@
 import type { PaletteParams } from '@/stack/doc'
 import { MASK_SOURCES, maskMaps, type MaskCombine, type MaskSource, type MaskSpec } from '../mask'
+import { decodePattern } from '@/dither/customPattern'
 import { definePass, packStruct, ROW_THREADS } from '../pass'
 import type { ColorMetric } from './quantize'
 
@@ -32,7 +33,8 @@ export const DITHER_PATTERNS = [
   { id: 'sierra-lite', label: 'Sierra Lite', kind: 'diffusion', period: 0 },
   { id: 'n64-magic', label: 'N64 magic square', kind: 'ordered', period: 4 },
   { id: 'checker', label: 'Checker', kind: 'ordered', period: 2 },
-  { id: 'crosshatch', label: 'Crosshatch', kind: 'ordered', period: 8 }
+  { id: 'crosshatch', label: 'Crosshatch', kind: 'ordered', period: 8 },
+  { id: 'custom', label: 'Custom image', kind: 'ordered', period: -1 }
 ] as const
 
 export type DitherPattern = (typeof DITHER_PATTERNS)[number]['id']
@@ -106,6 +108,10 @@ export interface DitherParams extends PaletteParams {
    * run one at a time), and mask edge detection and blur wrap around.
    */
   wrap: boolean
+  /** Pattern image for the 'custom' pattern (encoded, see dither/customPattern.ts); '' = none. */
+  customPattern: string
+  /** File name the custom pattern came from (shown in the editor). */
+  customPatternName: string
   /** Output the mask instead of the dithered image (viewer only, never stored). */
   showMask?: boolean
 }
@@ -136,7 +142,9 @@ export const DEFAULT_DITHER: DitherParams = {
   outsideStrength: 0.5,
   alpha: 'keep',
   serpentine: false,
-  wrap: false
+  wrap: false,
+  customPattern: '',
+  customPatternName: ''
 }
 
 export function isDiffusion(pattern: DitherPattern): boolean {
@@ -161,17 +169,30 @@ export function outsidePattern(p: DitherParams): DitherPattern | null {
   return p.outsidePattern !== 'none' && ditherMask(p) ? p.outsidePattern : null
 }
 
-function patternPeriod(pattern: DitherPattern, scale: number): number {
+/** Whether a pattern is used (inside or outside the mask). */
+export function usesPattern(p: DitherParams, pattern: DitherPattern): boolean {
+  return p.pattern === pattern || outsidePattern(p) === pattern
+}
+
+/** Horizontal and vertical period of a pattern in texels (0 = never repeats). */
+function patternPeriod(pattern: DitherPattern, p: DitherParams): { x: number; y: number } {
+  const scale = isDiffusion(pattern) ? 1 : Math.max(1, Math.round(p.scale))
+  if (pattern === 'custom') {
+    const image = decodePattern(p.customPattern)
+    return { x: (image?.width ?? 1) * scale, y: (image?.height ?? 1) * scale }
+  }
   const period = DITHER_PATTERNS.find((d) => d.id === pattern)?.period ?? 0
-  return period * (isDiffusion(pattern) ? 1 : Math.max(1, Math.round(scale)))
+  return { x: period * scale, y: period * scale }
 }
 
 /**
  * Pattern period in texels; ordered patterns tile seamlessly when this divides the texture size.
  * 0 = the pattern never repeats (noise, error diffusion; see `ditherTiling` for wrap-around).
+ * Custom images: the larger side.
  */
 export function ditherPeriod(p: DitherParams): number {
-  return patternPeriod(p.pattern, p.scale)
+  const { x, y } = patternPeriod(p.pattern, p)
+  return Math.max(x, y)
 }
 
 /** Why the dithered result won't tile on a texture of `size`, or null when it tiles seamlessly. */
@@ -179,13 +200,14 @@ export function ditherTiling(p: DitherParams, size: { width: number; height: num
   const patterns = [p.pattern, outsidePattern(p)].filter((d): d is DitherPattern => !!d)
   for (const pattern of patterns) {
     const name = DITHER_PATTERNS.find((d) => d.id === pattern)?.label ?? pattern
-    const period = patternPeriod(pattern, p.scale)
+    const period = patternPeriod(pattern, p)
     if (isDiffusion(pattern)) {
       if (!p.wrap) return `${name} won't tile seamlessly. Turn on "Wrap edges" for tiling textures.`
-    } else if (period === 0) {
+    } else if (period.x === 0) {
       return `${name} doesn't repeat, so the texture won't tile seamlessly. Use an ordered pattern for tiling textures.`
-    } else if (size.width % period !== 0 || size.height % period !== 0) {
-      return `The ${period}px pattern doesn't divide ${size.width}×${size.height}, so the texture won't tile seamlessly.`
+    } else if (size.width % period.x !== 0 || size.height % period.y !== 0) {
+      const px = period.x === period.y ? `${period.x}px` : `${period.x}×${period.y}px`
+      return `The ${px} pattern doesn't divide ${size.width}×${size.height}, so the texture won't tile seamlessly.`
     }
   }
   const mask = ditherMask(p)
@@ -328,6 +350,7 @@ fn threshold(p: vec2u, pattern: u32) -> f32 {
     case 21u: { return (f32(MAGIC4[(q.y % 4u) * 4u + q.x % 4u]) + 0.5) / 8.0; }
     case 22u: { return select(0.25, 0.75, ((q.x + q.y) & 1u) == 1u); }
     case 23u: { return rankThreshold(q, 2u, 8u); }
+    case 24u: { return textureLoad(customPattern, q % textureDimensions(customPattern), 0).r; }
     default: { return blueNoise(q); }
   }
 }
@@ -588,7 +611,11 @@ fn runRows(thread: u32, size: vec2u) {
   },
   resources: (p) => {
     const mask = ditherMask(p)
-    return { palette: p.mode === 'palette' ? p.paletteId : null, maps: mask ? maskMaps(mask) : [] }
+    return {
+      palette: p.mode === 'palette' ? p.paletteId : null,
+      maps: mask ? maskMaps(mask) : [],
+      pattern: usesPattern(p, 'custom') ? p.customPattern : undefined
+    }
   },
   mask: (p) => ditherMask(p),
   serial: (p) => {

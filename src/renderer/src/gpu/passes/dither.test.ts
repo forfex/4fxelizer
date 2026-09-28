@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { encodePattern } from '@/dither/customPattern'
 import { DEFAULT_DITHER, DITHER_PATTERNS, diffusionKernel, dither, ditherMask, ditherMixing, ditherPeriod, ditherTiles, isDiffusion, outsidePattern } from './dither'
 
 describe('dither', () => {
@@ -40,6 +41,15 @@ describe('dither', () => {
     expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'ign' }, size)).toBe(false)
     expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'jarvis' }, size)).toBe(false)
     expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'jarvis', wrap: true }, { width: 7, height: 5 })).toBe(true)
+  })
+
+  it('tiles custom pattern images by their width and height', () => {
+    const custom = { ...DEFAULT_DITHER, pattern: 'custom' as const, customPattern: encodePattern({ width: 3, height: 2, gray: new Uint8Array(6) }) }
+    expect(ditherTiles(custom, { width: 9, height: 4 })).toBe(true)
+    expect(ditherTiles(custom, { width: 8, height: 4 })).toBe(false)
+    expect(ditherTiles({ ...custom, scale: 2 }, { width: 12, height: 8 })).toBe(true)
+    expect(dither.resources!(custom).pattern).toBe(custom.customPattern)
+    expect(dither.resources!(DEFAULT_DITHER).pattern).toBeUndefined()
   })
 
   it('packs params to match the WGSL struct (20 scalars + 6 vec4f)', () => {

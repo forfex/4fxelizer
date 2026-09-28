@@ -4,7 +4,8 @@ import type { Size } from '@/gpu/pass'
 import type { StageSpec } from '@/gpu/plan'
 import { MAP_SLOTS } from '@shared/maps'
 import { maskMaps } from '@/gpu/mask'
-import { ditherMask, ditherTiling, type DitherParams } from '@/gpu/passes/dither'
+import { decodePattern } from '@/dither/customPattern'
+import { ditherMask, ditherTiling, usesPattern, type DitherParams } from '@/gpu/passes/dither'
 import { downscaleSize, type DownscaleParams } from '@/gpu/passes/downscale'
 import { upscaleSize, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
@@ -103,6 +104,7 @@ export function analyzeStack(
         if (p.mode === 'pattern' && !later.some(snapsColors) && !(lock.enabled && lock.paletteId)) {
           warnings.push('"Pattern only" adds the pattern without reducing colors. Add a Quantize after it.')
         }
+        if (usesPattern(p, 'custom') && !decodePattern(p.customPattern)) warnings.push('Load a pattern image for the custom pattern.')
         const tiling = ditherTiling(p, input)
         if (tiling && source) warnings.push(tiling)
         const mask = ditherMask(p)

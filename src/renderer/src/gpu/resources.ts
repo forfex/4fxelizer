@@ -5,6 +5,7 @@
 // wgslLib.ts), so shader palette indices are buffer positions, not palette order.
 
 import { blueNoise64 } from '@/dither/blueNoise'
+import { decodePattern, patternThresholds } from '@/dither/customPattern'
 import type { MapChannel, MapSlot } from '@shared/maps'
 import { hexToOklab, hexToRgb8, paletteSignature, type Palette } from '@/palette/palette'
 import type { MaskMap } from './mask'
@@ -22,6 +23,9 @@ export interface GpuMap extends MaskMap {
   signature: string
 }
 
+/** Custom pattern textures kept around (several stages may use different ones). */
+const MAX_PATTERNS = 8
+
 export class GpuResources {
   readonly pattern: GPUTexture
   /** Bound when a pass reads no palette (bindings can't be empty). */
@@ -29,6 +33,8 @@ export class GpuResources {
   private readonly palettes = new Map<string, GpuPalette>()
   private readonly maps = new Map<MapSlot, { texture: GPUTexture; version: number }>()
   private mapChannels: Partial<Record<MapSlot, MapChannel>> = {}
+  /** Custom pattern textures by encoded pattern, most recently used last. */
+  private readonly patterns = new Map<string, GPUTexture>()
 
   constructor(private readonly device: GPUDevice) {
     this.emptyPalette = device.createBuffer({
@@ -101,6 +107,36 @@ export class GpuResources {
     this.mapChannels = channels
   }
 
+  /**
+   * Thresholds of a custom pattern image (r32float), or null when the string holds none. A few
+   * recent ones are kept; older ones are freed (WebGPU keeps them alive for submitted work).
+   */
+  customPattern(encoded: string | undefined): GPUTexture | null {
+    if (!encoded) return null
+    let texture = this.patterns.get(encoded)
+    if (texture) {
+      this.patterns.delete(encoded)
+    } else {
+      const pattern = decodePattern(encoded)
+      if (!pattern) return null
+      texture = this.device.createTexture({
+        label: 'custom pattern',
+        size: [pattern.width, pattern.height],
+        format: 'r32float',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      })
+      const data = patternThresholds(pattern.gray)
+      this.device.queue.writeTexture({ texture }, data as Float32Array<ArrayBuffer>, { bytesPerRow: pattern.width * 4 }, [pattern.width, pattern.height])
+    }
+    this.patterns.set(encoded, texture)
+    for (const [key, old] of this.patterns) {
+      if (this.patterns.size <= MAX_PATTERNS) break
+      old.destroy()
+      this.patterns.delete(key)
+    }
+    return texture
+  }
+
   map(slot: MapSlot): GpuMap | null {
     const map = this.maps.get(slot)
     if (!map) return null
@@ -113,6 +149,8 @@ export class GpuResources {
     this.palettes.clear()
     for (const m of this.maps.values()) m.texture.destroy()
     this.maps.clear()
+    for (const t of this.patterns.values()) t.destroy()
+    this.patterns.clear()
     this.emptyPalette.destroy()
     this.pattern.destroy()
   }
