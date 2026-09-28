@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-4FXELIZER is an Electron desktop app that turns high-res textures into PSX-style low-res, palettized, dithered textures. Target users are artists, not programmers. `docs/PLAN.md` holds the full design, visual-style rules and roadmap. The app currently covers the 2D workflow: Adjust, Downscale, Upscale, Quantize and Dither stages, project palettes (generate / edit / import / export) plus per-stage generated palettes (up to 8192 colors), presets, undo, and PNG + indexed PNG export. It has been verified on Windows only; keep macOS/Linux supported (no platform-specific code paths beyond `src/main/gpuFlags.ts`, menu accelerators and the window icon format (`.ico` on Windows)).
+4FXELIZER is an Electron desktop app that turns high-res textures into PSX-style low-res, palettized, dithered textures. Target users are artists, not programmers. `docs/PLAN.md` holds the full design, visual-style rules and roadmap. The app currently covers the 2D workflow: Adjust, Downscale, Upscale, Quantize and Dither stages, project palettes (generate / edit / import / export) plus per-stage generated palettes (up to 8192 colors), presets, undo, a palette eyedropper, and PNG / TGA / BMP export (full color or indexed). It has been verified on Windows only; keep macOS/Linux supported (no platform-specific code paths beyond `src/main/gpuFlags.ts`, menu accelerators and the window icon format (`.ico` on Windows)).
 
 ## Commands
 
