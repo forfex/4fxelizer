@@ -46,12 +46,20 @@ Load a texture (drag and drop, or **File › Open**), then shape it with a reord
 - **Upscale**: enlarge ×2–×16 or back to the original size with the N64 3-point filter, bilinear, bicubic,
   sharp bilinear, Lanczos, Scale2x/Scale3x (EPX, pixel art) or nearest (optional edge wrap for tiling textures). Downscale → Dither → Upscale gives the N64 blur.
 - **Quantize**: snap to a palette (perceptual OKLab or RGB matching) or to N levels per channel (32 = PSX 15-bit).
-- **Dither**: ordered (Bayer 2×2–16×16, blue noise, white noise, IGN, clustered dots, halftone, lines, N64 magic square) or
-  error diffusion (Floyd–Steinberg, Atkinson, Jarvis–Judice–Ninke, Stucki, Burkes, Sierra ×3); to palette,
-  to levels, or pattern only. Palette mixing: offset, two nearest or Knoll. Saturation, and a mask
-  (edges, flats, shadows, midtones, highlights, saturated, grays) with strength, gamma and a mask view.
+- **Dither**: ordered (Bayer 2×2–16×16, blue noise, white noise, IGN, clustered dots, halftone, lines, checker,
+  crosshatch, N64 magic square, or your own pattern image) or error diffusion (Floyd–Steinberg, Atkinson,
+  Jarvis–Judice–Ninke, Stucki, Burkes, Sierra ×3, with serpentine scanning); to palette, to levels, or pattern only.
+  Palette mixing: offset, two nearest or Knoll. Saturation, and a **mask** saying where to dither: from the image
+  (edges, flats, shadows, midtones, highlights, saturated, grays) or from an imported map (AO, cavity, curvature,
+  edge, thickness, height, roughness, metallic). Two sources can be combined (multiply, add, min, max), each
+  inverted, then blurred and shaped by strength and gamma; a mask view shows the result, and a different
+  pattern can run outside the mask. **Wrap edges** makes error diffusion and mask filtering tile seamlessly.
 
 Every stage has on/off, opacity and a blend mode; click a stage to preview the image at that point.
+**Maps** (Maps panel) load with the texture when they sit next to it with a map suffix (`rock_ao.png`,
+`Rock_AmbientOcclusion.tga`, `T_Rock_ORM.png`; ORM/ARM and RMA files are split into their channels), can be
+dropped on the window or loaded per slot, and are sampled in UV, so their size doesn't need to match.
+**Tiling view** (View › Tiling View, Ctrl+T) repeats the texture 3×3 to show its seams.
 Quantize and Dither take their colors from a **palette** or a **generated** palette (2–8192 colors, built
 automatically from the stage's input). Palettes are shared resources: generate them from the image
 (median cut, Wu, octree or k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
@@ -64,7 +72,7 @@ Panels dock, tab together, float over the viewer and resize, like in Photoshop; 
 switches between built-in layouts (Essentials, Wide viewer, Palette editing, Floating), saves your own and resets them.
 On Windows and Linux the app draws its own title bar with the menus in the theme's colors; Alt or F10 moves to
 the menus and Alt+letter opens one, as in a native menu bar. macOS keeps its system menu bar.
-Grid, split view, the export format, the panel layout and the window size and position are remembered between sessions.
+Grid, split view, tiling view, the export format, the panel layout and the window size and position are remembered between sessions.
 **File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
 indexed BMP has no alpha, so transparent pixels use index 0 and semi-transparent ones become opaque).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
@@ -124,24 +132,26 @@ src/main/            Electron main: window, native menu, file dialogs, settings,
 src/preload/         window.fx bridge (sandboxed, CommonJS)
 src/shared/api.ts    IPC contract and user settings shared by main, preload and renderer
 src/shared/menu.ts   the app menu, defined once: native menu in main, title bar menus in the renderer
+src/shared/maps.ts   map slots and how map files are recognized by name (_ao, _cavity, _orm, …)
 src/renderer/src/
-  gpu/pass.ts        pass framework: each stage = one WGSL compute function (+ blend, palette, pattern)
+  gpu/pass.ts        pass framework: each stage = one WGSL compute function (+ blend, palette, mask, patterns)
+  gpu/mask.ts        stage masks: sources (image-derived or imported maps), combine, blur, built on the GPU
   gpu/wgslLib.ts     WGSL helpers shared by all passes (OKLab, palette lookup, dither thresholds, blend)
   gpu/plan.ts        stage-cache planning (pure, unit-tested)
   gpu/chain.ts       runs the stage stack on the GPU with per-stage caching
-  gpu/resources.ts   GPU copies of palettes and the blue-noise texture
-  gpu/viewer.*       2D viewer renderer: zoom, split view, pixel grid, alpha checker
+  gpu/resources.ts   GPU copies of palettes, imported maps, custom patterns and the blue-noise texture
+  gpu/viewer.*       2D viewer renderer: zoom, split view, tiling view, pixel grid, alpha checker
   gpu/passes/        stages: adjust, downscale, upscale, quantize, dither
   color/             OKLab conversion
   palette/           palette model, generation (worker), file formats, built-ins, auto-regeneration
-  dither/            blue-noise generator (void-and-cluster)
+  dither/            blue-noise generator (void-and-cluster), custom pattern images
   stack/             document ops, presets, built-in presets, order warnings (pure, unit-tested)
   image/             PNG, TGA and BMP encoders (RGBA + indexed), TGA decoder, half-float readback
   viewer/viewport.ts zoom/pan math in device pixels
   engine.ts          owns GPU objects; React talks to it
   store.ts           app state + undoable document (zustand)
   workspace/         dockable panel layout: built-in workspaces, saved layouts and their checks
-  components/        title bar, dock, stack panel, stage editors, palette panel, export dialog, viewer
+  components/        title bar, dock, stack panel, stage editors, palette and maps panels, export dialog, viewer
   components/ui/     shadcn-style primitives, restyled via tokens
   styles/tokens.css  design tokens: the one place to restyle the app
 ```
