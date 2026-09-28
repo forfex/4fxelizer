@@ -1,6 +1,38 @@
+<div align="center">
+
 # 4FXELIZER
 
-PSX-style texture stylizer. See [docs/PLAN.md](docs/PLAN.md) for the full design and roadmap.
+**Turn high-res textures into crunchy PSX-style low-res, palettized, dithered ones.**
+
+[![CI](https://github.com/forfex/4fxelizer/actions/workflows/ci.yml/badge.svg)](https://github.com/forfex/4fxelizer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/forfex/4fxelizer?color=d9a441)](https://github.com/forfex/4fxelizer/releases/latest)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-2b2a27)
+![WebGPU](https://img.shields.io/badge/WebGPU-compute-d9a441)
+
+[**Download**](https://github.com/forfex/4fxelizer/releases/latest) · [**Website**](https://forfex.github.io/4fxelizer/) · [Roadmap](docs/PLAN.md)
+
+<img src="site/images/app.png" alt="4FXELIZER showing a brick texture before and after" width="900">
+
+</div>
+
+## Gallery
+
+One 1024×1024 source texture through the built-in presets:
+
+| Source | PSX 8bpp | PSX 4bpp | N64 |
+|:--:|:--:|:--:|:--:|
+| <img src="site/images/gallery-source.png" width="200"> | <img src="site/images/gallery-psx-8bpp.png" width="200"> | <img src="site/images/gallery-psx-4bpp.png" width="200"> | <img src="site/images/gallery-n64.png" width="200"> |
+
+| NES-ish | Game Boy | Crunchy |
+|:--:|:--:|:--:|
+| <img src="site/images/gallery-nes.png" width="200"> | <img src="site/images/gallery-gameboy.png" width="200"> | <img src="site/images/gallery-crunchy.png" width="200"> |
+
+## Install
+
+Grab the installer for your OS from the [latest release](https://github.com/forfex/4fxelizer/releases/latest):
+Windows setup `.exe`, macOS `.dmg` (Apple Silicon and Intel), Linux `.AppImage` or `.deb`.
+Builds are not code-signed yet: Windows SmartScreen may warn (More info › Run anyway), and on macOS, if the app is
+reported as damaged, run `xattr -cr /Applications/4FXELIZER.app`. A GPU with WebGPU is required.
 
 ## What it does (Phase 1)
 
@@ -28,7 +60,7 @@ Grid, split view, the export format and the window size and position are remembe
 **File › Export** writes PNG (RGBA) or indexed PNG (1/2/4/8-bit, palette order kept, transparency at index 0).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
 
-## Commands
+## Development
 
 ```bash
 npm install          # also downloads the Electron binary (postinstall)
@@ -114,3 +146,8 @@ src/renderer/src/
 - **Image values are kept exact**: images decode without color-space conversion or alpha
   premultiplication, stages work in `rgba16float`, and PNG export uses our own encoder
   (canvas encoding would premultiply alpha).
+
+## Website
+
+The landing page lives in `site/` and is deployed to GitHub Pages by `.github/workflows/pages.yml` on pushes to
+`master` that touch it. One-time setup: **Settings › Pages › Source: GitHub Actions**.
