@@ -1,5 +1,10 @@
 // Contract between the preload bridge (window.fx) and the renderer.
 
+export interface FileFilter {
+  name: string
+  extensions: string[]
+}
+
 export interface OpenedFile {
   name: string
   bytes: Uint8Array
@@ -28,6 +33,9 @@ export interface RendererGpuReport {
 export type MenuCommand =
   | 'open'
   | 'export'
+  | 'import-palette'
+  | 'undo'
+  | 'redo'
   | 'zoom-fit'
   | 'zoom-actual'
   | 'zoom-in'
@@ -39,7 +47,8 @@ export type MenuCommand =
 export interface FxApi {
   platform: string
   openImage(): Promise<OpenedFile | null>
-  saveImage(defaultName: string, bytes: Uint8Array): Promise<string | null>
+  openFile(filters: FileFilter[]): Promise<OpenedFile | null>
+  saveFile(defaultName: string, bytes: Uint8Array, filters: FileFilter[]): Promise<string | null>
   getGpuInfo(): Promise<MainGpuInfo>
   submitGpuReport(report: RendererGpuReport): void
   onMenuCommand(listener: (command: MenuCommand) => void): () => void
@@ -47,7 +56,8 @@ export interface FxApi {
 
 export const IPC = {
   openImage: 'image:open',
-  saveImage: 'image:save',
+  openFile: 'file:open',
+  saveFile: 'file:save',
   gpuInfo: 'gpu:info',
   gpuReport: 'gpu:report',
   menuCommand: 'menu:command'

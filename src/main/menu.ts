@@ -15,12 +15,26 @@ export function buildMenu(win: BrowserWindow, isDev: boolean): Menu {
       label: 'File',
       submenu: [
         { label: 'Open Image…', accelerator: 'CmdOrCtrl+O', click: send('open') },
-        { label: 'Export PNG…', accelerator: 'CmdOrCtrl+E', click: send('export') },
+        { label: 'Export…', accelerator: 'CmdOrCtrl+E', click: send('export') },
+        { type: 'separator' },
+        { label: 'Import Palette…', click: send('import-palette') },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' }
       ]
     },
-    { role: 'editMenu' },
+    {
+      label: 'Edit',
+      submenu: [
+        // Undo/redo go to the stage stack; the renderer falls back to text undo inside text fields.
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: send('undo') },
+        { label: 'Redo', accelerator: isMac ? 'Shift+Cmd+Z' : 'Ctrl+Y', click: send('redo') },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
     {
       label: 'View',
       submenu: [

@@ -4,7 +4,8 @@ import { IPC, type FxApi, type MenuCommand } from '@shared/api'
 const api: FxApi = {
   platform: process.platform,
   openImage: () => ipcRenderer.invoke(IPC.openImage),
-  saveImage: (defaultName, bytes) => ipcRenderer.invoke(IPC.saveImage, defaultName, bytes),
+  openFile: (filters) => ipcRenderer.invoke(IPC.openFile, filters),
+  saveFile: (defaultName, bytes, filters) => ipcRenderer.invoke(IPC.saveFile, defaultName, bytes, filters),
   getGpuInfo: () => ipcRenderer.invoke(IPC.gpuInfo),
   submitGpuReport: (report) => ipcRenderer.send(IPC.gpuReport, report),
   onMenuCommand: (listener) => {

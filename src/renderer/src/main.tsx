@@ -3,9 +3,14 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { collectGpuReport } from './gpu/report'
 import { installPixelSnap } from './lib/pixelSnap'
+import { getEngine } from './engine'
+import { useApp } from './store'
 import './styles/index.css'
 
 installPixelSnap()
+
+// Dev builds expose the store for debugging from DevTools / automation (window.__fx.useApp.getState()).
+if (import.meta.env.DEV) Object.assign(window, { __fx: { useApp, getEngine } })
 const root = createRoot(document.getElementById('root')!)
 
 if (new URLSearchParams(location.search).get('mode') === 'gpu-report') {

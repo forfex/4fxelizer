@@ -79,6 +79,11 @@ export function toIndexed(image: RgbaImage, palette?: string[]): IndexedImage {
   return { width, height, indices, palette: entries }
 }
 
+export function hasTransparency(image: RgbaImage): boolean {
+  for (let i = 3; i < image.data.length; i += 4) if (image.data[i] === 0) return true
+  return false
+}
+
 /** Distinct colors in the image (fully transparent pixels count as one), counting stops at `limit`. */
 export function countColors(image: RgbaImage, limit = 257): number {
   const seen = new Set<number>()

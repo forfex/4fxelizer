@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
-import { IPC, type MainGpuInfo, type RendererGpuReport } from '@shared/api'
+import { IPC, type FileFilter, type MainGpuInfo, type RendererGpuReport } from '@shared/api'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu } from './menu'
 
@@ -38,24 +38,25 @@ async function getGpuInfo(): Promise<MainGpuInfo> {
   }
 }
 
-function registerIpc(): void {
-  ipcMain.handle(IPC.openImage, async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)!
-    const result = await dialog.showOpenDialog(win, {
-      properties: ['openFile'],
-      filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS }]
-    })
-    const path = result.filePaths[0]
-    if (result.canceled || !path) return null
-    return { name: basename(path), bytes: new Uint8Array(await readFile(path)) }
-  })
+async function openFile(win: BrowserWindow, filters: FileFilter[]) {
+  const result = await dialog.showOpenDialog(win, { properties: ['openFile'], filters })
+  const path = result.filePaths[0]
+  if (result.canceled || !path) return null
+  return { name: basename(path), bytes: new Uint8Array(await readFile(path)) }
+}
 
-  ipcMain.handle(IPC.saveImage, async (event, defaultName: string, bytes: Uint8Array) => {
+function registerIpc(): void {
+  ipcMain.handle(IPC.openImage, (event) =>
+    openFile(BrowserWindow.fromWebContents(event.sender)!, [{ name: 'Images', extensions: IMAGE_EXTENSIONS }])
+  )
+
+  ipcMain.handle(IPC.openFile, (event, filters: FileFilter[]) =>
+    openFile(BrowserWindow.fromWebContents(event.sender)!, filters)
+  )
+
+  ipcMain.handle(IPC.saveFile, async (event, defaultName: string, bytes: Uint8Array, filters: FileFilter[]) => {
     const win = BrowserWindow.fromWebContents(event.sender)!
-    const result = await dialog.showSaveDialog(win, {
-      defaultPath: defaultName,
-      filters: [{ name: 'PNG image', extensions: ['png'] }]
-    })
+    const result = await dialog.showSaveDialog(win, { defaultPath: defaultName, filters })
     if (result.canceled || !result.filePath) return null
     await writeFile(result.filePath, bytes)
     return result.filePath
