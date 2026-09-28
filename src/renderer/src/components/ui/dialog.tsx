@@ -13,10 +13,10 @@ export function DialogContent({
 }: ComponentProps<typeof DialogPrimitive.Content> & { title: ReactNode }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 bg-black/50" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/50" />
       <DialogPrimitive.Content
         className={cn(
-          'bevel-raised fixed top-1/2 left-1/2 flex max-h-[85vh] w-[min(720px,90vw)] -translate-x-1/2 -translate-y-1/2 flex-col',
+          'bevel-raised fixed top-1/2 left-1/2 z-40 flex max-h-[85vh] w-[min(720px,90vw)] -translate-x-1/2 -translate-y-1/2 flex-col',
           'rounded-fx border-px border-edge bg-panel',
           className
         )}

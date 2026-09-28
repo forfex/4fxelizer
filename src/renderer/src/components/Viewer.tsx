@@ -140,8 +140,9 @@ export function Viewer() {
     drag.current = null
   }
 
+  // `isolate`: the split handle and labels (z-10) must stay below dialogs and menus.
   return (
-    <div className="bevel-sunken relative min-h-0 min-w-0 flex-1 bg-well p-(--px)">
+    <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
       <canvas
         ref={canvasRef}
         className="block size-full cursor-grab active:cursor-grabbing"
