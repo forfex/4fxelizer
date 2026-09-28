@@ -4,8 +4,8 @@
  *
  * Two themes share every role; only values change. Dark (the default) is a deep plum desktop with
  * purple and magenta accents. Night is pure greyscale for dim rooms and for judging the image's
- * colors with no tinted chrome around it: its one hue is fx-magenta, used only for focus, the armed
- * outline, the selected swatch and the busy LED. The theme is `data-theme` on <html> (see theme.ts).
+ * colors with no tinted chrome around it: its only hues are fx-magenta (focus, the armed outline,
+ * the selected swatch, the busy LED) and the status LEDs. The theme is `data-theme` on <html> (see theme.ts).
  */
 :root {
   /* Surfaces, back to front: bg (the desktop behind the dock) → panel → panel-hi (raised controls) */
@@ -125,10 +125,7 @@
   --fx-magenta: #ff66da;
   --fx-drop: #2c2c2c;
 
-  /* Greys: on bright, warn mid, error near-white. The word beside them carries the meaning. */
-  --fx-led-green: #d6d6d6;
-  --fx-led-amber: #9e9e9e;
-  --fx-led-red: #f5f5f5;
+  /* Status LEDs keep their colors (the Dark values): status reads at a glance in every theme. */
   --fx-led-off: #242424;
 
   --fx-lcd-bg: #080808;
