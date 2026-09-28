@@ -85,25 +85,20 @@ async function zlibDeflate(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
-export async function encodePng(image: RgbaImage): Promise<Uint8Array> {
-  const { width, height, data } = image
-  if (data.length !== width * height * 4) throw new Error('encodePng: data size does not match dimensions')
-
-  const ihdr = new Uint8Array(13)
-  const view = new DataView(ihdr.buffer)
+function ihdr(width: number, height: number, bitDepth: number, colorType: number): Uint8Array {
+  const data = new Uint8Array(13)
+  const view = new DataView(data.buffer)
   view.setUint32(0, width)
   view.setUint32(4, height)
-  ihdr[8] = 8 // bit depth
-  ihdr[9] = 6 // color type: RGBA
+  data[8] = bitDepth
+  data[9] = colorType
   // compression, filter, interlace = 0
+  return chunk('IHDR', data)
+}
 
-  const idat = await zlibDeflate(filterScanlines(data, width, height, 4))
-  const parts = [
-    new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', idat),
-    chunk('IEND', new Uint8Array(0))
-  ]
+function assemble(chunks: Uint8Array[]): Uint8Array {
+  const signature = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const parts = [signature, ...chunks, chunk('IEND', new Uint8Array(0))]
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
   let offset = 0
   for (const p of parts) {
@@ -111,4 +106,55 @@ export async function encodePng(image: RgbaImage): Promise<Uint8Array> {
     offset += p.length
   }
   return out
+}
+
+export async function encodePng(image: RgbaImage): Promise<Uint8Array> {
+  const { width, height, data } = image
+  if (data.length !== width * height * 4) throw new Error('encodePng: data size does not match dimensions')
+  const idat = await zlibDeflate(filterScanlines(data, width, height, 4))
+  return assemble([ihdr(width, height, 8, 6), chunk('IDAT', idat)])
+}
+
+export interface IndexedImage {
+  width: number
+  height: number
+  /** One palette index per pixel, rows top to bottom. */
+  indices: Uint8Array
+  /** Straight RGBA palette entries (1–256). */
+  palette: [number, number, number, number][]
+}
+
+/** Smallest PNG bit depth that can address `count` palette entries. */
+export function indexedBitDepth(count: number): 1 | 2 | 4 | 8 {
+  return count <= 2 ? 1 : count <= 4 ? 2 : count <= 16 ? 4 : 8
+}
+
+/** Indexed-color PNG (color type 3) at the smallest bit depth; tRNS only when needed. */
+export async function encodeIndexedPng(image: IndexedImage): Promise<Uint8Array> {
+  const { width, height, indices, palette } = image
+  if (indices.length !== width * height) throw new Error('encodeIndexedPng: data size does not match dimensions')
+  if (palette.length === 0 || palette.length > 256) throw new Error('encodeIndexedPng: palette must have 1–256 entries')
+  const depth = indexedBitDepth(palette.length)
+  const perByte = 8 / depth
+  const stride = Math.ceil(width / perByte)
+
+  // Filter type 0 (None) on every row, as the PNG spec recommends for palette images.
+  const raw = new Uint8Array(height * (stride + 1))
+  for (let y = 0; y < height; y++) {
+    const row = y * (stride + 1) + 1
+    for (let x = 0; x < width; x++) {
+      const shift = 8 - depth * ((x % perByte) + 1)
+      raw[row + Math.floor(x / perByte)]! |= indices[y * width + x]! << shift
+    }
+  }
+
+  const plte = new Uint8Array(palette.length * 3)
+  palette.forEach(([r, g, b], i) => plte.set([r, g, b], i * 3))
+  const chunks = [ihdr(width, height, depth, 3), chunk('PLTE', plte)]
+  const lastTranslucent = palette.findLastIndex(([, , , a]) => a < 255)
+  if (lastTranslucent >= 0) {
+    chunks.push(chunk('tRNS', new Uint8Array(palette.slice(0, lastTranslucent + 1).map(([, , , a]) => a))))
+  }
+  chunks.push(chunk('IDAT', await zlibDeflate(raw)))
+  return assemble(chunks)
 }
