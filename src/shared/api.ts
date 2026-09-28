@@ -10,6 +10,14 @@ export interface OpenedFile {
   bytes: Uint8Array
 }
 
+/** A preset saved in the user's presets folder. */
+export interface PresetEntry {
+  /** Display name (from the file's "name" field). */
+  name: string
+  /** File name inside the presets folder, e.g. "PSX look.4fxpreset". */
+  file: string
+}
+
 export interface MainGpuInfo {
   platform: string
   arch: string
@@ -34,6 +42,8 @@ export type MenuCommand =
   | 'open'
   | 'export'
   | 'import-palette'
+  | 'presets'
+  | 'import-preset'
   | 'undo'
   | 'redo'
   | 'zoom-fit'
@@ -49,6 +59,12 @@ export interface FxApi {
   openImage(): Promise<OpenedFile | null>
   openFile(filters: FileFilter[]): Promise<OpenedFile | null>
   saveFile(defaultName: string, bytes: Uint8Array, filters: FileFilter[]): Promise<string | null>
+  /** Presets folder in the app's user-data directory (created on demand). */
+  listPresets(): Promise<PresetEntry[]>
+  readPreset(file: string): Promise<string>
+  writePreset(file: string, json: string): Promise<void>
+  deletePreset(file: string): Promise<void>
+  showPresetsFolder(): Promise<void>
   getGpuInfo(): Promise<MainGpuInfo>
   submitGpuReport(report: RendererGpuReport): void
   onMenuCommand(listener: (command: MenuCommand) => void): () => void
@@ -58,6 +74,11 @@ export const IPC = {
   openImage: 'image:open',
   openFile: 'file:open',
   saveFile: 'file:save',
+  presetsList: 'presets:list',
+  presetsRead: 'presets:read',
+  presetsWrite: 'presets:write',
+  presetsDelete: 'presets:delete',
+  presetsShow: 'presets:show',
   gpuInfo: 'gpu:info',
   gpuReport: 'gpu:report',
   menuCommand: 'menu:command'

@@ -90,8 +90,15 @@ export function startPaletteController(engine: Engine): () => void {
 
   return engine.onPlan((plan, sourceKey) => {
     const { palettes, paletteJobs, setPaletteJob } = useApp.getState()
+    const { stages } = useApp.getState()
     for (const palette of palettes) {
       if (!palette.generator?.auto) continue
+      // A stage's own palette only needs colors while that stage actually uses it.
+      if (palette.ownerUid) {
+        const owner = stages.find((s) => s.uid === palette.ownerUid)
+        const params = owner?.params as { mode?: string; paletteId?: string } | undefined
+        if (!owner?.enabled || params?.mode !== 'palette' || params.paletteId !== palette.id) continue
+      }
       const input = generatorInput(palette, plan, sourceKey)
       if ('blocked' in input) {
         const job = paletteJobs[palette.id]

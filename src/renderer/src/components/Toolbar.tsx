@@ -1,5 +1,6 @@
 import { openImage, redo, undo } from '@/actions'
 import { useApp } from '@/store'
+import { PresetsMenu } from './Presets'
 import { Button } from './ui/button'
 import { Led, Lcd } from './ui/retro'
 
@@ -29,6 +30,7 @@ export function Toolbar() {
       <Button onClick={() => setExportOpen(true)} disabled={!hasImage} title={`Export PNG (${mod}E)`}>
         Export…
       </Button>
+      <PresetsMenu />
 
       <Separator />
       <Button size="icon" onClick={undo} disabled={!canUndo} title={`Undo (${mod}Z)`}>

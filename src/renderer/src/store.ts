@@ -46,6 +46,11 @@ interface AppState extends Doc {
   message: Message | null
   diagnosticsOpen: boolean
   exportOpen: boolean
+  presetsOpen: boolean
+  /** Name of the last loaded or saved preset (suggested when saving). */
+  presetName: string | null
+  /** Bumped when the user's preset files change, so lists reload. */
+  presetsVersion: number
   /** Stage whose output the viewer shows (null = final output). */
   previewUid: string | null
   selectedPaletteId: string | null
@@ -70,6 +75,11 @@ interface AppState extends Doc {
   setMessage(message: Message | null): void
   setDiagnosticsOpen(open: boolean): void
   setExportOpen(open: boolean): void
+  setPresetsOpen(open: boolean): void
+  setPresetName(name: string | null): void
+  presetsChanged(): void
+  /** Replaces the whole document (e.g. loading a preset) as one undo step. */
+  loadDoc(doc: Doc): void
   setPreview(uid: string | null): void
   selectPalette(id: string | null): void
   setPaletteJob(id: string, job: PaletteJob | null): void
@@ -115,6 +125,9 @@ export const useApp = create<AppState>()((set, get) => ({
   message: null,
   diagnosticsOpen: false,
   exportOpen: false,
+  presetsOpen: false,
+  presetName: null,
+  presetsVersion: 0,
   previewUid: null,
   selectedPaletteId: doc0.palettes[0]!.id,
   paletteJobs: {},
@@ -161,6 +174,14 @@ export const useApp = create<AppState>()((set, get) => ({
   setMessage: (message) => set({ message }),
   setDiagnosticsOpen: (diagnosticsOpen) => set({ diagnosticsOpen }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
+  setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
+  setPresetName: (presetName) => set({ presetName }),
+  presetsChanged: () => set({ presetsVersion: get().presetsVersion + 1 }),
+  loadDoc: (doc) => {
+    get().edit(() => doc)
+    const firstStagePalette = doc.palettes.find((p) => p.ownerUid) ?? doc.palettes[0]
+    set({ previewUid: null, selectedPaletteId: firstStagePalette?.id ?? null })
+  },
   setPreview: (previewUid) => set({ previewUid }),
   selectPalette: (selectedPaletteId) => set({ selectedPaletteId }),
   setPaletteJob: (id, job) => {

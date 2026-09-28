@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
-import { IPC, type FileFilter, type MainGpuInfo, type RendererGpuReport } from '@shared/api'
+import { IPC, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport } from '@shared/api'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu } from './menu'
+import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
 const gpuFlags = applyGpuFlags()
@@ -60,6 +61,31 @@ function registerIpc(): void {
     if (result.canceled || !result.filePath) return null
     await writeFile(result.filePath, bytes)
     return result.filePath
+  })
+
+  ipcMain.handle(IPC.presetsList, async (): Promise<PresetEntry[]> => {
+    const dir = await presetsDir()
+    const files = (await readdir(dir)).filter((f) => f.toLowerCase().endsWith(PRESET_SUFFIX))
+    const entries = await Promise.all(
+      files.map(async (file) => {
+        let name = file.slice(0, -PRESET_SUFFIX.length)
+        try {
+          const parsed = JSON.parse(await readFile(join(dir, file), 'utf8')) as { name?: unknown }
+          if (typeof parsed.name === 'string' && parsed.name.trim()) name = parsed.name
+        } catch {
+          // Unreadable files still show up by file name; loading them reports the error.
+        }
+        return { name, file }
+      })
+    )
+    return entries.sort((a, b) => a.name.localeCompare(b.name))
+  })
+  ipcMain.handle(IPC.presetsRead, async (_e, file: string) => readFile(await presetPath(file), 'utf8'))
+  ipcMain.handle(IPC.presetsWrite, async (_e, file: string, json: string) => writeFile(await presetPath(file), json, 'utf8'))
+  ipcMain.handle(IPC.presetsDelete, async (_e, file: string) => rm(await presetPath(file), { force: true }))
+  ipcMain.handle(IPC.presetsShow, async () => {
+    const error = await shell.openPath(await presetsDir())
+    if (error) throw new Error(error)
   })
 
   ipcMain.handle(IPC.gpuInfo, getGpuInfo)

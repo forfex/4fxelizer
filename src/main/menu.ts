@@ -19,6 +19,9 @@ export function buildMenu(win: BrowserWindow, isDev: boolean): Menu {
         { type: 'separator' },
         { label: 'Import Palette…', click: send('import-palette') },
         { type: 'separator' },
+        { label: 'Presets…', accelerator: 'CmdOrCtrl+Shift+P', click: send('presets') },
+        { label: 'Import Preset…', click: send('import-preset') },
+        { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' }
       ]
     },

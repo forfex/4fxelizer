@@ -7,6 +7,7 @@ import { useApp } from '@/store'
 import { ExportDialog } from './components/ExportDialog'
 import { GpuDiagnostics } from './components/GpuDiagnostics'
 import { PalettePanel } from './components/PalettePanel'
+import { PresetsDialog } from './components/Presets'
 import { StackPanel } from './components/StackPanel'
 import { StatusBar } from './components/StatusBar'
 import { Toolbar } from './components/Toolbar'
@@ -82,6 +83,7 @@ export function App() {
       <StatusBar />
       <GpuDiagnostics />
       <ExportDialog />
+      <PresetsDialog />
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 border-2 border-dashed border-accent bg-accent/5" />
       )}
