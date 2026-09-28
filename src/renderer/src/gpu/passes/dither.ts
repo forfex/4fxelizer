@@ -29,7 +29,9 @@ export const DITHER_PATTERNS = [
   { id: 'sierra', label: 'Sierra', kind: 'diffusion', period: 0 },
   { id: 'sierra2', label: 'Sierra two-row', kind: 'diffusion', period: 0 },
   { id: 'sierra-lite', label: 'Sierra Lite', kind: 'diffusion', period: 0 },
-  { id: 'n64-magic', label: 'N64 magic square', kind: 'ordered', period: 4 }
+  { id: 'n64-magic', label: 'N64 magic square', kind: 'ordered', period: 4 },
+  { id: 'checker', label: 'Checker', kind: 'ordered', period: 2 },
+  { id: 'crosshatch', label: 'Crosshatch', kind: 'ordered', period: 8 }
 ] as const
 
 export type DitherPattern = (typeof DITHER_PATTERNS)[number]['id']
@@ -91,6 +93,13 @@ export interface DitherParams extends PaletteParams {
   maskGamma: number
   /** dither: alpha becomes 0/1 using the pattern (dithered cutout). */
   alpha: 'keep' | 'dither'
+  /** Error diffusion: every other row runs right to left (fewer diagonal "worms"). */
+  serpentine: boolean
+  /**
+   * Error diffusion: error leaving one edge re-enters on the opposite one, so the result tiles.
+   * Slower: rows run one at a time.
+   */
+  wrap: boolean
   /** Output the mask instead of the dithered image (viewer only, never stored). */
   showMask?: boolean
 }
@@ -112,7 +121,9 @@ export const DEFAULT_DITHER: DitherParams = {
   mask: 'none',
   maskStrength: 1,
   maskGamma: 1,
-  alpha: 'keep'
+  alpha: 'keep',
+  serpentine: false,
+  wrap: false
 }
 
 export function isDiffusion(pattern: DitherPattern): boolean {
@@ -126,11 +137,18 @@ export function ditherMixing(p: DitherParams): DitherMixing {
 
 /**
  * Pattern period in texels; ordered patterns tile seamlessly when this divides the texture size.
- * 0 = the pattern never repeats (noise, error diffusion).
+ * 0 = the pattern never repeats (noise, error diffusion; see `ditherTiles` for wrap-around).
  */
 export function ditherPeriod(p: DitherParams): number {
   const period = DITHER_PATTERNS.find((d) => d.id === p.pattern)?.period ?? 0
   return period * (isDiffusion(p.pattern) ? 1 : Math.max(1, Math.round(p.scale)))
+}
+
+/** Whether the dithered result tiles seamlessly on a texture of `size`. */
+export function ditherTiles(p: DitherParams, size: { width: number; height: number }): boolean {
+  if (isDiffusion(p.pattern)) return p.wrap
+  const period = ditherPeriod(p)
+  return period > 0 && size.width % period === 0 && size.height % period === 0
 }
 
 /**
@@ -156,6 +174,8 @@ export function diffusionKernel(pattern: DitherPattern): number[] {
 
 /** Ring of error rows kept in scratch; see `runRows`. Must exceed ROW_THREADS + 2. */
 const RING_ROWS = ROW_THREADS + 4
+/** Rows run before the real scan with wrap-around, so the top rows start with the bottom's error. */
+const WARMUP_ROWS = 32
 
 const index = <T extends { id: string }>(list: readonly T[], id: string): number =>
   Math.max(0, list.findIndex((d) => d.id === id))
@@ -168,11 +188,12 @@ struct Params {
   pattern: u32, mode: u32, metric: u32, levels: f32,
   strength: f32, scale: u32, mixing: u32, alphaMode: u32,
   saturation: f32, mask: u32, maskStrength: f32, maskGamma: f32,
-  knollCount: u32, showMask: u32, _pad0: u32, _pad1: u32,
+  knollCount: u32, showMask: u32, serpentine: u32, wrap: u32,
   k0: vec4f, k1: vec4f, k2: vec4f,
 }
 
 const RING_ROWS = ${RING_ROWS}u;
+const WARMUP_ROWS = ${WARMUP_ROWS}u;
 const TAU = 6.283185307;
 
 // Classic 4×4 clustered-dot matrix (dots grow from the center of each cell).
@@ -205,14 +226,34 @@ fn spotValue(kind: u32, q: vec2u, n: u32) -> f32 {
   return -cos(TAU * c.x / f32(n)) * cos(TAU * c.y / f32(n));
 }
 
+/**
+ * Crosshatch spot values: diagonal lines turn on first (one direction, then the other), then
+ * lines between them, then the rest in Bayer order.
+ */
+fn hatchValue(q: vec2u) -> f32 {
+  let d1 = (q.x + 8u - q.y) % 8u;
+  let d2 = (q.x + q.y) % 8u;
+  var layer = 4.0;
+  if (d1 == 0u) { layer = 0.0; }
+  else if (d2 == 0u) { layer = 1.0; }
+  else if (d1 == 4u) { layer = 2.0; }
+  else if (d2 == 4u) { layer = 3.0; }
+  return layer + bayer(q, 8u);
+}
+
+fn spot(kind: u32, q: vec2u, n: u32) -> f32 {
+  if (kind == 2u) { return hatchValue(q); }
+  return spotValue(kind, q, n);
+}
+
 /** Rank of the cell within its n×n tile by spot value, as an evenly distributed threshold. */
 fn rankThreshold(p: vec2u, kind: u32, n: u32) -> f32 {
   let q = p % n;
-  let v = spotValue(kind, q, n);
+  let v = spot(kind, q, n);
   let qi = q.y * n + q.x;
   var rank = 0u;
   for (var j = 0u; j < n * n; j++) {
-    let o = spotValue(kind, vec2u(j % n, j / n), n);
+    let o = spot(kind, vec2u(j % n, j / n), n);
     if (o < v || (o == v && j < qi)) { rank++; }
   }
   return (f32(rank) + 0.5) / f32(n * n);
@@ -234,6 +275,8 @@ fn threshold(p: vec2u) -> f32 {
     case 11u: { return (LINE4[q.x % 4u] + 0.5) / 4.0; }
     case 12u: { return (LINE4[(q.x + q.y) % 4u] + 0.5) / 4.0; }
     case 21u: { return (f32(MAGIC4[(q.y % 4u) * 4u + q.x % 4u]) + 0.5) / 8.0; }
+    case 22u: { return select(0.25, 0.75, ((q.x + q.y) & 1u) == 1u); }
+    case 23u: { return rankThreshold(q, 2u, 8u); }
     default: { return blueNoise(q); }
   }
 }
@@ -348,11 +391,19 @@ fn run(p: vec2u, size: vec2u) -> vec4f {
 }
 
 // ── Error diffusion ─────────────────────────────────────────────────────────
-// One workgroup; thread t handles rows t, t + ROW_THREADS, … Row r processes column k - lag·r at
-// step k, so every row stays at least \`lag\` (>= 3) columns behind the row above and all error it
-// receives has already been written. Errors for the next row and the one after go to two ring
-// buffers in \`scratch\`; each cell has exactly one writer (the row above, or two above) and is
-// cleared by the row that reads it. Errors along the row itself stay in registers.
+// Parallel scan: one workgroup; thread t handles rows t, t + ROW_THREADS, … Row r processes column
+// k - lag·r at step k, so every row stays at least \`lag\` (>= 3) columns behind the row above and
+// all error it receives has already been written. Errors for the next row and the one after go to
+// two ring buffers in \`scratch\`; each cell has exactly one writer (the row above, or two above)
+// and is cleared by the row that reads it. Errors along the row itself stay in registers.
+//
+// Serpentine rows (every other row right to left) and wrap-around need the whole row above to be
+// done first, so they run row by row on one thread. Wrap-around first runs the last rows once as a
+// warm-up, so their error flows into the top rows as if the texture repeated; errors that leave a
+// side re-enter on the other.
+
+var<private> carryCur: vec3f; // error waiting for the next pixel in scan order
+var<private> carryNxt: vec3f; // … and for the one after
 
 fn snapColor(v: vec3f) -> vec3f {
   if (params.mode == 1u) {
@@ -367,50 +418,90 @@ fn ringIndex(buffer: u32, x: u32, row: u32, width: u32, rows: u32) -> u32 {
   return (buffer * rows + row % rows) * width + x;
 }
 
-/** Adds error e with weights for columns x-2…x+2 of \`row\` into ring buffer \`buffer\`. */
-fn spread(buffer: u32, x: u32, row: u32, size: vec2u, rows: u32, e: vec3f, w: array<f32, 5>) {
-  if (row >= size.y) { return; }
+/** Adds error e to column \`col\` of \`row\` in ring buffer \`buffer\` (wrapped or dropped at the edges). */
+fn addError(buffer: u32, col: i32, row: u32, size: vec2u, rows: u32, e: vec3f) {
+  var c = col;
+  var r = row;
+  if (params.wrap == 1u) {
+    c = (c % i32(size.x) + i32(size.x)) % i32(size.x);
+    r = r % size.y;
+  } else if (r >= size.y || c < 0 || c >= i32(size.x)) {
+    return;
+  }
+  let j = ringIndex(buffer, u32(c), r, size.x, rows);
+  scratch[j] = scratch[j] + vec4f(e, 0.0);
+}
+
+/** Spreads error e over columns x-2…x+2 (mirrored when dir < 0) of \`row\`. */
+fn spread(buffer: u32, x: u32, row: u32, size: vec2u, rows: u32, e: vec3f, w: array<f32, 5>, dir: i32) {
   for (var i = 0u; i < 5u; i++) {
-    let col = i32(x) + i32(i) - 2;
-    if (w[i] == 0.0 || col < 0 || col >= i32(size.x)) { continue; }
-    let j = ringIndex(buffer, u32(col), row, size.x, rows);
-    scratch[j] = scratch[j] + vec4f(e * w[i], 0.0);
+    if (w[i] == 0.0) { continue; }
+    addError(buffer, i32(x) + (i32(i) - 2) * dir, row, size, rows, e * w[i]);
+  }
+}
+
+/** Dithers one pixel of an error diffusion scan in direction dir; writes it when \`write\`. */
+fn diffusePixel(p: vec2u, size: vec2u, rows: u32, dir: i32, write: bool) {
+  let c = textureLoad(src, p, 0);
+  let a0 = ringIndex(0u, p.x, p.y, size.x, rows);
+  let a1 = ringIndex(1u, p.x, p.y, size.x, rows);
+  let value = clamp(c.rgb + carryCur + scratch[a0].rgb + scratch[a1].rgb, vec3f(0.0), vec3f(1.0));
+  scratch[a0] = vec4f(0.0);
+  scratch[a1] = vec4f(0.0);
+  let out = snapColor(value);
+
+  var e = (value - out) * params.strength * maskWeight(p, size) * select(0.0, 1.0, c.a > 0.0);
+  let el = luma(e);
+  e = vec3f(el) + (e - vec3f(el)) * clamp(params.saturation, 0.0, 1.0);
+  carryCur = carryNxt + e * params.k0.x;
+  carryNxt = e * params.k0.y;
+  spread(0u, p.x, p.y + 1u, size, rows, e, array<f32, 5>(params.k0.z, params.k0.w, params.k1.x, params.k1.y, params.k1.z), dir);
+  spread(1u, p.x, p.y + 2u, size, rows, e, array<f32, 5>(params.k1.w, params.k2.x, params.k2.y, params.k2.z, params.k2.w), dir);
+
+  if (write) {
+    var alpha = c.a;
+    if (params.alphaMode == 1u) { alpha = select(0.0, 1.0, alpha > 1.0 - blueNoise(p)); }
+    emit(p, size, vec4f(out, alpha));
+  }
+}
+
+/** Rows run one after another (serpentine, wrap-around). */
+fn runSequential(size: vec2u, rows: u32) {
+  let warm = select(0u, min(size.y, WARMUP_ROWS), params.wrap == 1u);
+  for (var i = 0u; i < warm + size.y; i++) {
+    let r = select(i - warm, size.y - warm + i, i < warm);
+    let reverse = params.serpentine == 1u && (r & 1u) == 1u;
+    let dir = select(1, -1, reverse);
+    carryCur = vec3f(0.0);
+    carryNxt = vec3f(0.0);
+    for (var k = 0u; k < size.x; k++) {
+      diffusePixel(vec2u(select(k, size.x - 1u - k, reverse), r), size, rows, dir, i >= warm);
+    }
+    if (params.wrap == 1u) {
+      // Error pushed past the end of the row continues on the next row, wrapped to the other side.
+      let end = i32(select(size.x - 1u, 0u, reverse));
+      addError(0u, end + dir, r + 1u, size, rows, carryCur);
+      addError(0u, end + 2 * dir, r + 1u, size, rows, carryNxt);
+    }
   }
 }
 
 fn runRows(thread: u32, size: vec2u) {
-  let lag = max(3u, (size.x + ROW_THREADS - 1u) / ROW_THREADS);
   let rows = min(size.y, RING_ROWS);
+  if (params.serpentine == 1u || params.wrap == 1u) {
+    if (thread == 0u) { runSequential(size, rows); }
+    return;
+  }
+  let lag = max(3u, (size.x + ROW_THREADS - 1u) / ROW_THREADS);
   let steps = size.x + lag * (size.y - 1u);
-  var cur = vec3f(0.0); // error waiting for the current column
-  var nxt = vec3f(0.0); // … and for the next one
   for (var k = 0u; k < steps; k++) {
     let started = k / lag;
     if (started >= thread) {
       let r = thread + ROW_THREADS * ((started - thread) / ROW_THREADS);
       let x = k - lag * r;
       if (r < size.y && x < size.x) {
-        if (x == 0u) { cur = vec3f(0.0); nxt = vec3f(0.0); }
-        let p = vec2u(x, r);
-        let c = textureLoad(src, p, 0);
-        let a0 = ringIndex(0u, x, r, size.x, rows);
-        let a1 = ringIndex(1u, x, r, size.x, rows);
-        let value = clamp(c.rgb + cur + scratch[a0].rgb + scratch[a1].rgb, vec3f(0.0), vec3f(1.0));
-        scratch[a0] = vec4f(0.0);
-        scratch[a1] = vec4f(0.0);
-        let out = snapColor(value);
-
-        var e = (value - out) * params.strength * maskWeight(p, size) * select(0.0, 1.0, c.a > 0.0);
-        let el = luma(e);
-        e = vec3f(el) + (e - vec3f(el)) * clamp(params.saturation, 0.0, 1.0);
-        cur = nxt + e * params.k0.x;
-        nxt = e * params.k0.y;
-        spread(0u, x, r + 1u, size, rows, e, array<f32, 5>(params.k0.z, params.k0.w, params.k1.x, params.k1.y, params.k1.z));
-        spread(1u, x, r + 2u, size, rows, e, array<f32, 5>(params.k1.w, params.k2.x, params.k2.y, params.k2.z, params.k2.w));
-
-        var alpha = c.a;
-        if (params.alphaMode == 1u) { alpha = select(0.0, 1.0, alpha > 1.0 - blueNoise(p)); }
-        emit(p, size, vec4f(out, alpha));
+        if (x == 0u) { carryCur = vec3f(0.0); carryNxt = vec3f(0.0); }
+        diffusePixel(vec2u(x, r), size, rows, 1, true);
       }
     }
     storageBarrier();
@@ -435,8 +526,8 @@ fn runRows(thread: u32, size: vec2u) {
       ['f', p.maskGamma],
       ['u', Math.round(p.knollCount)],
       ['u', p.showMask ? 1 : 0],
-      ['u', 0],
-      ['u', 0],
+      ['u', p.serpentine ? 1 : 0],
+      ['u', p.wrap ? 1 : 0],
       ...k.map((w): ['f', number] => ['f', w])
     )
   },

@@ -2,7 +2,7 @@
 
 import type { Size } from '@/gpu/pass'
 import type { StageSpec } from '@/gpu/plan'
-import { DITHER_PATTERNS, ditherPeriod, type DitherParams } from '@/gpu/passes/dither'
+import { DITHER_PATTERNS, ditherPeriod, ditherTiles, isDiffusion, type DitherParams } from '@/gpu/passes/dither'
 import { downscaleSize, type DownscaleParams } from '@/gpu/passes/downscale'
 import { upscaleSize, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
@@ -97,10 +97,14 @@ export function analyzeStack(
           warnings.push('"Pattern only" adds the pattern without reducing colors. Add a Quantize after it.')
         }
         const period = ditherPeriod(p)
-        if (period === 0) {
-          const name = DITHER_PATTERNS.find((d) => d.id === p.pattern)?.label ?? p.pattern
+        const name = DITHER_PATTERNS.find((d) => d.id === p.pattern)?.label ?? p.pattern
+        if (ditherTiles(p, input)) {
+          // Tiles seamlessly: nothing to warn about.
+        } else if (isDiffusion(p.pattern)) {
+          warnings.push(`${name} won't tile seamlessly. Turn on "Wrap around" for tiling textures.`)
+        } else if (period === 0) {
           warnings.push(`${name} doesn't repeat, so the texture won't tile seamlessly. Use an ordered pattern for tiling textures.`)
-        } else if (source && (input.width % period !== 0 || input.height % period !== 0)) {
+        } else if (source) {
           warnings.push(`The ${period}px pattern doesn't divide ${input.width}×${input.height}, so the texture won't tile seamlessly.`)
         }
       }

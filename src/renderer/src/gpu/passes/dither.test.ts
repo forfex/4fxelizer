@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DITHER, DITHER_PATTERNS, diffusionKernel, dither, ditherMixing, ditherPeriod, isDiffusion } from './dither'
+import { DEFAULT_DITHER, DITHER_PATTERNS, diffusionKernel, dither, ditherMixing, ditherPeriod, ditherTiles, isDiffusion } from './dither'
 
 describe('dither', () => {
   it('keeps the original patterns at their shader indices', () => {
@@ -27,8 +27,19 @@ describe('dither', () => {
     expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'bayer8', scale: 2 })).toBe(16)
     expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'white-noise' })).toBe(0)
     expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'atkinson', scale: 3 })).toBe(0)
+    expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'checker' })).toBe(2)
+    expect(ditherPeriod({ ...DEFAULT_DITHER, pattern: 'crosshatch', scale: 2 })).toBe(16)
     expect(ditherMixing({ ...DEFAULT_DITHER, twoNearest: true })).toBe('two-nearest')
     expect(ditherMixing({ ...DEFAULT_DITHER, twoNearest: true, mixing: 'knoll' })).toBe('knoll')
+  })
+
+  it('tiles: ordered when the period divides the size, diffusion only with wrap-around', () => {
+    const size = { width: 72, height: 64 }
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'bayer8' }, size)).toBe(true)
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'bayer16' }, size)).toBe(false)
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'ign' }, size)).toBe(false)
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'jarvis' }, size)).toBe(false)
+    expect(ditherTiles({ ...DEFAULT_DITHER, pattern: 'jarvis', wrap: true }, { width: 7, height: 5 })).toBe(true)
   })
 
   it('packs params to match the WGSL struct (16 scalars + 3 vec4f)', () => {

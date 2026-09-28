@@ -74,7 +74,11 @@ describe('analyzeStack', () => {
     const w = warningsOf([stage('dither', { pattern: 'bayer8' })], noLock, { width: 100, height: 100 })
     expect(w[0]!.some((m) => /won't tile/.test(m))).toBe(true)
     const fs = warningsOf([stage('dither', { pattern: 'floyd-steinberg' })], noLock, { width: 64, height: 64 })
-    expect(fs[0]!.some((m) => /Floyd–Steinberg doesn't repeat/.test(m))).toBe(true)
+    expect(fs[0]!.some((m) => /Floyd–Steinberg won't tile.*Wrap around/.test(m))).toBe(true)
+    const wrapped = warningsOf([stage('dither', { pattern: 'floyd-steinberg', wrap: true })], noLock, { width: 63, height: 17 })
+    expect(wrapped[0]!.some((m) => /tile/.test(m))).toBe(false)
+    const noise = warningsOf([stage('dither', { pattern: 'white-noise' })], noLock, { width: 64, height: 64 })
+    expect(noise[0]!.some((m) => /doesn't repeat/.test(m))).toBe(true)
   })
 
   it('ignores disabled stages', () => {

@@ -388,7 +388,7 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
         label="Algorithm"
         hint={
           diffusion
-            ? 'Error diffusion spreads each pixel\'s rounding error to its neighbors: smooth, organic, but it does not tile.'
+            ? 'Error diffusion spreads each pixel\'s rounding error to its neighbors: smooth and organic. Turn on Wrap around for tiling textures.'
             : 'Ordered patterns compare each pixel with a repeating threshold pattern: crisp, retro, tileable.'
         }
       >
@@ -438,6 +438,22 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
           step={0.01}
           onChange={(saturation) => set({ saturation })}
         />
+      )}
+      {diffusion && (
+        <Field label="Scan">
+          <Checkbox
+            checked={p.serpentine}
+            onCheckedChange={(serpentine) => set({ serpentine })}
+            label="Serpentine"
+            hint="Every other row runs right to left, which breaks up the diagonal streaks error diffusion leaves."
+          />
+          <Checkbox
+            checked={p.wrap}
+            onCheckedChange={(wrap) => set({ wrap })}
+            label="Wrap around"
+            hint="Error leaving one edge comes back in on the opposite edge, so the result tiles seamlessly. Slower on large images."
+          />
+        </Field>
       )}
       {!diffusion && (
         <ParamSlider label="Pattern scale" hint="Pixels per pattern cell." value={p.scale} min={1} max={8} ticks={8} onChange={(scale) => set({ scale })} suffix="×" />
