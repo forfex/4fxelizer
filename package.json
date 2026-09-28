@@ -5,6 +5,7 @@
   "description": "PSX-style texture stylizer",
   "private": true,
   "author": "4FX",
+  "license": "MIT",
   "homepage": "https://github.com/forfex/4fxelizer",
   "repository": {
     "type": "git",

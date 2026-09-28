@@ -153,3 +153,13 @@ src/renderer/src/
 
 The landing page lives in `site/` and is deployed to GitHub Pages by `.github/workflows/pages.yml` on pushes to
 `master` that touch it. One-time setup: **Settings › Pages › Source: GitHub Actions**.
+
+## License
+
+4FXELIZER is released under the [MIT License](LICENSE). It bundles open-source libraries (React, Radix UI, zustand
+and a few small helpers, all MIT, ISC, Apache-2.0 or 0BSD) and runs on Electron; their notices are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and installers include the Electron and Chromium licenses.
+The app ships no third-party fonts, images or textures.
+
+PlayStation, PSX, Nintendo 64, NES and Game Boy are trademarks of their respective owners. They are used here only to
+describe the look and limits this tool imitates; 4FXELIZER is not affiliated with or endorsed by them.
