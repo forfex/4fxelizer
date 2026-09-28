@@ -1,5 +1,6 @@
 // Generates the app icon: a 4x4 Bayer threshold matrix drawn as bevelled cells.
-// Usage: node scripts/make-icon.mjs   (writes build/icon.png, build/icon.ico, site/icon.svg, site/favicon.png)
+// Usage: node scripts/make-icon.mjs   (writes build/icon.png, build/icon.ico, site/icon.svg, site/favicon.png,
+// src/renderer/src/assets/icon.svg for the title bar)
 import { deflateSync } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
@@ -147,4 +148,6 @@ writeFileSync('build/icon.png', png(1024))
 writeFileSync('build/icon.ico', ico([16, 32, 48, 64, 128, 256]))
 writeFileSync('site/favicon.png', png(64))
 writeFileSync('site/icon.svg', svg())
+mkdirSync('src/renderer/src/assets', { recursive: true })
+writeFileSync('src/renderer/src/assets/icon.svg', svg())
 console.log('icons written')
