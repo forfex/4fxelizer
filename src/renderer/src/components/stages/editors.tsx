@@ -14,6 +14,7 @@ import {
 } from '@/gpu/passes/dither'
 import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
+import { MAX_UPSCALE_FACTOR, UPSCALE_METHODS, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { StageSpec } from '@/gpu/plan'
 import { MAX_PALETTE, type GeneratorSettings, type Palette } from '@/palette/palette'
 import type { StageInfo } from '@/stack/analyze'
@@ -248,6 +249,51 @@ function DownscaleEditor({ params: p, set, info }: EditorProps<DownscaleParams>)
   )
 }
 
+function UpscaleEditor({ params: p, set, info }: EditorProps<UpscaleParams>) {
+  const method = UPSCALE_METHODS.find((m) => m.id === p.method)
+  return (
+    <>
+      <Field label="Filter" hint={method?.hint}>
+        <Select
+          className="flex-1"
+          value={p.method}
+          onValueChange={(m) => set({ method: m })}
+          options={UPSCALE_METHODS.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
+        />
+      </Field>
+      <Field label="Size">
+        <Segmented
+          className="flex-1"
+          value={p.sizeMode}
+          onChange={(sizeMode) => set({ sizeMode })}
+          options={[
+            { value: 'factor', label: 'Factor', hint: 'Multiply the input size.' },
+            { value: 'source', label: 'Original', hint: 'Back to the size of the loaded image.' }
+          ]}
+        />
+      </Field>
+      {p.sizeMode === 'factor' && (
+        <ParamSlider label="" value={p.factor} min={2} max={MAX_UPSCALE_FACTOR} onChange={(factor) => set({ factor })} suffix="×" />
+      )}
+      <Field label="">
+        <Checkbox
+          checked={p.wrap}
+          onCheckedChange={(wrap) => set({ wrap })}
+          label="Wrap edges (tiling)"
+          hint="Blend across the edges as if the texture repeats, so tiling textures have no seams."
+        />
+      </Field>
+      {info && info.input.width > 0 && (
+        <Field label="Result" hint="Input → output size">
+          <span className="font-mono text-small">
+            {info.input.width}×{info.input.height} → {info.output.width}×{info.output.height}
+          </span>
+        </Field>
+      )}
+    </>
+  )
+}
+
 function LevelsSlider({ value, onChange }: { value: number; onChange(v: number): void }) {
   const bits = Math.log2(value)
   return (
@@ -323,7 +369,9 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
     set(patch)
   }
 
-  const patterns = DITHER_PATTERNS.filter((d) => p.mode !== 'pattern' || d.kind === 'ordered').map((d) => ({
+  // Ordered patterns first (list order is the shader index, so newer ordered ones come after diffusion).
+  const sorted = [...DITHER_PATTERNS].sort((a, b) => Number(a.kind === 'diffusion') - Number(b.kind === 'diffusion'))
+  const patterns = sorted.filter((d) => p.mode !== 'pattern' || d.kind === 'ordered').map((d) => ({
     value: d.id,
     label: d.label,
     group: d.kind === 'ordered' ? 'Ordered (tiles)' : 'Error diffusion'
@@ -458,6 +506,7 @@ function DitherEditor({ stage, params: p, set }: EditorProps<DitherParams>) {
 const EDITORS: Record<string, (props: EditorProps<never>) => React.JSX.Element> = {
   adjust: AdjustEditor as never,
   downscale: DownscaleEditor as never,
+  upscale: UpscaleEditor as never,
   quantize: QuantizeEditor as never,
   dither: DitherEditor as never
 }

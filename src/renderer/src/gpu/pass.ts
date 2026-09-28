@@ -42,6 +42,12 @@ export interface PassResources {
   palette?: string | null
 }
 
+/** Stack-wide facts a pass may need beyond its own input. */
+export interface PassContext {
+  /** Size of the loaded source image. */
+  source: Size
+}
+
 export interface PassDef<P = unknown> {
   id: string
   label: string
@@ -61,8 +67,8 @@ export interface PassDef<P = unknown> {
   wgsl: string
   /** Packs params into uniform data laid out like `struct Params` (16-byte aligned). */
   pack?(params: P): ArrayBuffer | Float32Array
-  /** Output size; defaults to the input size. */
-  outputSize?(input: Size, params: P): Size
+  /** Output size; defaults to the input size. `ctx.source` is the original image size. */
+  outputSize?(input: Size, params: P, ctx?: PassContext): Size
   /** Project resources the pass reads. */
   resources?(params: P): PassResources
   /** True to run `runRows` (a single workgroup) instead of `run` per texel. */

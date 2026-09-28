@@ -4,6 +4,7 @@ import type { Size } from '@/gpu/pass'
 import type { StageSpec } from '@/gpu/plan'
 import { DITHER_PATTERNS, ditherPeriod, type DitherParams } from '@/gpu/passes/dither'
 import { downscaleSize, type DownscaleParams } from '@/gpu/passes/downscale'
+import { upscaleSize, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
 import { stageLabel } from '@/gpu/passes'
 import type { Palette } from '@/palette/palette'
@@ -38,6 +39,7 @@ export function makesNewColors(s: StageSpec): boolean {
   if (!isFullStrength(s)) return true
   if (s.passId === 'adjust') return true
   if (s.passId === 'downscale') return !['nearest', 'median'].includes((s.params as DownscaleParams).method)
+  if (s.passId === 'upscale') return (s.params as UpscaleParams).method !== 'nearest'
   if (s.passId === 'dither') return (s.params as DitherParams).mode === 'pattern'
   return false
 }
@@ -69,6 +71,7 @@ export function analyzeStack(
     const input = size
     let output = size
     if (s.enabled && s.passId === 'downscale' && source) output = downscaleSize(input, s.params as DownscaleParams)
+    if (s.enabled && s.passId === 'upscale' && source) output = upscaleSize(input, s.params as UpscaleParams, source)
 
     if (s.enabled) {
       const ref = paletteRef(s)

@@ -109,7 +109,7 @@ export class Engine {
     const input = planned && this.textureForKey(planned.inputKey)
     if (planned && def && input) {
       const params = { ...(planned.stage.params as object), showMask: true }
-      const size = def.outputSize?.(input, params) ?? input
+      const size = def.outputSize?.(input, params, { source: this.source!.texture }) ?? input
       const texture = this.gpu.device.createTexture({
         label: 'mask view',
         size: [Math.max(1, size.width), Math.max(1, size.height)],

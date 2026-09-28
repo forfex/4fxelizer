@@ -58,7 +58,7 @@ export class PassChain {
       const { stage } = planned
       const def = this.def(stage)
       const input = textureFor(planned.inputKey)
-      const size = def.outputSize?.(input, stage.params) ?? { width: input.width, height: input.height }
+      const size = def.outputSize?.(input, stage.params, { source: source.texture }) ?? { width: input.width, height: input.height }
       const texture = this.device.createTexture({
         label: `${def.id} output`,
         size: [Math.max(1, size.width), Math.max(1, size.height)],
