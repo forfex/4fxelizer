@@ -5,12 +5,16 @@
 // So changing a setting re-runs only that stage and those after it, and reordering
 // re-runs from the first stage whose upstream changed — with no explicit invalidation.
 
+import type { StageBlend } from './pass'
+
 export interface StageSpec {
   /** Stable identity of this stage instance in the stack (survives reordering). */
   uid: string
   passId: string
   params: unknown
   enabled: boolean
+  /** How the stage's result is blended over its input (opacity + mode). */
+  blend: StageBlend
 }
 
 export interface PlannedStage {
@@ -55,7 +59,16 @@ export function hashString(str: string, seed = 0): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
 }
 
-export function planChain(sourceKey: string, stages: StageSpec[], isCached: (key: string) => boolean): ChainPlan {
+/**
+ * @param depsKey  Signature of the project resources a stage reads (e.g. its palette's colors),
+ *                 so editing a resource re-runs the stages that use it.
+ */
+export function planChain(
+  sourceKey: string,
+  stages: StageSpec[],
+  isCached: (key: string) => boolean,
+  depsKey: (stage: StageSpec) => string = () => ''
+): ChainPlan {
   const planned: PlannedStage[] = []
   const liveKeys = new Set<string>([sourceKey])
   let key = sourceKey
@@ -65,7 +78,9 @@ export function planChain(sourceKey: string, stages: StageSpec[], isCached: (key
       planned.push({ stage, inputKey: key, outputKey: key, run: false })
       continue
     }
-    const outputKey = hashString(`${key}>${stage.passId}:${stableStringify(stage.params)}`)
+    const outputKey = hashString(
+      `${key}>${stage.passId}:${stableStringify(stage.params)}|${stableStringify(stage.blend)}|${depsKey(stage)}`
+    )
     // A cached entry under this key was produced from identical inputs, so it's valid
     // even if an upstream stage re-runs (it would produce the same input again).
     planned.push({ stage, inputKey: key, outputKey, run: !isCached(outputKey) })

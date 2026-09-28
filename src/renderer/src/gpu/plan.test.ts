@@ -5,7 +5,8 @@ const stage = (uid: string, params: unknown = {}, enabled = true): StageSpec => 
   uid,
   passId: `pass-${uid}`,
   params,
-  enabled
+  enabled,
+  blend: { opacity: 1, mode: 'normal' }
 })
 
 /** Plans, then "runs" by caching every output key — like the GPU chain does. */
@@ -64,5 +65,25 @@ describe('planChain', () => {
     const p1 = planChain('src', [stage('a', { x: 1, y: 2 })], () => false)
     const p2 = planChain('src', [stage('a', { y: 2, x: 1 })], () => false)
     expect(p1.outputKey).toBe(p2.outputKey)
+  })
+
+  it('re-runs a stage when its blend changes', () => {
+    const run = runner()
+    run([stage('a'), stage('b')])
+    expect(run([stage('a'), { ...stage('b'), blend: { opacity: 0.5, mode: 'normal' } }])).toEqual(['b'])
+  })
+
+  it('re-runs a stage and its successors when a resource it reads changes', () => {
+    const cache = new Set<string>()
+    const plan = (palette: string) => {
+      const p = planChain('src', [stage('a'), stage('q'), stage('c')], (k) => cache.has(k), (s) =>
+        s.uid === 'q' ? palette : ''
+      )
+      for (const s of p.stages) if (s.run) cache.add(s.outputKey)
+      return p.stages.filter((s) => s.run).map((s) => s.stage.uid)
+    }
+    expect(plan('#000,#fff')).toEqual(['a', 'q', 'c'])
+    expect(plan('#000,#fff')).toEqual([])
+    expect(plan('#000,#f00')).toEqual(['q', 'c'])
   })
 })
