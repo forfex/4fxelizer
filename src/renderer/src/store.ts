@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { MapChannel, MapSlot } from '@shared/maps'
 import type { StageSpec } from '@/gpu/plan'
 import type { Palette } from '@/palette/palette'
 import * as docOps from '@/stack/doc'
@@ -21,6 +22,19 @@ export interface ImageInfo {
   height: number
   /** Bumped on every load, so effects re-run even for same-named files. */
   version: number
+}
+
+/** An imported map (AO, cavity, …); its pixels live on the GPU (engine). */
+export interface MapInfo {
+  name: string
+  width: number
+  height: number
+  /** Which part of the image is the mask (packed maps such as ORM use one channel each). */
+  channel: MapChannel
+  /** Changes with every load, so cached stages reading the map re-run. */
+  version: number
+  /** Small preview (data URL). */
+  thumbnail: string | null
 }
 
 export type GpuState =
@@ -74,6 +88,8 @@ interface AppState extends Doc {
   picking: boolean
   /** Auto/manual palette generation status by palette id (absent = idle). */
   paletteJobs: Record<string, PaletteJob>
+  /** Imported maps by slot. They belong to the loaded texture, not to the (undoable) document. */
+  maps: Partial<Record<MapSlot, MapInfo>>
 
   past: Doc[]
   future: Doc[]
@@ -105,6 +121,9 @@ interface AppState extends Doc {
   selectColor(selection: { paletteId: string; index: number } | null): void
   setPicking(picking: boolean): void
   setPaletteJob(id: string, job: PaletteJob | null): void
+  setMap(slot: MapSlot, map: MapInfo | null): void
+  setMapChannel(slot: MapSlot, channel: MapChannel): void
+  clearMaps(): void
 
   /**
    * Applies an undoable change. `coalesce` merges rapid edits with the same key into one step;
@@ -160,6 +179,7 @@ export const useApp = create<AppState>()((set, get) => ({
   selectedColor: null,
   picking: false,
   paletteJobs: {},
+  maps: {},
   past: [],
   future: [],
   lastEdit: null,
@@ -236,6 +256,18 @@ export const useApp = create<AppState>()((set, get) => ({
     else delete jobs[id]
     set({ paletteJobs: jobs })
   },
+
+  setMap: (slot, map) => {
+    const maps = { ...get().maps }
+    if (map) maps[slot] = map
+    else delete maps[slot]
+    set({ maps })
+  },
+  setMapChannel: (slot, channel) => {
+    const map = get().maps[slot]
+    if (map) set({ maps: { ...get().maps, [slot]: { ...map, channel } } })
+  },
+  clearMaps: () => set({ maps: {} }),
 
   edit: (change, opts = {}) => {
     const s = get()

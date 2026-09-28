@@ -85,6 +85,15 @@ describe('analyzeStack', () => {
     expect(outside[0]!.some((m) => /Atkinson won't tile/.test(m))).toBe(true)
   })
 
+  it('warns when a mask reads a map that is not loaded', () => {
+    const stages = [stage('dither', { mask: 'map-ao', mask2: 'map-cavity' })]
+    const w = (maps?: Set<string>): string[] => analyzeStack({ width: 64, height: 64 }, stages, [palette], noLock, maps).get(stages[0]!.uid)!.warnings
+    expect(w().some((m) => /map is loaded/.test(m))).toBe(false)
+    expect(w(new Set(['ao'])).filter((m) => /map is loaded/.test(m))).toEqual([
+      'No Cavity map is loaded, so the mask ignores it. Load one in the Maps panel.'
+    ])
+  })
+
   it('ignores disabled stages', () => {
     expect(warningsOf([stage('quantize'), stage('adjust', {}, { enabled: false })])[1]).toEqual([])
   })

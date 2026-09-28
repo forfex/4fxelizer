@@ -14,7 +14,7 @@ import {
   type DitherParams,
   type DitherPattern
 } from '@/gpu/passes/dither'
-import { MASK_COMBINE, MAX_MASK_BLUR } from '@/gpu/mask'
+import { MASK_COMBINE, maskMapSlot, MAX_MASK_BLUR } from '@/gpu/mask'
 import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
 import { MAX_UPSCALE_FACTOR, UPSCALE_METHODS, type UpscaleParams } from '@/gpu/passes/upscale'
@@ -508,7 +508,12 @@ function MaskSourceField({
   none: string
   children?: React.ReactNode
 }) {
-  const options = MASK_OPTIONS.map((o) => (o.value === 'none' ? { ...o, label: none } : o))
+  const maps = useApp((s) => s.maps)
+  const options = MASK_OPTIONS.map((o) => {
+    if (o.value === 'none') return { ...o, label: none }
+    const slot = maskMapSlot(o.value)
+    return slot && !maps[slot] ? { ...o, label: `${o.label} (not loaded)` } : o
+  })
   return (
     <Field label={label} hint={DITHER_MASKS.find((m) => m.id === value)?.hint ?? hint}>
       <Select className="min-w-0 flex-1" value={value} onValueChange={onChange} options={options} />

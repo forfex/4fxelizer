@@ -45,7 +45,7 @@ export function Viewer() {
     // Processing happens inside the frame, so dragging a slider runs the stack at most once per frame.
     const frame = (): void => {
       const s = useApp.getState()
-      const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid]
+      const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid, s.maps]
       if (s.image && (!processed || inputs.some((v, i) => v !== processed![i]))) {
         processed = inputs
         try {
@@ -54,7 +54,8 @@ export function Viewer() {
             palettes: s.palettes,
             outputLock: s.outputLock,
             previewUid: s.previewUid,
-            maskUid: s.maskUid
+            maskUid: s.maskUid,
+            mapChannels: Object.fromEntries(Object.entries(s.maps).map(([slot, map]) => [slot, map.channel]))
           })
         } catch (e) {
           s.setMessage({ kind: 'error', text: `Processing failed: ${(e as Error).message}` })

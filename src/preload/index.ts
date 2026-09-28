@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC, type FxApi, type MenuCommand } from '@shared/api'
 
 const api: FxApi = {
@@ -9,6 +9,8 @@ const api: FxApi = {
   openImage: () => ipcRenderer.invoke(IPC.openImage),
   openFile: (filters) => ipcRenderer.invoke(IPC.openFile, filters),
   saveFile: (defaultName, bytes, filters) => ipcRenderer.invoke(IPC.saveFile, defaultName, bytes, filters),
+  findMaps: (texturePath) => ipcRenderer.invoke(IPC.findMaps, texturePath),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   listPresets: () => ipcRenderer.invoke(IPC.presetsList),
   readPreset: (file) => ipcRenderer.invoke(IPC.presetsRead, file),
   writePreset: (file, json) => ipcRenderer.invoke(IPC.presetsWrite, file, json),

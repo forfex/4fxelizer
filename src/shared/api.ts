@@ -10,6 +10,8 @@ export interface FileFilter {
 export interface OpenedFile {
   name: string
   bytes: Uint8Array
+  /** Full path on disk, when known (used to find a texture's map files next to it). */
+  path?: string
 }
 
 /** A preset saved in the user's presets folder. */
@@ -140,6 +142,10 @@ export interface FxApi {
   openImage(): Promise<OpenedFile | null>
   openFile(filters: FileFilter[]): Promise<OpenedFile | null>
   saveFile(defaultName: string, bytes: Uint8Array, filters: FileFilter[]): Promise<string | null>
+  /** Map files (AO, cavity, …) next to a texture, recognized by name (see @shared/maps). */
+  findMaps(texturePath: string): Promise<OpenedFile[]>
+  /** Path on disk of a dropped file ('' when it has none). */
+  pathForFile(file: File): string
   /** Presets folder in the app's user-data directory (created on demand). */
   listPresets(): Promise<PresetEntry[]>
   readPreset(file: string): Promise<string>
@@ -159,6 +165,7 @@ export const IPC = {
   openImage: 'image:open',
   openFile: 'file:open',
   saveFile: 'file:save',
+  findMaps: 'maps:find',
   presetsList: 'presets:list',
   presetsRead: 'presets:read',
   presetsWrite: 'presets:write',
