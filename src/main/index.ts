@@ -1,9 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
-import { IPC, type MainGpuInfo, type RendererGpuReport } from '@shared/api'
+import { IPC, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport } from '@shared/api'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu } from './menu'
+import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
+import { getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
 const gpuFlags = applyGpuFlags()
@@ -38,28 +40,59 @@ async function getGpuInfo(): Promise<MainGpuInfo> {
   }
 }
 
-function registerIpc(): void {
-  ipcMain.handle(IPC.openImage, async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)!
-    const result = await dialog.showOpenDialog(win, {
-      properties: ['openFile'],
-      filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS }]
-    })
-    const path = result.filePaths[0]
-    if (result.canceled || !path) return null
-    return { name: basename(path), bytes: new Uint8Array(await readFile(path)) }
-  })
+async function openFile(win: BrowserWindow, filters: FileFilter[]) {
+  const result = await dialog.showOpenDialog(win, { properties: ['openFile'], filters })
+  const path = result.filePaths[0]
+  if (result.canceled || !path) return null
+  return { name: basename(path), bytes: new Uint8Array(await readFile(path)) }
+}
 
-  ipcMain.handle(IPC.saveImage, async (event, defaultName: string, bytes: Uint8Array) => {
+function registerIpc(): void {
+  ipcMain.handle(IPC.openImage, (event) =>
+    openFile(BrowserWindow.fromWebContents(event.sender)!, [{ name: 'Images', extensions: IMAGE_EXTENSIONS }])
+  )
+
+  ipcMain.handle(IPC.openFile, (event, filters: FileFilter[]) =>
+    openFile(BrowserWindow.fromWebContents(event.sender)!, filters)
+  )
+
+  ipcMain.handle(IPC.saveFile, async (event, defaultName: string, bytes: Uint8Array, filters: FileFilter[]) => {
     const win = BrowserWindow.fromWebContents(event.sender)!
-    const result = await dialog.showSaveDialog(win, {
-      defaultPath: defaultName,
-      filters: [{ name: 'PNG image', extensions: ['png'] }]
-    })
+    const result = await dialog.showSaveDialog(win, { defaultPath: defaultName, filters })
     if (result.canceled || !result.filePath) return null
     await writeFile(result.filePath, bytes)
     return result.filePath
   })
+
+  ipcMain.handle(IPC.presetsList, async (): Promise<PresetEntry[]> => {
+    const dir = await presetsDir()
+    const files = (await readdir(dir)).filter((f) => f.toLowerCase().endsWith(PRESET_SUFFIX))
+    const entries = await Promise.all(
+      files.map(async (file) => {
+        let name = file.slice(0, -PRESET_SUFFIX.length)
+        try {
+          const parsed = JSON.parse(await readFile(join(dir, file), 'utf8')) as { name?: unknown }
+          if (typeof parsed.name === 'string' && parsed.name.trim()) name = parsed.name
+        } catch {
+          // Unreadable files still show up by file name; loading them reports the error.
+        }
+        return { name, file }
+      })
+    )
+    return entries.sort((a, b) => a.name.localeCompare(b.name))
+  })
+  ipcMain.handle(IPC.presetsRead, async (_e, file: string) => readFile(await presetPath(file), 'utf8'))
+  ipcMain.handle(IPC.presetsWrite, async (_e, file: string, json: string) => writeFile(await presetPath(file), json, 'utf8'))
+  ipcMain.handle(IPC.presetsDelete, async (_e, file: string) => rm(await presetPath(file), { force: true }))
+  ipcMain.handle(IPC.presetsShow, async () => {
+    const error = await shell.openPath(await presetsDir())
+    if (error) throw new Error(error)
+  })
+
+  ipcMain.on(IPC.settingsLoad, (event) => {
+    event.returnValue = getSettings()
+  })
+  ipcMain.on(IPC.settingsSave, (_event, patch: unknown) => updateSettings(patch))
 
   ipcMain.handle(IPC.gpuInfo, getGpuInfo)
 
@@ -86,12 +119,16 @@ function loadRenderer(win: BrowserWindow): void {
   }
 }
 
+const MIN_WINDOW = { width: 900, height: 600 }
+
 function createWindow(): void {
+  const saved = gpuReportPath ? { maximized: false } : savedWindowBounds(MIN_WINDOW)
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 900,
-    minHeight: 600,
+    ...saved.bounds,
+    minWidth: MIN_WINDOW.width,
+    minHeight: MIN_WINDOW.height,
     show: false,
     title: '4FXELIZER',
     backgroundColor: '#1d1c1a',
@@ -103,7 +140,11 @@ function createWindow(): void {
   })
 
   if (!gpuReportPath) {
-    win.once('ready-to-show', () => win.show())
+    win.once('ready-to-show', () => {
+      if (saved.maximized) win.maximize()
+      win.show()
+    })
+    trackWindow(win)
     Menu.setApplicationMenu(buildMenu(win, isDev))
   }
 

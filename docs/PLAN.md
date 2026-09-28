@@ -179,7 +179,13 @@ source into the project and Radix supplies only behavior, so every visual detail
 ## Roadmap
 0. **Foundation** — Electron + React + Vite skeleton, WebGPU pass framework, image load/save, 2D viewer (zoom, pixel grid, split view). Verify WebGPU on Win/macOS/Linux.
 1. **2D core (first usable version)** — reorderable stage stack with per-stage blend + preview-at-stage, adjust, downscale modes, palette generation + editor, ordered + blue-noise dither, indexed PNG export.
+   *Status: implemented, verified on Windows. Not in yet: per-stage masks (Phase 2), octree/Wu palette
+   generation, palette eyedropper, TGA/BMP export.*
 2. **Dither expansion** — line/halftone/error-diffusion dithers, texture-derived masks, imported map slots, mask blending, presets.
+   *Status: error diffusion (8 kernels), lines/halftone/clustered/noise patterns, Knoll mixing, dither saturation,
+   texture-derived masks (edges/flats/tones/saturation, strength + gamma, mask view) and presets are in.
+   Not yet: crosshatch/checker/custom pattern images, serpentine and wrap-around diffusion, imported map
+   slots, mask blur/invert/combining, different patterns inside vs. outside the mask.*
 3. **3D** — model import (glTF/FBX/OBJ), viewport, PSX preview shader, UV G-buffer + BVH ray tracing,
    AO/cavity/curvature/edge/thickness baking with edge padding and progressive refinement.
 4. **Mask-driven dithering** using baked maps.

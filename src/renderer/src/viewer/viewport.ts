@@ -76,3 +76,29 @@ export function pixelAt(view: View, image: Size, point: { x: number; y: number }
   if (x < 0 || y < 0 || x >= image.width || y >= image.height) return null
   return { x, y }
 }
+
+/**
+ * Canvas device-pixel x of the before/after divider. The divider is anchored to the image
+ * (`pos` is a fraction of the image width, snapped to a pixel column), so it moves with pans and zooms.
+ */
+export function splitScreenX(view: View, image: Size, pos: number): number {
+  return Math.round(view.x + Math.round(pos * image.width) * view.zoom)
+}
+
+/** Divider position (fraction of the image width, 0–1) under canvas device-pixel x. */
+export function splitPosAt(view: View, image: Size, x: number): number {
+  return Math.min(Math.max((x - view.x) / (image.width * view.zoom), 0), 1)
+}
+
+/** True when the divider lies inside the canvas, so it can be seen and grabbed. */
+export function splitVisible(view: View, image: Size, canvas: Size, pos: number): boolean {
+  const x = splitScreenX(view, image, pos)
+  return x > 0 && x < canvas.width
+}
+
+/** Divider position at the middle of the visible part of the image. */
+export function splitAtVisibleCenter(view: View, image: Size, canvas: Size): number {
+  const left = Math.max(view.x, 0)
+  const right = Math.min(view.x + image.width * view.zoom, canvas.width)
+  return right > left ? splitPosAt(view, image, (left + right) / 2) : 0.5
+}

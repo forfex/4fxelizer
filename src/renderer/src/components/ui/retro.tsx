@@ -8,7 +8,7 @@ export function GroupBox({ title, className, children, ...props }: ComponentProp
   return (
     <fieldset
       className={cn(
-        'rounded-fx border-px border-bevel-dark px-2.5 pt-1 pb-2.5',
+        'min-w-0 rounded-fx border-px border-bevel-dark px-2.5 pt-1 pb-2.5',
         'shadow-[inset_var(--px)_var(--px)_0_var(--fx-bevel-light),var(--px)_var(--px)_0_var(--fx-bevel-light)]',
         className
       )}

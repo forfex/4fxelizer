@@ -1,10 +1,13 @@
 import { clsx, type ClassValue } from 'clsx'
 import { extendTailwindMerge } from 'tailwind-merge'
 
-// Teach tailwind-merge our custom font sizes, so `text-ui` isn't mistaken for a color
-// and dropped when combined with `text-dim`.
+// Teach tailwind-merge our custom font sizes and line utilities, so `text-ui` / `outline-px`
+// aren't mistaken for colors and dropped when combined with `text-dim` / `outline-accent`.
 const twMerge = extendTailwindMerge({
-  extend: { theme: { text: ['ui', 'small'] } }
+  extend: {
+    theme: { text: ['ui', 'small'] },
+    classGroups: { 'outline-w': ['outline-px'] }
+  }
 })
 
 export function cn(...inputs: ClassValue[]): string {

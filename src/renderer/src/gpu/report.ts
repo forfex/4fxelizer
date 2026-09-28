@@ -3,7 +3,8 @@ import { adapterLabel, initGpu, type Gpu } from './device'
 import { PassChain } from './chain'
 import { PassRunner } from './pass'
 import { PASSES } from './passes'
-import { posterizeCpu } from './passes/posterize'
+import { quantizeLevelsCpu, DEFAULT_QUANTIZE } from './passes/quantize'
+import { GpuResources } from './resources'
 import { readTextureRgba8, uploadBitmap } from './textureIO'
 
 const REPORTED_LIMITS = [
@@ -33,13 +34,20 @@ export async function smokeTest(gpu: Gpu): Promise<{ ok: boolean; detail: string
     colorSpaceConversion: 'none'
   })
   const source = uploadBitmap(gpu.device, bitmap, 'smoke source')
-  const chain = new PassChain(gpu.device, new PassRunner(gpu.device), PASSES)
+  const resources = new GpuResources(gpu.device)
+  const chain = new PassChain(gpu.device, new PassRunner(gpu.device), PASSES, resources)
   try {
     const { output } = chain.run({ key: 'smoke', texture: source }, [
-      { uid: 'p', passId: 'posterize', params: { levels }, enabled: true }
+      {
+        uid: 'q',
+        passId: 'quantize',
+        params: { ...DEFAULT_QUANTIZE, mode: 'levels', levels },
+        enabled: true,
+        blend: { opacity: 1, mode: 'normal' }
+      }
     ])
     const result = await readTextureRgba8(gpu.device, output)
-    const expected = input.flatMap(([r, g, b, a]) => [...[r!, g!, b!].map((v) => posterizeCpu(v, levels)), a!])
+    const expected = input.flatMap(([r, g, b, a]) => [...[r!, g!, b!].map((v) => quantizeLevelsCpu(v, levels)), a!])
     const actual = [...result.data]
     // The fully transparent texel's RGB may legitimately differ (some decoders zero it).
     const ignored = (i: number): boolean => i >= 8 && i < 11
@@ -49,6 +57,7 @@ export async function smokeTest(gpu: Gpu): Promise<{ ok: boolean; detail: string
       : { ok: false, detail: `mismatch at byte ${mismatch}: expected ${expected} got ${actual}` }
   } finally {
     chain.dispose()
+    resources.dispose()
     source.destroy()
   }
 }

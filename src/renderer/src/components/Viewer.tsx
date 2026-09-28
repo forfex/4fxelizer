@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react'
 import { openImage } from '@/actions'
 import { getEngine } from '@/engine'
 import { cssColor } from '@/lib/pixelSnap'
+import { stageLabel } from '@/gpu/passes'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
-import { pan, pixelAt, stepZoom, zoomAt } from '@/viewer/viewport'
+import { pan, pixelAt, splitPosAt, splitScreenX, stepZoom, zoomAt } from '@/viewer/viewport'
 import { Button } from './ui/button'
 
 const isMac = window.fx.platform === 'darwin'
@@ -16,7 +17,15 @@ export function Viewer() {
   const gpuReady = useApp((s) => s.gpu.status === 'ready')
   const hasImage = useApp((s) => s.image !== null)
   const split = useApp((s) => s.split && s.image !== null)
-  const splitPos = useApp((s) => s.splitPos)
+  // Divider x in canvas device pixels; it's anchored to the image, so it follows pans and zooms.
+  const splitX = useApp((s) => (s.split && s.image ? splitScreenX(s.view, s.image, s.splitPos) : null))
+  const canvasWidth = useApp((s) => s.canvasSize.width)
+  const previewLabel = useApp((s) => {
+    const m = s.stages.findIndex((st) => st.uid === s.maskUid)
+    if (m >= 0) return `Mask of ${m + 1}. ${stageLabel(s.stages[m]!.passId)}`
+    const i = s.stages.findIndex((st) => st.uid === s.previewUid)
+    return i < 0 ? null : `After ${i + 1}. ${stageLabel(s.stages[i]!.passId)}`
+  })
 
   // Canvas ↔ engine, sizing and the render loop.
   useEffect(() => {
@@ -30,15 +39,22 @@ export function Viewer() {
       checkerA: cssColor('--fx-checker-a'),
       checkerB: cssColor('--fx-checker-b')
     }
-    let processed: { stages: unknown; version: number | undefined } | null = null
+    let processed: unknown[] | null = null
 
     // Processing happens inside the frame, so dragging a slider runs the stack at most once per frame.
     const frame = (): void => {
       const s = useApp.getState()
-      if (s.image && (processed?.stages !== s.stages || processed.version !== s.image.version)) {
-        processed = { stages: s.stages, version: s.image.version }
+      const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid]
+      if (s.image && (!processed || inputs.some((v, i) => v !== processed![i]))) {
+        processed = inputs
         try {
-          engine.process(s.stages)
+          engine.process({
+            stages: s.stages,
+            palettes: s.palettes,
+            outputLock: s.outputLock,
+            previewUid: s.previewUid,
+            maskUid: s.maskUid
+          })
         } catch (e) {
           s.setMessage({ kind: 'error', text: `Processing failed: ${(e as Error).message}` })
         }
@@ -46,7 +62,7 @@ export function Viewer() {
       engine.draw({
         view: s.view,
         image: s.image,
-        splitX: s.split && s.image ? Math.round(s.splitPos * s.canvasSize.width) : null,
+        splitX: s.split && s.image ? splitScreenX(s.view, s.image, s.splitPos) : null,
         grid: s.grid,
         ...colors
       })
@@ -134,8 +150,9 @@ export function Viewer() {
     drag.current = null
   }
 
+  // `isolate`: the split handle and labels (z-10) must stay below dialogs and menus.
   return (
-    <div className="bevel-sunken relative min-h-0 min-w-0 flex-1 bg-well p-(--px)">
+    <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
       <canvas
         ref={canvasRef}
         className="block size-full cursor-grab active:cursor-grabbing"
@@ -146,36 +163,58 @@ export function Viewer() {
         onPointerLeave={() => useApp.getState().setCursor(null)}
         onAuxClick={(e) => e.preventDefault()}
       />
-      {split && <SplitHandle pos={splitPos} />}
+      {split && splitX !== null && (
+        <SplitHandle
+          x={splitX}
+          visible={splitX > 0 && splitX < canvasWidth}
+          canvas={canvasRef}
+          afterLabel={previewLabel ?? 'After'}
+        />
+      )}
+      {!split && previewLabel && <ViewerLabel className="right-2 text-accent">{previewLabel}</ViewerLabel>}
       {!hasImage && <EmptyState />}
     </div>
   )
 }
 
-function SplitHandle({ pos }: { pos: number }) {
+interface SplitHandleProps {
+  /** Divider position in canvas device pixels. */
+  x: number
+  visible: boolean
+  canvas: React.RefObject<HTMLCanvasElement | null>
+  afterLabel: string
+}
+
+function SplitHandle({ x, visible, canvas, afterLabel }: SplitHandleProps) {
+  const el = canvas.current
+  const scale = el && el.clientWidth ? el.width / el.clientWidth : window.devicePixelRatio
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
-    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
-    const rect = e.currentTarget.parentElement!.getBoundingClientRect()
-    useApp.getState().setSplitPos((e.clientX - rect.left) / rect.width)
+    const s = useApp.getState()
+    if (!e.currentTarget.hasPointerCapture(e.pointerId) || !canvas.current || !s.image) return
+    const rect = canvas.current.getBoundingClientRect()
+    s.setSplitPos(splitPosAt(s.view, s.image, (e.clientX - rect.left) * scale))
   }
   return (
     <>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Before / after divider"
-        className="absolute inset-y-0 z-10 flex w-2.5 -translate-x-1/2 cursor-ew-resize justify-center"
-        style={{ left: `${pos * 100}%` }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-      >
-        <div className="h-full w-(--px) bg-accent" />
-      </div>
+      {visible && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Before / after divider"
+          className="absolute inset-y-0 z-10 flex w-2.5 -translate-x-1/2 cursor-ew-resize justify-center"
+          // The canvas sits inside the well's var(--px) padding.
+          style={{ left: `calc(var(--px) + ${(x + 0.5) / scale}px)` }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+        >
+          <div className="h-full w-(--px) bg-accent" />
+        </div>
+      )}
       <ViewerLabel className="left-2">Before</ViewerLabel>
-      <ViewerLabel className="right-2">After</ViewerLabel>
+      <ViewerLabel className="right-2">{afterLabel}</ViewerLabel>
     </>
   )
 }
