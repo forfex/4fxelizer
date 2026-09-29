@@ -11,7 +11,7 @@ import { gbufferAsync, loadModelAsync } from '@/model/modelAsync'
 import type { ModelData, TextureRef } from '@/model/model'
 import { objMaterialLibraries } from '@/model/mtl'
 import { useApp, type ModelInfo } from '@/store'
-import { activeMaterials } from '@/stack/textures'
+import { activeMaterials, unboundPick } from '@/stack/textures'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 const fileName = (path: string): string => path.split(/[\\/]/).pop() ?? path
@@ -259,11 +259,17 @@ export async function startBake(): Promise<void> {
   setJob({ status: 'running', progress: 0, label: 'Preparing' })
   let baker: Baker | null = null
   let bakedInto: string | null = null
+  let blank: string | null = null
   try {
     if (!BAKE_MAPS.some((m) => settings.maps[m])) throw new Error('Choose at least one map to bake.')
-    const materials = activeMaterials(model.data.materials.length, s.textures, s.activeTextureId, s.modelMaterial)
-    // Maps belong to a texture: with none open, a blank one named after the texture set holds them.
-    const textureId = s.activeTextureId ?? (await addBlankTexture(`${model.data.materials[materials[0]!]?.name ?? model.data.name}.png`, size))
+    const count = model.data.materials.length
+    const unbound = unboundPick(count, s.textures, s.activeTextureId, s.modelMaterial)
+    const materials = unbound === null ? activeMaterials(count, s.textures, s.activeTextureId, s.modelMaterial) : [unbound]
+    // Maps belong to a texture: with none open (or none drawn on the picked texture set), a blank
+    // one named after the texture set holds them.
+    const blankName = `${model.data.materials[materials[0]!]?.name ?? model.data.name}.png`
+    const textureId = unbound === null && s.activeTextureId ? s.activeTextureId : (blank = await addBlankTexture(blankName, size))
+    if (unbound !== null) useApp.getState().assignMaterials(textureId, [unbound])
     bakedInto = textureId
     const gbuffer = await gbufferAsync({ materials, uvSet: s.modelUvSet, width: size, height: size, padding: settings.padding })
     if (engine.model !== model) return
@@ -274,7 +280,10 @@ export async function startBake(): Promise<void> {
     // Maps handed to the slots so far. One the user replaced or cleared since is left alone.
     const published = new Set<BakeMap>()
     const ours = (map: BakeMap, texture: GPUTexture): boolean => !published.has(map) || engine.mapTexture(map, textureId) === texture
+    // The bake stops when another model loads or its texture is closed.
+    const current = (): boolean => engine.model === model && useApp.getState().textures.some((t) => t.id === textureId)
     const publish = (thumbnails: Map<BakeMap, string | null> = new Map()): void => {
+      if (!current()) return
       b.resolve(ours)
       for (const { map, texture } of b.outputs) {
         if (!ours(map, texture)) continue
@@ -294,7 +303,7 @@ export async function startBake(): Promise<void> {
     }
 
     let lastPublish = performance.now()
-    while (!b.finished && !run.stop && engine.model === model) {
+    while (!b.finished && !run.stop && current()) {
       await b.step()
       const { done, total, label } = b.progress
       setJob({ status: 'running', progress: total ? done / total : 1, label })
@@ -305,7 +314,7 @@ export async function startBake(): Promise<void> {
       // Let the UI draw between steps.
       await new Promise((r) => setTimeout(r, 0))
     }
-    if (engine.model !== model) return
+    if (!current()) return
 
     publish()
     const thumbnails = new Map<BakeMap, string | null>()
@@ -329,6 +338,8 @@ export async function startBake(): Promise<void> {
     useApp.getState().setMessage({ kind: 'info', text: `${run.stop ? 'Stopped baking' : 'Baked'} ${maps} (${size}×${size}).${note}` })
   } catch (e) {
     setJob(null)
+    // A texture made to hold the maps has nothing in it.
+    if (blank && !baker) useApp.getState().closeTexture(blank)
     useApp.getState().setMessage({ kind: 'error', text: `Baking failed: ${errorText(e)}` })
   } finally {
     // Textures that never reached their slot (an abandoned bake) belong to no one else.

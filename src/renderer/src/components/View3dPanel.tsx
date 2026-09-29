@@ -83,7 +83,8 @@ export function View3d() {
         framed = identity
         camera.current = gpuModel ? frameBounds(gpuModel.data.bounds, aspect) : null
       }
-      const show = s.view3dShow
+      // A map view whose map the texture doesn't have (any more) shows the result, like the toolbar.
+      const show = s.view3dShow !== 'result' && s.view3dShow !== 'source' && !s.maps[s.view3dShow as MapSlot] ? 'result' : s.view3dShow
       const channelIndex = (channel: string): number => MAP_CHANNELS.findIndex((c) => c.id === channel)
       // What a texture puts on the materials drawn with it: its result (the active one as the
       // viewer shows it), its source or one of its maps, plus its maps for the lit style.

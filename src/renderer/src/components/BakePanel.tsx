@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { saveSettings, useSavedSettings } from '@/settings'
 import { closeModel, openModel, openTextureOf, startBake, stopBake } from '@/modelActions'
 import { useApp } from '@/store'
-import { activeMaterials } from '@/stack/textures'
+import { activeMaterials, unboundPick } from '@/stack/textures'
 import { Button } from './ui/button'
 import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
 import { GroupBox, Led, PanelBody } from './ui/retro'
@@ -66,7 +66,11 @@ export function BakePanel() {
 function ModelBox() {
   const model = useApp((s) => s.model)!
   // The texture set the active texture is drawn on.
-  const material = useApp((s) => activeMaterials(s.model?.materials.length ?? 0, s.textures, s.activeTextureId, s.modelMaterial)[0]!)
+  // (or a picked one no texture is drawn on yet: a bake makes one for it).
+  const material = useApp((s) => {
+    const count = s.model?.materials.length ?? 0
+    return unboundPick(count, s.textures, s.activeTextureId, s.modelMaterial) ?? activeMaterials(count, s.textures, s.activeTextureId, s.modelMaterial)[0]!
+  })
   const uvSet = useApp((s) => s.modelUvSet)
   const image = useApp((s) => s.image?.name)
   const { setModelMaterial, setModelUvSet } = useApp.getState()
