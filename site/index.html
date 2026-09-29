@@ -110,6 +110,23 @@ h1{margin:12px 0 0;font:700 clamp(44px,9vw,92px)/.92 var(--font-display);letter-
 .window-bar .ramp{flex:1;height:10px}
 .winbtn{margin-left:auto;display:grid;place-items:center;width:24px;height:24px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);background:var(--fx-panel-hi);box-shadow:var(--bevel-raised);color:var(--fx-text)}
 .winbtn svg{width:14px;height:14px}
+button.winbtn{padding:0;cursor:pointer}
+button.winbtn:hover{background:var(--fx-hover)}
+.zoomable{cursor:zoom-in}
+
+/* Full-screen viewer: a floating window over a dimmed page. It shows an image, or borrows the 3D comparison
+   (moved in while open, back on close, so its slider keeps working). */
+.lightbox{padding:0;max-width:none;max-height:none;background:var(--fx-panel);color:var(--fx-text);border:2px solid var(--fx-edge);border-radius:var(--fx-radius-lg);box-shadow:var(--fx-shadow-window);overflow:hidden}
+.lightbox::backdrop{background:rgba(6,4,10,.85)}
+.lightbox .window-bar{gap:12px}
+.lightbox .window-title{overflow:hidden;text-overflow:ellipsis}
+.lightbox .count{font:500 12px/18px var(--font-mono);color:var(--fx-text-dim);white-space:nowrap}
+.lightbox .body{display:block;background:#000}
+.lightbox .body>img{display:block;image-rendering:pixelated}
+.lightbox .body>.compare{display:block}
+.lightbox .nav{display:flex;gap:6px;margin-left:auto}
+.lightbox .nav[hidden]{display:none}
+.lightbox .nav .winbtn,.lightbox .nav:not([hidden])+.winbtn{margin-left:0}
 .shot{margin-top:48px}
 .shot img{display:block;width:100%;height:auto;background:var(--fx-bg)}
 
@@ -207,9 +224,9 @@ footer .logo{margin-right:auto;font-size:14px}
     <div class="window-bar">
       <span class="window-title">mossy-brick.png</span>
       <span class="ramp"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></span>
-      <span class="winbtn" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg></span>
+      <button class="winbtn" type="button" data-expand="#shot-img" aria-label="View the screenshot full screen"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M2 5.5V2h3.5M8.5 2H12v3.5M12 8.5V12H8.5M5.5 12H2V8.5"/></svg></button>
     </div>
-    <img src="images/app.png" width="2560" height="1392" alt="4FXELIZER with a brick texture, split into the source and the dithered 16-color result">
+    <img id="shot-img" src="images/app.png" width="2560" height="1392" alt="4FXELIZER with a brick texture, split into the source and the dithered 16-color result">
   </div>
 </div></header>
 
@@ -221,7 +238,7 @@ footer .logo{margin-right:auto;font-size:14px}
     <div class="window-bar">
       <span class="window-title">3D view</span>
       <span class="ramp"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></span>
-      <span class="winbtn" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg></span>
+      <button class="winbtn" type="button" data-expand="#compare" aria-label="View the 3D comparison full screen"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M2 5.5V2h3.5M8.5 2H12v3.5M12 8.5V12H8.5M5.5 12H2V8.5"/></svg></button>
     </div>
     <div class="compare" id="compare">
       <img src="images/3d-before.png" width="1024" height="1024" alt="A scanned stone statue rendered with its original texture" loading="lazy">
@@ -317,6 +334,111 @@ footer .logo{margin-right:auto;font-size:14px}
     sync()
   })
   sync()
+</script>
+
+<dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-title">
+  <div class="window-bar">
+    <span class="window-title" id="lightbox-title"></span>
+    <span class="count" id="lightbox-count"></span>
+    <span class="nav" id="lightbox-nav">
+      <button class="winbtn" type="button" id="lightbox-prev" aria-label="Previous image"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M8.5 3L4.5 7l4 4"/></svg></button>
+      <button class="winbtn" type="button" id="lightbox-next" aria-label="Next image"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M5.5 3l4 4-4 4"/></svg></button>
+    </span>
+    <button class="winbtn" type="button" id="lightbox-close" aria-label="Close"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg></button>
+  </div>
+  <div class="body" id="lightbox-body"></div>
+</dialog>
+
+<script>
+  // Full-screen viewer for the gallery, the app screenshot and the 3D comparison.
+  const box = document.getElementById('lightbox')
+  const body = document.getElementById('lightbox-body')
+  const title = document.getElementById('lightbox-title')
+  const count = document.getElementById('lightbox-count')
+  const nav = document.getElementById('lightbox-nav')
+  const gallery = [...document.querySelectorAll('.gallery img')]
+  let index = -1          // position in the gallery, or -1
+  let borrowed = null     // the comparison while it's shown here: { node, parent, next }
+
+  // Largest size with the content's aspect ratio that fits the window, bar included.
+  function fit() {
+    const el = body.firstElementChild
+    if (!el) return
+    const aspect = el.naturalWidth ? el.naturalWidth / el.naturalHeight : 1
+    const maxW = innerWidth * 0.94 - 4, maxH = innerHeight * 0.94 - 40
+    const w = Math.floor(Math.min(maxW, maxH * aspect))
+    el.style.width = w + 'px'
+    el.style.height = el.naturalWidth ? Math.floor(w / aspect) + 'px' : ''
+  }
+
+  function giveBack() {
+    if (!borrowed) return
+    borrowed.node.style.width = ''
+    borrowed.parent.insertBefore(borrowed.node, borrowed.next)
+    borrowed = null
+  }
+
+  function showImage(img, name, i) {
+    giveBack()
+    index = i
+    const big = new Image()
+    big.src = img.currentSrc || img.src
+    big.alt = img.alt
+    big.onload = fit
+    body.replaceChildren(big)
+    title.textContent = name
+    nav.hidden = i < 0
+    count.textContent = i < 0 ? '' : `${i + 1} / ${gallery.length}`
+    if (!box.open) box.showModal()
+    fit()
+  }
+
+  function showGallery(i) {
+    i = (i + gallery.length) % gallery.length
+    const cap = gallery[i].closest('figure').querySelector('figcaption')
+    showImage(gallery[i], cap.firstChild.textContent.trim(), i)
+  }
+
+  function showCompare() {
+    const node = document.getElementById('compare')
+    borrowed = { node, parent: node.parentNode, next: node.nextSibling }
+    index = -1
+    body.replaceChildren(node)
+    title.textContent = '3D view'
+    nav.hidden = true
+    count.textContent = ''
+    box.showModal()
+    fit()
+    node.querySelector('input').focus()
+  }
+
+  function zoomable(img, open) {
+    img.classList.add('zoomable')
+    img.tabIndex = 0
+    img.setAttribute('role', 'button')
+    img.setAttribute('aria-label', `${img.alt} (view full screen)`)
+    img.addEventListener('click', open)
+    img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } })
+  }
+
+  gallery.forEach((img, i) => zoomable(img, () => showGallery(i)))
+  const shot = document.getElementById('shot-img')
+  zoomable(shot, () => showImage(shot, 'mossy-brick.png', -1))
+  document.querySelectorAll('[data-expand]').forEach((b) => b.addEventListener('click', () => {
+    b.dataset.expand === '#compare' ? showCompare() : showImage(shot, 'mossy-brick.png', -1)
+  }))
+
+  document.getElementById('lightbox-close').addEventListener('click', () => box.close())
+  document.getElementById('lightbox-prev').addEventListener('click', () => showGallery(index - 1))
+  document.getElementById('lightbox-next').addEventListener('click', () => showGallery(index + 1))
+  box.addEventListener('click', (e) => { if (e.target === box) box.close() })  // the backdrop
+  box.addEventListener('keydown', (e) => {
+    if (index < 0) return
+    if (e.key === 'ArrowLeft') showGallery(index - 1)
+    if (e.key === 'ArrowRight') showGallery(index + 1)
+  })
+  box.addEventListener('close', () => { giveBack(); body.replaceChildren() })
+  addEventListener('resize', () => { if (box.open) fit() })
 </script>
 </body>
 </html>
