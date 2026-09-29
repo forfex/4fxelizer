@@ -50,7 +50,7 @@ export class Engine {
   private output: GPUTexture | null = null
   private shown: GPUTexture | null = null
   /** Mask view output, kept outside the stage cache so it never affects the real output. */
-  private mask: { texture: GPUTexture; uniforms: GPUBuffer[] } | null = null
+  private mask: { texture: GPUTexture; free(): void } | null = null
   private viewer: ViewerRenderer | null = null
   private sourceVersion = 0
   private lastPlan: ChainPlan | null = null
@@ -147,25 +147,35 @@ export class Engine {
     for (const listener of this.planListeners) listener(plan, this.source.key)
   }
 
-  /** Runs a stage with `showMask` on its input, into a texture of its own. */
+  /**
+   * Renders a stage's mask into a texture of its own: a pass with its own mask (Dither) runs with
+   * `showMask` on its input; any other stage shows its blend mask.
+   */
   private renderMask(plan: ChainPlan, uid: string | null): GPUTexture | null {
     const old = this.mask
     this.mask = null
     const planned = uid ? plan.stages.find((s) => s.stage.uid === uid) : undefined
     const input = planned && this.textureForKey(planned.inputKey)
-    if (planned && input && PASSES.has(planned.stage.passId)) {
-      const params = { ...(planned.stage.params as object), showMask: true }
+    const def = planned && PASSES.get(planned.stage.passId)
+    if (planned && input && def) {
+      const { passId, params, blend } = planned.stage
       const encoder = this.gpu.device.createCommandEncoder({ label: 'mask view' })
-      const run = this.chain.encodeStage(encoder, planned.stage.passId, params, DEFAULT_BLEND, input, this.source!.texture, 'mask view')
-      this.gpu.device.queue.submit([encoder.finish()])
-      run.release()
-      this.mask = { texture: run.texture, uniforms: run.uniforms }
+      if (def.ownMask) {
+        const run = this.chain.encodeStage(encoder, passId, { ...(params as object), showMask: true }, DEFAULT_BLEND, input, this.source!.texture, 'mask view')
+        this.gpu.device.queue.submit([encoder.finish()])
+        run.release()
+        this.mask = { texture: run.texture, free: () => run.uniforms.forEach((u) => u.destroy()) }
+      } else {
+        const build = this.chain.encodeBlendMask(encoder, passId, params, blend, input, this.source!.texture)
+        this.gpu.device.queue.submit([encoder.finish()])
+        if (build) this.mask = { texture: build.texture, free: () => build.release() }
+      }
     }
     // The viewer must drop the old texture before it's destroyed; process() rebinds right after.
     if (old) {
       this.viewer?.setTextures(this.source?.texture ?? null, this.mask?.texture ?? this.output)
       old.texture.destroy()
-      for (const u of old.uniforms) u.destroy()
+      old.free()
     }
     return this.mask?.texture ?? null
   }

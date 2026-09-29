@@ -1,4 +1,5 @@
-import { MaskBuilder } from './mask'
+import type { MapSlot } from '@shared/maps'
+import { MaskBuilder, maskMaps, type MaskBuild, type MaskMap, type MaskSpec } from './mask'
 import { WORK_FORMAT, type PassDef, type PassRunner, type Size, type StageBlend } from './pass'
 import { planChain, type ChainPlan, type StageSpec } from './plan'
 import type { GpuResources } from './resources'
@@ -29,6 +30,11 @@ export interface EncodedStage {
   release(): void
 }
 
+/** The blend mask a stage uses: none for passes with a mask of their own (see PassDef.ownMask). */
+export function stageBlendMask(def: PassDef<unknown>, blend: StageBlend): MaskSpec | null {
+  return !def.ownMask && blend.mask ? blend.mask : null
+}
+
 /** Runs a stage stack on the GPU, caching each stage's output (see plan.ts). */
 export class PassChain {
   private readonly cache = new Map<string, CacheEntry>()
@@ -51,11 +57,27 @@ export class PassChain {
 
   /** Signature of the resources a stage reads; part of its cache key. */
   private depsKey = (stage: StageSpec): string => {
-    const res = this.def(stage.passId).resources?.(stage.params)
+    const def = this.def(stage.passId)
+    const res = def.resources?.(stage.params)
+    const blendMask = stageBlendMask(def, stage.blend)
     const parts: string[] = []
     if (res?.palette) parts.push(`pal:${this.resources.palette(res.palette)?.signature ?? 'missing'}`)
-    for (const slot of res?.maps ?? []) parts.push(`map-${slot}:${this.resources.map(slot)?.signature ?? 'missing'}`)
+    for (const slot of new Set([...(res?.maps ?? []), ...(blendMask ? maskMaps(blendMask) : [])])) {
+      parts.push(`map-${slot}:${this.resources.map(slot)?.signature ?? 'missing'}`)
+    }
     return parts.join('|')
+  }
+
+  /**
+   * Encodes building a stage's blend mask alone (the mask view), sized like the stage's output.
+   * Null when the stage has no blend mask.
+   */
+  encodeBlendMask(encoder: GPUCommandEncoder, passId: string, params: unknown, blend: StageBlend, input: GPUTexture, source: Size): MaskBuild | null {
+    const def = this.def(passId)
+    const spec = stageBlendMask(def, blend)
+    if (!spec) return null
+    const size = def.outputSize?.(input, params, { source }) ?? { width: input.width, height: input.height }
+    return this.masks.encode(encoder, input, size, spec, (slot) => this.resources.map(slot))
   }
 
   /**
@@ -83,10 +105,13 @@ export class PassChain {
     const palette = this.resources.palette(res?.palette)
     const serial = def.serial?.(params) ?? false
     const steps = serial ? (def.serialSteps?.(params, texture) ?? 1) : 1
-    const uniforms = this.runner.createUniforms(def, params, blend, palette?.count ?? 0, steps)
+    const blendMaskSpec = stageBlendMask(def, blend)
+    const uniforms = this.runner.createUniforms(def, params, { ...blend, mask: blendMaskSpec ?? undefined }, palette?.count ?? 0, steps)
     const scratch = this.runner.createScratch(def, params, texture)
+    const maps = (slot: MapSlot): MaskMap | null => this.resources.map(slot)
     const maskSpec = def.mask?.(params)
-    const mask = maskSpec ? this.masks.encode(encoder, input, texture, maskSpec, (slot) => this.resources.map(slot)) : null
+    const mask = maskSpec ? this.masks.encode(encoder, input, texture, maskSpec, maps) : null
+    const blendMask = blendMaskSpec ? this.masks.encode(encoder, input, texture, blendMaskSpec, maps) : null
     this.runner.encode(encoder, def as PassDef<never>, input, texture, uniforms, {
       palette: palette?.buffer ?? this.resources.emptyPalette,
       paletteCount: palette?.count ?? 0,
@@ -94,7 +119,8 @@ export class PassChain {
       serial,
       scratch,
       mask: mask?.texture,
-      customPattern: this.resources.customPattern(res?.pattern)
+      customPattern: this.resources.customPattern(res?.pattern),
+      blendMask: blendMask?.texture
     })
     return {
       texture,
@@ -102,6 +128,7 @@ export class PassChain {
       release: () => {
         scratch?.destroy()
         mask?.release()
+        blendMask?.release()
       }
     }
   }

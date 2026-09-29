@@ -629,6 +629,7 @@ fn runRows(thread: u32, size: vec2u) {
     }
   },
   mask: (p) => ditherMask(p),
+  ownMask: true,
   serial: (p) => {
     const outside = outsidePattern(p)
     return (isDiffusion(p.pattern) || (!!outside && isDiffusion(outside))) && p.mode !== 'pattern' && !p.showMask

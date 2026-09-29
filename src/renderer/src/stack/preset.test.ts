@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_MASK_BLUR } from '@/gpu/mask'
 import type { DitherParams } from '@/gpu/passes/dither'
 import type { DownscaleParams } from '@/gpu/passes/downscale'
 import { analyzeStack } from './analyze'
@@ -87,6 +88,22 @@ describe('presets', () => {
     expect(doc.stages[0]!.blend).toEqual({ opacity: 1, mode: 'normal' })
     expect(doc.palettes[0]!.colors).toEqual([{ hex: '#aabbcc' }, { hex: '#010203' }])
     expect(warnings[0]).toMatch(/sparkles/)
+  })
+
+  it('keeps a stage blend mask, cleaning it up', () => {
+    const json = JSON.stringify({
+      format: '4fxelizer-preset',
+      version: 1,
+      name: 'masked',
+      stages: [
+        { uid: 'a', passId: 'adjust', params: {}, blend: { opacity: 0.5, mode: 'normal', mask: { a: 'none', b: 'map-ao', bInvert: true, combine: 'max', blur: 99 } } },
+        { uid: 'b', passId: 'adjust', params: {}, blend: { opacity: 1, mode: 'normal', mask: { a: 'nope', b: 'none' } } }
+      ],
+      palettes: []
+    })
+    const { doc } = parsePreset(json)
+    expect(doc.stages[0]!.blend.mask).toMatchObject({ a: 'map-ao', aInvert: true, b: 'none', combine: 'max', blur: MAX_MASK_BLUR, wrap: false })
+    expect(doc.stages[1]!.blend).toEqual({ opacity: 1, mode: 'normal' })
   })
 
   it('writes only the document, even when given the whole app state', () => {

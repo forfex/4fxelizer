@@ -2,6 +2,7 @@
 // texture can be reapplied to others. Loading validates everything, fills in missing settings with
 // defaults (older presets keep working) and gives stages and palettes fresh ids.
 
+import { MASK_COMBINE, MASK_SOURCES, MAX_MASK_BLUR, normalizeMask, type MaskSource, type MaskSpec } from '@/gpu/mask'
 import { BLEND_MODES, DEFAULT_BLEND, type StageBlend } from '@/gpu/pass'
 import { STAGE_TYPES } from '@/gpu/passes'
 import type { StageSpec } from '@/gpu/plan'
@@ -59,7 +60,25 @@ function cleanParams(defaults: object, raw: unknown): Record<string, unknown> {
 function cleanBlend(raw: unknown): StageBlend {
   if (!isObject(raw)) return { ...DEFAULT_BLEND }
   const mode = BLEND_MODES.find((m) => m.id === raw.mode)?.id ?? DEFAULT_BLEND.mode
-  return { opacity: Math.min(Math.max(num(raw.opacity, 1), 0), 1), mode }
+  const mask = cleanMask(raw.mask)
+  return { opacity: Math.min(Math.max(num(raw.opacity, 1), 0), 1), mode, ...(mask ? { mask } : {}) }
+}
+
+function cleanMask(raw: unknown): MaskSpec | null {
+  if (!isObject(raw)) return null
+  const source = (v: unknown): MaskSource => MASK_SOURCES.find((m) => m.id === v)?.id ?? 'none'
+  const amount = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? Math.min(Math.max(v, 0), 1) : undefined)
+  return normalizeMask({
+    a: source(raw.a),
+    aInvert: raw.aInvert === true,
+    aAmount: amount(raw.aAmount),
+    b: source(raw.b),
+    bInvert: raw.bInvert === true,
+    bAmount: amount(raw.bAmount),
+    combine: MASK_COMBINE.find((m) => m.id === raw.combine)?.id ?? 'multiply',
+    blur: Math.min(Math.max(num(raw.blur, 0), 0), MAX_MASK_BLUR),
+    wrap: raw.wrap === true
+  })
 }
 
 function cleanGenerator(raw: unknown): GeneratorSettings | undefined {

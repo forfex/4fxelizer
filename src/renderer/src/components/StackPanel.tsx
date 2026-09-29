@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { STAGE_TYPES, stageLabel } from '@/gpu/passes'
 import type { StageSpec } from '@/gpu/plan'
 import { cn } from '@/lib/utils'
-import { analyzeStack, type StageInfo } from '@/stack/analyze'
+import { analyzeStack, blendMaskOf, type StageInfo } from '@/stack/analyze'
 import { useApp } from '@/store'
 import { BlendRow, PaletteSelect, StageEditor } from './stages/editors'
 import { Button } from './ui/button'
@@ -177,6 +177,8 @@ function StageCard({
   const warnings = info?.warnings ?? []
   const resized = info && (info.input.width !== info.output.width || info.input.height !== info.output.height)
   const blended = stage.blend.opacity < 1 || stage.blend.mode !== 'normal'
+  const masked = !!blendMaskOf(stage)
+  const blendSummary = [blended && stage.blend.mode, blended && `${Math.round(stage.blend.opacity * 100)}%`, masked && 'masked'].filter(Boolean).join(', ')
 
   return (
     <div
@@ -214,7 +216,11 @@ function StageCard({
           onClick={() => setPreview(previewing ? null : stage.uid)}
         >
           {stageLabel(stage.passId)}
-          {blended && <span className="pl-1 font-ui text-small font-normal text-dim">· {Math.round(stage.blend.opacity * 100)}%</span>}
+          {(blended || masked) && (
+            <span className="pl-1 font-ui text-small font-normal text-dim">
+              · {blended ? `${Math.round(stage.blend.opacity * 100)}%` : 'masked'}
+            </span>
+          )}
         </button>
         {resized && (
           <span className="hidden shrink-0 font-mono text-[10px] text-dim @min-[280px]/card:inline" title="Output size">
@@ -281,7 +287,7 @@ function StageCard({
             onClick={() => setBlendOpen(!blendOpen)}
             aria-expanded={blendOpen}
           >
-            <CaretIcon open={blendOpen} /> Blending{blended ? ` (${stage.blend.mode}, ${Math.round(stage.blend.opacity * 100)}%)` : ''}
+            <CaretIcon open={blendOpen} /> Blending{blendSummary ? ` (${blendSummary})` : ''}
           </button>
           {blendOpen && <BlendRow stage={stage} />}
         </div>
