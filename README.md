@@ -72,7 +72,10 @@ Panels dock, tab together, float over the viewer and resize, like in Photoshop; 
 switches between built-in layouts (Essentials, Wide viewer, Palette editing, Floating), saves your own and resets them.
 On Windows and Linux the app draws its own title bar with the menus in the theme's colors; Alt or F10 moves to
 the menus and Alt+letter opens one, as in a native menu bar. macOS keeps its system menu bar.
-Grid, split view, tiling view, the export format, the panel layout and the window size and position are remembered between sessions.
+Five themes: **Dark** (plum with purple and magenta accents), **Night** (neutral greyscale, for dim rooms and for
+judging colors with no tinted chrome around the image), **Light**, **Matrix** (green phosphor) and **Retro** (the classic
+silver-grey desktop); pick one in View › Theme or the toolbar's theme menu. GPU details are in Help › GPU Diagnostics.
+The theme, grid, split view, tiling view, the export format, the panel layout and the window size and position are remembered between sessions.
 **File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
 indexed BMP has no alpha, so transparent pixels use index 0 and semi-transparent ones become opaque).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
@@ -176,9 +179,9 @@ The landing page lives in `site/` and is deployed to GitHub Pages by `.github/wo
 ## License
 
 4FXELIZER is released under the [MIT License](LICENSE). It bundles open-source libraries (React, Radix UI, dockview, zustand
-and a few small helpers, all MIT, ISC, Apache-2.0 or 0BSD) and runs on Electron; their notices are in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and installers include the Electron and Chromium licenses.
-The app ships no third-party fonts, images or textures.
+and a few small helpers, all MIT, ISC, Apache-2.0 or 0BSD) and the Chakra Petch, Rubik and Martian Mono fonts (SIL Open
+Font License 1.1), and runs on Electron; their notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and
+installers include the Electron and Chromium licenses. The app ships no third-party images or textures.
 
 PlayStation, PSX, Nintendo 64, NES and Game Boy are trademarks of their respective owners. They are used here only to
 describe the look and limits this tool imitates; 4FXELIZER is not affiliated with or endorsed by them.

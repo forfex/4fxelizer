@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,117 +7,305 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <title>4FXELIZER — PSX-style texture stylizer</title>
 <meta name="description" content="Turn high-res textures into low-res, palettized, dithered PSX-style textures. Free desktop app for Windows, macOS and Linux.">
+<meta name="theme-color" content="#16121e">
 <meta property="og:title" content="4FXELIZER">
 <meta property="og:description" content="Turn high-res textures into PSX-style low-res, palettized, dithered textures.">
 <meta property="og:url" content="https://forfex.github.io/4fxelizer/">
 <meta property="og:image" content="https://forfex.github.io/4fxelizer/images/app.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Martian+Mono:wght@400;500&family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  // The saved theme, applied before the page paints.
+  try { const t = localStorage.getItem('fx-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t } catch {}
+</script>
 <style>
-:root{--bg:#1d1c1a;--panel:#2b2a27;--panel-hi:#37352f;--line:#45423a;--text:#e8e4da;--dim:#a39e90;--accent:#d9a441;--accent-text:#1d1c1a}
+/* Tokens from the 4FXELIZER design system: the same names and values as the app. */
+:root{
+  --fx-bg:#16121e;--fx-panel:#211b2c;--fx-panel-hi:#2d2540;--fx-well:#0f0c16;--fx-edge:#06040a;--fx-line:#3a3050;
+  --fx-bevel-light:#4b3f66;--fx-bevel-dark:#08060d;--fx-text:#f1e9dc;--fx-text-dim:#aca2bf;--fx-text-faint:#766b8a;
+  --fx-accent:#a978ff;--fx-accent-hi:#c6a6ff;--fx-accent-text:#120d1c;--fx-accent-soft:#3a2a5c;--fx-magenta:#ff4fcf;--fx-drop:#3f1f70;
+  --fx-led-green:#5ee08e;--fx-led-amber:#ffc247;--fx-lcd-bg:#170c22;--fx-lcd-text:#ff9fe6;--fx-hover:#3b3154;
+  --fx-radius:3px;--fx-radius-md:6px;--fx-radius-lg:10px;
+  --fx-shadow-hard:2px 2px 0 var(--fx-drop);--fx-shadow-window:6px 6px 0 var(--fx-drop);
+  --bevel-raised:inset 1px 1px 0 var(--fx-bevel-light),inset -1px -1px 0 var(--fx-bevel-dark);
+  --bevel-sunken:inset 1px 1px 0 var(--fx-bevel-dark),inset -1px -1px 0 var(--fx-bevel-light);
+  --font-display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --font-ui:Rubik,"Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-mono:"Martian Mono","Cascadia Mono","SF Mono",Menlo,Consolas,monospace;
+  --lcd-glow:0 0 6px color-mix(in srgb,var(--fx-lcd-text) 55%,transparent);
+  color-scheme:dark;
+}
+/* Light: pale lilac surfaces, dark ink, a deeper purple. */
+:root[data-theme="light"]{
+  --fx-bg:#e6e0ee;--fx-panel:#f6f3fa;--fx-panel-hi:#fdfcff;--fx-well:#ebe6f2;--fx-edge:#3d3452;--fx-line:#d2c8e0;
+  --fx-bevel-light:#ffffff;--fx-bevel-dark:#b3a7c7;--fx-text:#1e1829;--fx-text-dim:#594f6d;--fx-text-faint:#978dab;
+  --fx-accent:#7a3ff2;--fx-accent-hi:#8f5cff;--fx-accent-text:#ffffff;--fx-accent-soft:#e3d6ff;--fx-magenta:#d4199e;--fx-drop:#b49de0;
+  --fx-led-green:#1f9d55;--fx-led-amber:#a35f00;--fx-lcd-bg:#efe7f8;--fx-lcd-text:#8a1570;--fx-hover:#eee8f6;--lcd-glow:none;
+  color-scheme:light;
+}
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
-a{color:var(--accent)}
-.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
-nav{position:sticky;top:0;z-index:5;background:rgba(29,28,26,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
-nav .wrap{display:flex;align-items:center;gap:20px;height:52px}
-.logo{font:700 18px ui-monospace,Consolas,monospace;color:var(--accent);letter-spacing:.08em;text-decoration:none;margin-right:auto}
-nav a:not(.logo){color:var(--dim);text-decoration:none;font-size:14px}
-nav a:not(.logo):hover{color:var(--text)}
-.hero{text-align:center;padding:72px 0 40px}
-h1{font:700 clamp(36px,8vw,68px)/1.05 ui-monospace,Consolas,monospace;letter-spacing:.06em;margin:0 0 16px;color:var(--accent);text-shadow:3px 3px 0 #000}
-.tag{font-size:clamp(17px,2.6vw,22px);max-width:640px;margin:0 auto 28px}
-.btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-.btn{display:inline-block;padding:11px 22px;border:2px solid;border-color:#5a5648 #14130f #14130f #5a5648;background:var(--panel-hi);color:var(--text);text-decoration:none;font-weight:600}
-.btn:hover{background:var(--line)}
-.btn.primary{background:var(--accent);color:var(--accent-text);border-color:#f0c878 #7a5a18 #7a5a18 #f0c878}
-.btn.primary:hover{background:#e6b458}
-.shot{margin:44px auto 0;border:2px solid;border-color:#14130f #5a5648 #5a5648 #14130f;background:#000;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-.shot img{display:block;width:100%;height:auto}
-section{padding:56px 0}
-h2{font:700 26px ui-monospace,Consolas,monospace;letter-spacing:.05em;margin:0 0 8px;color:var(--accent)}
-.sub{color:var(--dim);margin:0 0 28px;max-width:680px}
-.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
-.card{background:var(--panel);border:1px solid var(--line);padding:18px}
-.card h3{margin:0 0 6px;font-size:16px}
-.card p{margin:0;color:var(--dim);font-size:14.5px}
-.gallery{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
-.gallery figure{margin:0;background:var(--panel);border:1px solid var(--line)}
-.gallery img{display:block;width:100%;aspect-ratio:1;object-fit:cover;image-rendering:pixelated}
-.gallery figcaption{padding:8px 12px;font:13px ui-monospace,Consolas,monospace;color:var(--dim)}
-.gallery figcaption b{color:var(--text)}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+body{margin:0;background:var(--fx-bg);color:var(--fx-text);font:16px/1.6 var(--font-ui);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--fx-accent-hi)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--fx-magenta);outline-offset:2px}
+img{max-width:100%}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+code{font:0.9em var(--font-mono)}
+
+/* Ordered dither in 2px dots: the brand's replacement for gradients. */
+.d25{background:repeating-conic-gradient(var(--a) 0 25%,var(--b) 0 100%) 0 0/4px 4px}
+.d50{background:repeating-conic-gradient(var(--a) 0 25%,var(--b) 0 50%) 0 0/4px 4px}
+.d75{background:repeating-conic-gradient(var(--b) 0 25%,var(--a) 0 100%) 0 0/4px 4px}
+.ramp{display:flex;min-width:0;--a:var(--fx-accent);--b:var(--fx-panel-hi)}
+.ramp>span{flex:1}
+.ramp>span:first-child{background:var(--b)}
+.ramp>span:last-child{background:var(--a)}
+
+/* Buttons: beveled, inside an ink outline. The primary one sits on its hard shadow. */
+.btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);
+  background:var(--fx-panel-hi);color:var(--fx-text);box-shadow:var(--bevel-raised);font:500 15px/1 var(--font-ui);text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--fx-hover)}
+.btn:active{--a:var(--fx-well);--b:var(--fx-well);box-shadow:var(--bevel-sunken)}
+.btn.primary{background:var(--fx-accent);color:var(--fx-accent-text);font-weight:600;box-shadow:inset 1px 1px 0 var(--fx-accent-hi),var(--fx-shadow-hard)}
+.btn.primary:hover{background:var(--fx-accent-hi)}
+.btn.primary:active{transform:translate(2px,2px);box-shadow:none}
+.btn.sm{height:30px;padding:0 12px;font-size:14px}
+.btn svg{width:14px;height:14px;flex-shrink:0}
+
+/* Navigation */
+nav{position:sticky;top:0;z-index:5;background:var(--fx-bg);border-bottom:1px solid var(--fx-edge);box-shadow:0 1px 0 var(--fx-line)}
+nav .wrap{display:flex;align-items:center;gap:20px;height:56px}
+.logo{display:flex;align-items:center;gap:10px;margin-right:auto;color:var(--fx-text);text-decoration:none;font:700 17px/1 var(--font-display);letter-spacing:.06em}
+.logo img{width:24px;height:24px}
+.navlink{color:var(--fx-text-dim);text-decoration:none;font-size:14px}
+.navlink:hover{color:var(--fx-text)}
+/* Theme switch: Dark | a sunken track with a beveled knob | Light. */
+.switch{display:inline-flex;align-items:center;gap:8px;padding:0;border:0;background:none;color:var(--fx-text-dim);font:500 13px/1 var(--font-ui);cursor:pointer}
+.switch .on{color:var(--fx-text)}
+.switch-track{position:relative;width:38px;height:20px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);--a:var(--fx-well);--b:var(--fx-well);box-shadow:var(--bevel-sunken)}
+.switch[aria-checked="true"] .switch-track{--a:var(--fx-accent);--b:var(--fx-accent-soft)}
+.switch-knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border:1px solid var(--fx-edge);border-radius:2px;background:var(--fx-panel-hi);box-shadow:var(--bevel-raised)}
+.switch[aria-checked="true"] .switch-knob{left:20px}
+.switch:hover .switch-knob{background:var(--fx-hover)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Hero */
+.hero{padding:64px 0 32px}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:40px;align-items:center}
+.label{font:600 12px/16px var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--fx-text-dim)}
+h1{margin:12px 0 0;font:700 clamp(44px,9vw,92px)/.92 var(--font-display);letter-spacing:.02em;overflow-wrap:anywhere}
+.tag{margin:20px 0 28px;max-width:520px;font-size:clamp(17px,2.3vw,20px);line-height:1.5;color:var(--fx-text-dim)}
+.tag b{color:var(--fx-text);font-weight:500}
+.btns{display:flex;gap:14px;flex-wrap:wrap}
+.meta{display:flex;align-items:center;gap:8px;margin-top:18px;font-size:14px;color:var(--fx-text-dim)}
+.led{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--fx-led-green);box-shadow:0 0 6px var(--fx-led-green);flex-shrink:0}
+.art{width:100%;height:auto;display:block}
+.art .deep{fill:var(--fx-drop)}.art .brand{fill:var(--fx-accent)}.art .hot{fill:var(--fx-magenta)}.art .cream{fill:var(--fx-text)}
+.art .dot{fill:var(--fx-accent)}.art .cut{fill:var(--fx-bg)}
+
+/* A floating window: 2px ink outline, the large corner, the hard offset shadow, a dither-ramp title strip. */
+.window{background:var(--fx-panel);border:2px solid var(--fx-edge);border-radius:var(--fx-radius-lg);box-shadow:var(--fx-shadow-window);overflow:hidden}
+.window-bar{display:flex;align-items:center;gap:10px;height:36px;padding:0 6px 0 14px;background:var(--fx-panel-hi);border-bottom:2px solid var(--fx-edge);box-shadow:inset 1px 1px 0 var(--fx-bevel-light)}
+.window-title{font:700 14px/18px var(--font-display);letter-spacing:.02em;white-space:nowrap}
+.window-bar .ramp{flex:1;height:10px}
+.winbtn{margin-left:auto;display:grid;place-items:center;width:24px;height:24px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);background:var(--fx-panel-hi);box-shadow:var(--bevel-raised);color:var(--fx-text)}
+.winbtn svg{width:14px;height:14px}
+.shot{margin-top:48px}
+.shot img{display:block;width:100%;height:auto;background:var(--fx-bg)}
+
+/* Sections */
+section{padding:64px 0}
+h2{margin:8px 0 10px;font:700 clamp(28px,4vw,38px)/1.1 var(--font-display);letter-spacing:.02em}
+.sub{margin:0 0 32px;max-width:680px;color:var(--fx-text-dim)}
+
+/* Feature cards: raised panels with an LED and a tracked label. */
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.card{padding:18px 18px 20px;background:var(--fx-panel);border:1px solid var(--fx-edge);border-radius:var(--fx-radius-md);box-shadow:var(--bevel-raised)}
+.card h3{display:flex;align-items:center;gap:10px;margin:0 0 8px;font:600 17px/22px var(--font-display)}
+.card p{margin:0;font-size:15px;line-height:1.55;color:var(--fx-text-dim)}
+.card code{color:var(--fx-text)}
+
+/* Gallery: each result in a sunken well, the preset name on an LCD strip. */
+/* Rows are centered, so a short last row sits in the middle. */
+.gallery{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;--cols:4}
+.gallery figure{flex:0 0 calc((100% - (var(--cols) - 1) * 16px) / var(--cols));min-width:0;margin:0;padding:6px;background:var(--fx-well);border:1px solid var(--fx-edge);border-radius:var(--fx-radius-md);box-shadow:var(--bevel-sunken)}
+.gallery img{display:block;width:100%;aspect-ratio:1;object-fit:cover;image-rendering:pixelated;border-radius:2px}
+.gallery figcaption{display:flex;justify-content:space-between;gap:8px;margin-top:6px;padding:4px 8px;background:var(--fx-lcd-bg);border-radius:2px;
+  font:400 12px/18px var(--font-mono);color:var(--fx-lcd-text);text-shadow:var(--lcd-glow)}
+.gallery figcaption span{color:var(--fx-text-dim);text-shadow:none}
+
+/* Steps */
 .steps{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:14px}
-.steps li{counter-increment:s;background:var(--panel);border:1px solid var(--line);padding:16px 18px 16px 62px;position:relative}
-.steps li::before{content:counter(s);position:absolute;left:16px;top:14px;width:32px;height:32px;background:var(--accent);color:var(--accent-text);font:700 16px/32px ui-monospace,monospace;text-align:center}
-pre{background:#12110f;border:1px solid var(--line);padding:14px;overflow:auto;font-size:14px}
-code{font-family:ui-monospace,Consolas,monospace}
-footer{border-top:1px solid var(--line);padding:28px 0;color:var(--dim);font-size:14px;text-align:center}
-@media(max-width:600px){nav a:not(.logo):not(.dl){display:none}}
+.steps li{counter-increment:s;position:relative;padding:18px 20px 18px 76px;background:var(--fx-panel);border:1px solid var(--fx-edge);border-radius:var(--fx-radius-md);box-shadow:var(--bevel-raised);color:var(--fx-text-dim)}
+.steps li b{color:var(--fx-text);font-weight:500}
+.steps li::before{content:counter(s,decimal-leading-zero);position:absolute;left:18px;top:16px;width:42px;height:32px;display:grid;place-items:center;
+  background:var(--fx-lcd-bg);border:1px solid var(--fx-edge);border-radius:var(--fx-radius);box-shadow:var(--bevel-sunken);
+  font:500 15px/1 var(--font-mono);color:var(--fx-lcd-text);text-shadow:var(--lcd-glow)}
+.note{margin:24px 0 8px;max-width:720px;color:var(--fx-text-dim);font-size:15px}
+pre{margin:0;padding:16px 18px;overflow:auto;background:var(--fx-well);border:1px solid var(--fx-edge);border-radius:var(--fx-radius-md);box-shadow:var(--bevel-sunken);font:13px/1.8 var(--font-mono);color:var(--fx-text)}
+pre .p{color:var(--fx-accent-hi);user-select:none}
+
+footer{margin-top:32px;border-top:1px solid var(--fx-edge);box-shadow:inset 0 1px 0 var(--fx-line)}
+footer .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding-top:28px;padding-bottom:28px;font-size:14px;color:var(--fx-text-dim)}
+footer .ramp{height:8px;margin-top:-1px}
+footer a{color:var(--fx-text-dim)}
+footer a:hover{color:var(--fx-text)}
+footer .logo{margin-right:auto;font-size:14px}
+
+@media(max-width:860px){
+  .gallery{--cols:3}
+  .hero-grid{grid-template-columns:1fr}
+  .art{max-width:520px}
+}
+@media(max-width:640px){
+  .gallery{--cols:2}
+  .navlink{display:none}
+  .hero{padding-top:40px}
+  .window-bar .ramp{display:none}
+  .steps li{padding-left:18px;padding-top:60px}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 </style>
 </head>
 <body>
 <nav><div class="wrap">
-  <a class="logo" href="#"><img src="icon.svg" alt="" width="22" height="22" style="vertical-align:-4px;margin-right:8px;image-rendering:pixelated">4FXELIZER</a>
-  <a href="#features">Features</a><a href="#gallery">Gallery</a><a href="#start">Get started</a>
-  <a class="dl" href="https://github.com/forfex/4fxelizer">GitHub</a>
+  <a class="logo" href="#"><img src="icon.svg" alt="">4FXELIZER</a>
+  <a class="navlink" href="#features">Features</a>
+  <a class="navlink" href="#gallery">Gallery</a>
+  <a class="navlink" href="#start">Get started</a>
+  <a class="navlink" href="https://github.com/forfex/4fxelizer">GitHub</a>
+  <button class="switch" id="theme" type="button" role="switch" aria-checked="false" aria-label="Light theme">
+    <span data-t="dark">Dark</span><span class="switch-track d50"><span class="switch-knob"></span></span><span data-t="light">Light</span>
+  </button>
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <img src="icon.svg" alt="" width="96" height="96" style="image-rendering:pixelated;margin-bottom:16px">
-  <h1>4FXELIZER</h1>
-  <p class="tag">Turn high-res textures into crunchy PSX-style low-res, palettized, dithered ones. Built for artists, runs on the GPU.</p>
-  <div class="btns">
-    <a class="btn primary" href="https://github.com/forfex/4fxelizer/releases/latest">Download</a>
-    <a class="btn" href="https://github.com/forfex/4fxelizer">View on GitHub</a>
+  <div class="hero-grid">
+    <div>
+      <div class="label">PSX-style texture stylizer</div>
+      <h1>4FXELIZER</h1>
+      <p class="tag">Big textures in. <b>Small, palettized, dithered out.</b> A desktop app for artists that turns high-res textures into crunchy PSX-era ones, live on the GPU.</p>
+      <div class="btns">
+        <a class="btn primary" href="https://github.com/forfex/4fxelizer/releases/latest">Download</a>
+        <a class="btn" href="https://github.com/forfex/4fxelizer">View on GitHub</a>
+      </div>
+      <p class="meta"><span class="led" aria-hidden="true"></span>Windows · macOS · Linux · free and open source</p>
+    </div>
+    <!-- The design system's cover art: a window slab and its hard shadow, dithered by a 4x4 Bayer matrix. -->
+    <svg class="art" viewBox="0 0 480 288" aria-hidden="true">
+      <rect class="deep" x="16" y="0" width="176" height="224" rx="10"/>
+      <rect class="brand" x="208" y="40" width="128" height="248" rx="10"/>
+      <rect class="hot" x="352" y="24" width="112" height="112" rx="6"/>
+      <rect class="cream" x="352" y="152" width="112" height="56" rx="6"/>
+      <g id="dots"></g>
+    </svg>
   </div>
-  <p style="color:var(--dim);font-size:14px;margin-top:14px">Windows · macOS · Linux — free and open source</p>
-  <div class="shot"><img src="images/app.png" alt="4FXELIZER showing a brick texture split into before and after"></div>
+
+  <div class="window shot">
+    <div class="window-bar">
+      <span class="window-title">mossy-brick.png</span>
+      <span class="ramp"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></span>
+      <span class="winbtn" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg></span>
+    </div>
+    <img src="images/app.png" width="2560" height="1392" alt="4FXELIZER with a brick texture, split into the source and the dithered 16-color result">
+  </div>
 </div></header>
 
 <section id="features"><div class="wrap">
-  <h2>Features</h2>
-  <p class="sub">A non-destructive stack of stages, like adjustment layers. Reorder them, stack them, switch them off, and watch the result update live.</p>
+  <div class="label">Features</div>
+  <h2>A stack of stages, like adjustment layers</h2>
+  <p class="sub">Reorder them, stack them, switch them off, and watch the result update live.</p>
   <div class="grid">
-    <div class="card"><h3>Reorderable stage stack</h3><p>Adjust, Downscale, Upscale, Quantize and Dither. Drag them in any order, add the same stage twice, click one to preview the image at that point.</p></div>
-    <div class="card"><h3>Real dithering</h3><p>Bayer, blue noise, halftone, lines, crosshatch, checker, N64 magic square or your own pattern image, plus Floyd–Steinberg, Atkinson, Stucki, Sierra and more, with serpentine and wrap-around scanning.</p></div>
-    <div class="card"><h3>Masks &amp; maps</h3><p>Decide where the dither goes: edges, shadows, saturation, or your AO, cavity and curvature maps, loaded automatically from <code>_ao</code> / <code>_orm</code> files. Combine, invert and blur masks, and run a different pattern outside them.</p></div>
-    <div class="card"><h3>Smart palettes</h3><p>Generate up to 8192 colors in OKLab with median cut, Wu, octree or k-means, start from PICO-8, NES, Game Boy, CGA or C64, import <code>.hex .gpl .pal .act .ase</code>, edit and lock colors, or pick them from the image with the eyedropper.</p></div>
-    <div class="card"><h3>Downscale &amp; upscale filters</h3><p>Box, Lanczos, dominant color, edge-preserving, contrast-aware; back up with the N64 3-point filter, Scale2x, sharp bilinear and more.</p></div>
-    <div class="card"><h3>Presets</h3><p>PSX 8bpp / 4bpp / 15-bit, N64, NES-ish, Game Boy, Crunchy. Save your own as shareable <code>.4fxpreset</code> files.</p></div>
-    <div class="card"><h3>Exact export</h3><p>PNG, TGA or BMP, full color or indexed, with palette order kept and transparency at index 0. No color-space surprises.</p></div>
-    <div class="card"><h3>WebGPU speed</h3><p>Every stage is a compute shader with per-stage caching, so tweaking a slider only re-runs what changed.</p></div>
-    <div class="card"><h3>Your workspace</h3><p>Dock, tab, float and resize the panels, switch between built-in workspaces or save your own. Undo covers the stack and palettes; split view, pixel grid and a 3×3 tiling view to check seams.</p></div>
+    <div class="card"><h3><span class="led"></span>Reorderable stage stack</h3><p>Adjust, Downscale, Upscale, Quantize and Dither. Drag them in any order, add the same stage twice, click one to preview the image at that point.</p></div>
+    <div class="card"><h3><span class="led"></span>Real dithering</h3><p>Bayer, blue noise, halftone, lines, crosshatch, checker, N64 magic square or your own pattern image, plus Floyd–Steinberg, Atkinson, Stucki, Sierra and more, with serpentine and wrap-around scanning.</p></div>
+    <div class="card"><h3><span class="led"></span>Masks &amp; maps</h3><p>Decide where the dither goes: edges, shadows, saturation, or your AO, cavity and curvature maps, loaded automatically from <code>_ao</code> / <code>_orm</code> files. Combine, invert and blur masks, and run a different pattern outside them.</p></div>
+    <div class="card"><h3><span class="led"></span>Smart palettes</h3><p>Generate up to 8192 colors in OKLab with median cut, Wu, octree or k-means, start from PICO-8, NES, Game Boy, CGA or C64, import <code>.hex .gpl .pal .act .ase</code>, edit and lock colors, or pick them from the image with the eyedropper.</p></div>
+    <div class="card"><h3><span class="led"></span>Downscale &amp; upscale filters</h3><p>Box, Lanczos, dominant color, edge-preserving, contrast-aware; back up with the N64 3-point filter, Scale2x, sharp bilinear and more.</p></div>
+    <div class="card"><h3><span class="led"></span>Presets</h3><p>PSX 8bpp / 4bpp / 15-bit, N64, NES-ish, Game Boy, Crunchy. Save your own as shareable <code>.4fxpreset</code> files.</p></div>
+    <div class="card"><h3><span class="led"></span>Exact export</h3><p>PNG, TGA or BMP, full color or indexed, with palette order kept and transparency at index 0. No color-space surprises.</p></div>
+    <div class="card"><h3><span class="led"></span>WebGPU speed</h3><p>Every stage is a compute shader with per-stage caching, so tweaking a slider only re-runs what changed.</p></div>
+    <div class="card"><h3><span class="led"></span>Your workspace</h3><p>Dock, tab, float and resize the panels, save your own workspaces, and pick a theme: Dark, Night (greyscale), Light, Matrix or Retro. Split view, pixel grid and a 3×3 tiling view to check seams.</p></div>
   </div>
 </div></section>
 
 <section id="gallery"><div class="wrap">
-  <h2>Gallery</h2>
-  <p class="sub">One source texture, six built-in presets.</p>
+  <div class="label">Gallery</div>
+  <h2>One texture, six presets</h2>
+  <p class="sub">The same source run through the built-in presets.</p>
   <div class="gallery">
-    <figure><img src="images/gallery-source.png" alt="Source" loading="lazy"><figcaption><b>Source</b></figcaption></figure>
-    <figure><img src="images/gallery-psx-8bpp.png" alt="PSX 8bpp" loading="lazy"><figcaption><b>PSX 8bpp</b> 256 colors</figcaption></figure>
-    <figure><img src="images/gallery-psx-4bpp.png" alt="PSX 4bpp" loading="lazy"><figcaption><b>PSX 4bpp</b> 16 colors</figcaption></figure>
-    <figure><img src="images/gallery-n64.png" alt="N64" loading="lazy"><figcaption><b>N64</b> filtered blur</figcaption></figure>
-    <figure><img src="images/gallery-nes.png" alt="NES-ish" loading="lazy"><figcaption><b>NES-ish</b></figcaption></figure>
-    <figure><img src="images/gallery-gameboy.png" alt="Game Boy" loading="lazy"><figcaption><b>Game Boy</b> 4 shades</figcaption></figure>
-    <figure><img src="images/gallery-crunchy.png" alt="Crunchy" loading="lazy"><figcaption><b>Crunchy</b></figcaption></figure>
+    <figure><img src="images/gallery-source.png" alt="Source texture: mossy bricks" loading="lazy"><figcaption>Source<span>683²</span></figcaption></figure>
+    <figure><img src="images/gallery-psx-8bpp.png" alt="PSX 8bpp preset" loading="lazy"><figcaption>PSX 8bpp<span>256 col</span></figcaption></figure>
+    <figure><img src="images/gallery-psx-4bpp.png" alt="PSX 4bpp preset" loading="lazy"><figcaption>PSX 4bpp<span>16 col</span></figcaption></figure>
+    <figure><img src="images/gallery-n64.png" alt="N64 preset" loading="lazy"><figcaption>N64<span>filtered</span></figcaption></figure>
+    <figure><img src="images/gallery-nes.png" alt="NES-ish preset" loading="lazy"><figcaption>NES-ish<span>NES</span></figcaption></figure>
+    <figure><img src="images/gallery-gameboy.png" alt="Game Boy preset" loading="lazy"><figcaption>Game Boy<span>4 col</span></figcaption></figure>
+    <figure><img src="images/gallery-crunchy.png" alt="Crunchy preset" loading="lazy"><figcaption>Crunchy<span>dither</span></figcaption></figure>
   </div>
 </div></section>
 
 <section id="start"><div class="wrap">
-  <h2>Get started</h2>
+  <div class="label">Get started</div>
+  <h2>Three steps</h2>
   <ol class="steps">
     <li><b>Download</b> the installer for your OS from the <a href="https://github.com/forfex/4fxelizer/releases/latest">latest release</a> (Windows setup, macOS dmg, Linux AppImage or deb). Builds are not code-signed yet, so Windows SmartScreen or macOS Gatekeeper may warn.</li>
     <li><b>Drop a texture</b> into the window (PNG, JPG, TGA and more), or use <i>File › Open Image…</i>.</li>
-    <li><b>Pick a preset</b> or tweak the stack, compare with the split view, then <b>Export</b> a PNG, TGA or BMP, full color or indexed.</li>
+    <li><b>Pick a preset</b> or tweak the stack, compare with the split view, then <b>export</b> a PNG, TGA or BMP, full color or indexed.</li>
   </ol>
-  <p class="sub" style="margin-top:24px">Requires a GPU with WebGPU support. Windows 11 is the verified platform so far; macOS and Linux builds are produced by CI and feedback is welcome.</p>
-  <p class="sub">Build from source:</p>
-<pre><code>git clone https://github.com/forfex/4fxelizer.git
-cd 4fxelizer
-npm install
-npm run dev</code></pre>
+  <p class="note">Needs a GPU with WebGPU support. Windows 11 is the verified platform so far; macOS and Linux builds are produced by CI and feedback is welcome.</p>
+  <p class="note">Build from source:</p>
+<pre><code><span class="p">$ </span>git clone https://github.com/forfex/4fxelizer.git
+<span class="p">$ </span>cd 4fxelizer
+<span class="p">$ </span>npm install
+<span class="p">$ </span>npm run dev</code></pre>
 </div></section>
 
-<footer><div class="wrap">4FXELIZER · <a href="https://github.com/forfex/4fxelizer">GitHub</a> · <a href="https://github.com/forfex/4fxelizer/blob/master/docs/PLAN.md">Roadmap</a> · <a href="https://github.com/forfex/4fxelizer/issues">Issues</a> · <a href="https://github.com/forfex/4fxelizer/blob/master/LICENSE">MIT License</a></div></footer>
+<footer>
+  <div class="ramp" aria-hidden="true" style="--b:var(--fx-bg)"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></div>
+  <div class="wrap">
+    <a class="logo" href="#"><img src="icon.svg" alt="">4FXELIZER</a>
+    <a href="https://github.com/forfex/4fxelizer">GitHub</a>
+    <a href="https://github.com/forfex/4fxelizer/blob/master/docs/PLAN.md">Roadmap</a>
+    <a href="https://github.com/forfex/4fxelizer/issues">Issues</a>
+    <a href="https://github.com/forfex/4fxelizer/blob/master/LICENSE">MIT License</a>
+  </div>
+</footer>
+
+<script>
+  // Cover art dither: 8px squares on a 16px pitch, placed by a 4x4 Bayer matrix. Density rises toward
+  // the purple slab, then continues as holes cut into it.
+  const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
+  const dots = document.getElementById('dots')
+  const ns = 'http://www.w3.org/2000/svg'
+  for (let y = 16; y < 224; y += 16) {
+    for (let x = 32; x < 336; x += 16) {
+      const onSlab = x >= 208
+      if (onSlab && y < 48) continue
+      const t = onSlab ? 1 - (x - 208) / 128 : (x - 32) / 160
+      if (BAYER[(y / 16) % 4][(x / 16) % 4] / 16 >= t * 0.9) continue
+      if (!onSlab && x + 8 > 192) continue
+      const r = document.createElementNS(ns, 'rect')
+      r.setAttribute('class', onSlab ? 'cut' : 'dot')
+      r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', 8); r.setAttribute('height', 8)
+      dots.appendChild(r)
+    }
+  }
+
+  // Dark / Light switch, remembered in this browser.
+  const toggle = document.getElementById('theme')
+  const sync = () => {
+    const light = document.documentElement.dataset.theme === 'light'
+    toggle.setAttribute('aria-checked', String(light))
+    toggle.querySelectorAll('[data-t]').forEach((el) => el.classList.toggle('on', el.dataset.t === (light ? 'light' : 'dark')))
+    document.querySelector('meta[name="theme-color"]').content = light ? '#e6e0ee' : '#16121e'
+  }
+  toggle.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'
+    document.documentElement.dataset.theme = next
+    try { localStorage.setItem('fx-theme', next) } catch {}
+    sync()
+  })
+  sync()
+</script>
 </body>
 </html>

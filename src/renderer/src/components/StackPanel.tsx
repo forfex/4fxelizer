@@ -7,6 +7,7 @@ import { useApp } from '@/store'
 import { BlendRow, PaletteSelect, StageEditor } from './stages/editors'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/controls'
+import { CaretIcon, MoreIcon, PlusIcon, PreviewIcon } from './ui/icons'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './ui/menu'
 import { GroupBox, Led, LedToggle, PanelBody } from './ui/retro'
 
@@ -180,19 +181,23 @@ function StageCard({
   return (
     <div
       className={cn(
-        'bevel-raised flex flex-col rounded-fx bg-panel-hi',
-        previewing && 'outline-px outline-accent',
+        // A size container: the header drops its size readout when the card is narrow.
+        '@container/card flex flex-col rounded-fx-md border-px border-edge',
+        previewing
+          ? 'bg-accent-soft shadow-[inset_var(--px)_var(--px)_0_var(--fx-bevel-light),inset_3px_0_0_var(--fx-accent)]'
+          : 'bg-panel-hi bevel-raised',
         dragging && 'opacity-50'
       )}
     >
-      <div className="flex h-7 items-center gap-1.5 pr-1 pl-0.5">
+      <div className="flex h-8 min-w-0 items-center gap-1 pr-1 pl-1">
         <span
-          className="flex h-full w-3.5 shrink-0 cursor-grab touch-none items-center justify-center text-dim active:cursor-grabbing"
+          className="flex h-full w-3 shrink-0 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
           title="Drag to reorder"
           onPointerDown={onGripPointerDown}
           aria-hidden
         >
-          ⋮⋮
+          {/* Grip: a 50% dither of faint dots. */}
+          <span className="h-3.5 w-1.5 dither-50 [--dither-a:var(--fx-text-faint)] [--dither-b:transparent]" />
         </span>
         <LedToggle
           label="Enabled"
@@ -201,15 +206,18 @@ function StageCard({
         />
         <button
           type="button"
-          className={cn('min-w-0 flex-1 truncate text-left font-semibold', !stage.enabled && 'text-dim line-through')}
+          className={cn(
+            'min-w-0 flex-1 truncate text-left font-display text-[14px] leading-[18px] font-semibold',
+            !stage.enabled && 'text-faint line-through'
+          )}
           title={previewing ? 'Showing the image after this stage. Click to show the final result.' : 'Show the image after this stage'}
           onClick={() => setPreview(previewing ? null : stage.uid)}
         >
           {stageLabel(stage.passId)}
-          {blended && <span className="pl-1 font-normal text-dim">· {Math.round(stage.blend.opacity * 100)}%</span>}
+          {blended && <span className="pl-1 font-ui text-small font-normal text-dim">· {Math.round(stage.blend.opacity * 100)}%</span>}
         </button>
         {resized && (
-          <span className="font-mono text-small text-dim" title="Output size">
+          <span className="hidden shrink-0 font-mono text-[10px] text-dim @min-[280px]/card:inline" title="Output size">
             {info.output.width}×{info.output.height}
           </span>
         )}
@@ -221,17 +229,19 @@ function StageCard({
         <Button
           variant="ghost"
           size="icon"
-          className="size-5"
+          // Narrow cards drop it: clicking the stage name does the same.
+          className="hidden size-5 shrink-0 @min-[220px]/card:inline-flex"
           title={previewing ? 'Previewing this stage' : 'Preview the image at this stage'}
+          aria-label="Preview this stage"
           aria-pressed={previewing}
           onClick={() => setPreview(previewing ? null : stage.uid)}
         >
-          ◉
+          <PreviewIcon className={previewing ? 'text-accent-hi' : 'text-dim'} />
         </Button>
         <Menu>
           <MenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-5" title="Stage actions">
-              ⋯
+            <Button variant="ghost" size="icon" className="size-5 shrink-0" title="Stage actions" aria-label="Stage actions">
+              <MoreIcon className="text-dim" />
             </Button>
           </MenuTrigger>
           <MenuContent align="end">
@@ -245,16 +255,19 @@ function StageCard({
         <Button
           variant="ghost"
           size="icon"
-          className="size-5"
+          className="size-5 shrink-0"
           title={open ? 'Collapse' : 'Expand'}
+          aria-label={open ? 'Collapse' : 'Expand'}
           aria-expanded={open}
           onClick={() => setOpen(!open)}
         >
-          {open ? '▾' : '▸'}
+          <CaretIcon open={open} className="text-dim" />
         </Button>
       </div>
       {open && (
-        <div className={cn('flex flex-col gap-1.5 border-t-px border-bevel-dark px-2 pt-2 pb-2', !stage.enabled && 'opacity-60')}>
+        <div
+          className={cn('@container/panel flex min-w-0 flex-col gap-2 border-t-px border-edge px-2 pt-2 pb-2', !stage.enabled && 'opacity-60')}
+        >
           {warnings.map((w) => (
             <p key={w} className="flex gap-1.5 text-small text-led-warn">
               <Led state="warn" className="mt-1" />
@@ -264,11 +277,11 @@ function StageCard({
           <StageEditor stage={stage} info={info} />
           <button
             type="button"
-            className="mt-0.5 flex items-center gap-1 self-start text-small text-dim hover:text-text"
+            className="mt-0.5 flex items-center gap-1.5 self-start text-small text-dim hover:text-text"
             onClick={() => setBlendOpen(!blendOpen)}
             aria-expanded={blendOpen}
           >
-            {blendOpen ? '▾' : '▸'} Blending{blended ? ` (${stage.blend.mode}, ${Math.round(stage.blend.opacity * 100)}%)` : ''}
+            <CaretIcon open={blendOpen} /> Blending{blended ? ` (${stage.blend.mode}, ${Math.round(stage.blend.opacity * 100)}%)` : ''}
           </button>
           {blendOpen && <BlendRow stage={stage} />}
         </div>
@@ -282,14 +295,14 @@ function AddStageMenu() {
     <Menu>
       <MenuTrigger asChild>
         <Button className="flex-1" title="Add a stage (after the previewed stage, or at the end)">
-          + Add stage
+          <PlusIcon /> Add stage
         </Button>
       </MenuTrigger>
       <MenuContent className="w-72">
         {STAGE_TYPES.map((t) => (
           <MenuItem
             key={t.passId}
-            className="h-auto flex-col items-start gap-0 py-1"
+            className="h-auto flex-col items-start gap-0 py-1.5 whitespace-normal"
             onSelect={() => {
               // Insert after the previewed stage when there is one, otherwise at the end.
               const { addStage, previewUid, stages } = useApp.getState()
@@ -297,8 +310,8 @@ function AddStageMenu() {
               addStage(t.passId, at > 0 ? at : undefined)
             }}
           >
-            <span className="font-semibold">{t.label}</span>
-            <span className="text-small opacity-80">{t.hint}</span>
+            <span className="font-display font-semibold">{t.label}</span>
+            <span className="text-small text-dim">{t.hint}</span>
           </MenuItem>
         ))}
       </MenuContent>

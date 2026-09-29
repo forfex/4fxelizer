@@ -35,16 +35,23 @@ export function Viewer() {
     if (!gpuReady || !canvas || !engine) return
     engine.attachCanvas(canvas)
 
-    const colors = {
+    // Theme colors, read again when the theme changes.
+    const readColors = () => ({
       background: cssColor('--fx-viewer-bg'),
       checkerA: cssColor('--fx-checker-a'),
       checkerB: cssColor('--fx-checker-b')
-    }
+    })
+    let colors = readColors()
+    let theme = useApp.getState().theme
     let processed: unknown[] | null = null
 
     // Processing happens inside the frame, so dragging a slider runs the stack at most once per frame.
     const frame = (): void => {
       const s = useApp.getState()
+      if (s.theme !== theme) {
+        theme = s.theme
+        colors = readColors()
+      }
       const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid, s.maps]
       if (s.image && (!processed || inputs.some((v, i) => v !== processed![i]))) {
         processed = inputs

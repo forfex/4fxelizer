@@ -12,6 +12,7 @@ describe('settings', () => {
       grid: true,
       split: true,
       tile: false,
+      theme: 'dark',
       exportFormat: 'png-rgba',
       layout: null,
       workspace: 'essentials',
@@ -20,6 +21,12 @@ describe('settings', () => {
     expect(normalizeSettings({ exportFormat: 'tiff' }).exportFormat).toBe('png-indexed')
     for (const f of ['tga-indexed', 'tga-rgba', 'bmp-indexed', 'bmp-rgba']) expect(normalizeSettings({ exportFormat: f }).exportFormat).toBe(f)
     expect(normalizeSettings({ exportFormat: 'bmp-cmyk' }).exportFormat).toBe('png-indexed')
+  })
+
+  it('keeps a known theme and falls back to Dark', () => {
+    for (const t of ['night', 'light', 'matrix', 'retro']) expect(normalizeSettings({ theme: t }).theme).toBe(t)
+    expect(normalizeSettings({ theme: 'sepia' }).theme).toBe('dark')
+    expect(normalizeSettings({}).theme).toBe('dark')
   })
 
   it('keeps panel layouts and saved workspaces, dropping broken entries', () => {

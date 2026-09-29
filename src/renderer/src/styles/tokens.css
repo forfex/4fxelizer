@@ -1,64 +1,277 @@
 /*
- * Design tokens — the single place to restyle the app.
- * Placeholder neutral-retro theme until the Figma design lands; Figma variables map 1:1 onto these.
+ * Design tokens: the single place to restyle the app. Names and values follow the 4FXELIZER
+ * design system (Figma variables map 1:1 onto these).
+ *
+ * Themes share every role; only values change. `:root` holds Dark (the default) and every token;
+ * each `:root[data-theme=…]` block overrides only what differs. The theme is `data-theme` on
+ * <html> (see theme.ts); add one to THEMES / THEME_NAMES / THEME_WINDOW_COLORS in @shared/api too.
+ *
+ * - Dark: a deep plum desktop with purple and magenta accents.
+ * - Night: pure greyscale for dim rooms and for judging the image's colors with no tinted chrome
+ *   around it. Its only hues are fx-magenta (focus, the armed outline, the selected swatch, the
+ *   busy LED) and the status LEDs.
+ * - Light: the daylight counterpart of Dark: pale lilac surfaces, dark ink, a deeper purple.
+ * - Matrix: green phosphor on black.
+ * - Retro: the classic silver-grey desktop: navy title bars, white wells and readouts, black
+ *   outlines, square corners, no glow.
  */
 :root {
-  /* Surfaces */
-  --fx-bg: #1d1c1a;
-  --fx-panel: #2b2a27;
-  --fx-panel-hi: #37352f;
-  --fx-well: #151413;
-  --fx-edge: #0c0b0a;
-  --fx-bevel-light: #4d4a43;
-  --fx-bevel-dark: #0e0d0c;
-  --fx-viewer-bg: #232220;
-  --fx-checker-a: #3a3936;
-  --fx-checker-b: #2e2d2a;
+  /* Surfaces, back to front: bg (the desktop behind the dock) → panel → panel-hi (raised controls) */
+  --fx-bg: #16121e;
+  --fx-panel: #211b2c;
+  --fx-panel-hi: #2d2540;
+  --fx-well: #0f0c16;
+  --fx-edge: #06040a;
+  --fx-line: #3a3050;
+  --fx-bevel-light: #4b3f66;
+  --fx-bevel-dark: #08060d;
+  --fx-viewer-bg: #1a1524;
+  --fx-checker-a: #302a3a;
+  --fx-checker-b: #252030;
 
   /* Text */
-  --fx-text: #e4e0d6;
-  --fx-text-dim: #9a958a;
+  --fx-text: #f1e9dc;
+  --fx-text-dim: #aca2bf;
+  /* Placeholders and disabled labels only: below 4.5:1 on purpose. */
+  --fx-text-faint: #766b8a;
 
-  /* Accents (used sparingly, like status LEDs) */
-  --fx-accent: #d9a441;
-  --fx-accent-text: #1d1c1a;
-  --fx-led-green: #7cc36a;
-  --fx-led-amber: #e0a33a;
-  --fx-led-red: #d8584a;
-  --fx-led-off: #3d3b36;
+  /* Accents: purple marks state; magenta is the "hot" accent for small marks only */
+  --fx-accent: #a978ff;
+  --fx-accent-hi: #c6a6ff;
+  --fx-accent-text: #120d1c;
+  --fx-accent-soft: #3a2a5c;
+  --fx-magenta: #ff4fcf;
+  /* Hard shadows: a deep violet, not black, so they read on the dark ground */
+  --fx-drop: #3f1f70;
+
+  /* Status LEDs: always beside a word */
+  --fx-led-green: #5ee08e;
+  --fx-led-amber: #ffc247;
+  --fx-led-red: #ff5a6e;
+  --fx-led-off: #3a3348;
 
   /* LCD readouts */
-  --fx-lcd-bg: #121810;
-  --fx-lcd-text: #9fdc7c;
+  --fx-lcd-bg: #170c22;
+  --fx-lcd-text: #ff9fe6;
 
-  /* Title bar (the native window buttons on Windows/Linux are sized to match) */
+  --fx-scrollbar-thumb-hover: #3b3154;
+
+  /* Native form controls and scrollbars (light or dark). */
+  --fx-color-scheme: dark;
+
+  /* ---- Derived from the colors above: the same in every theme ---- */
+  --fx-focus: var(--fx-magenta);
+  --fx-glow: 0 0 8px color-mix(in srgb, var(--fx-magenta) 55%, transparent);
+  --fx-shadow-hard: 2px 2px 0 var(--fx-drop);
+  --fx-shadow-window: 6px 6px 0 var(--fx-drop);
+  /* Phosphor glow of LCD digits (text-shadow). */
+  --fx-lcd-glow: 0 0 6px color-mix(in srgb, var(--fx-lcd-text) 55%, transparent);
+
+  /* Title bar (the native window buttons on Windows/Linux are sized and colored to match) */
   --fx-titlebar-height: 32px;
   --fx-titlebar-bg: var(--fx-bg);
   --fx-titlebar-text: var(--fx-text-dim);
   --fx-titlebar-symbol: var(--fx-text);
+  /* Hovered / open menu in the title bar: a tint of its own text color, so it reads on any ground. */
+  --fx-titlebar-hover: color-mix(in srgb, var(--fx-titlebar-symbol) 14%, transparent);
   /* macOS: room for the traffic lights at the title bar's left */
   --fx-titlebar-mac-inset: 80px;
 
   /* Dockable panels */
   --fx-dock-gap: 4px;
-  --fx-dock-tab-height: 24px;
-  --fx-dock-tab-padding: 10px;
+  --fx-dock-tab-height: 26px;
+  --fx-dock-tab-padding: 12px;
   --fx-dock-float-grip-height: 10px;
-  --fx-dock-float-shadow: 0 4px 14px rgb(0 0 0 / 45%);
+  --fx-dock-float-shadow: var(--fx-shadow-window);
 
-  /* Scrollbars: sunken track, raised bevel thumb */
+  /* Scrollbars: dithered track, raised bevel thumb */
   --fx-scrollbar-size: 12px;
   --fx-scrollbar-track: var(--fx-well);
   --fx-scrollbar-thumb: var(--fx-panel-hi);
-  --fx-scrollbar-thumb-hover: #45423a;
 
-  /* Shape & type */
-  --fx-radius: 2px;
-  --fx-font-ui: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Ubuntu, 'Noto Sans', sans-serif;
-  --fx-font-mono: 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  /* Shape */
+  --fx-radius: 3px;
+  --fx-radius-md: 6px;
+  --fx-radius-lg: 10px;
+  --fx-radius-pill: 999px;
+  --fx-control-height: 24px;
+  --fx-outline: 2px;
+
+  /* Spacing (4px grid) */
+  --fx-space-1: 4px;
+  --fx-space-2: 8px;
+  --fx-space-3: 12px;
+  --fx-space-4: 16px;
+  --fx-space-6: 24px;
+
+  /* Type: Chakra Petch for display and labels, Rubik for UI text, Martian Mono for numbers */
+  --fx-font-display: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif;
+  --fx-font-ui: Rubik, 'Segoe UI', system-ui, -apple-system, 'Noto Sans', sans-serif;
+  --fx-font-mono: 'Martian Mono', 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
   --fx-font-size: 13px;
   --fx-font-size-small: 11px;
+  --fx-font-size-lcd: 12px;
 
   /* Set at runtime by lib/pixelSnap.ts */
   --px: 1px;
+}
+
+:root[data-theme='night'] {
+  --fx-bg: #090909;
+  --fx-panel: #111111;
+  --fx-panel-hi: #1a1a1a;
+  --fx-well: #050505;
+  --fx-edge: #000000;
+  --fx-line: #272727;
+  --fx-bevel-light: #363636;
+  --fx-bevel-dark: #000000;
+  --fx-viewer-bg: #070707;
+  --fx-checker-a: #1b1b1b;
+  --fx-checker-b: #141414;
+
+  --fx-text: #e3e3e3;
+  --fx-text-dim: #969696;
+  --fx-text-faint: #606060;
+
+  --fx-accent: #bdbdbd;
+  --fx-accent-hi: #dedede;
+  --fx-accent-text: #090909;
+  --fx-accent-soft: #2e2e2e;
+  --fx-magenta: #ff66da;
+  --fx-drop: #2c2c2c;
+
+  /* Status LEDs keep their colors (the Dark values): status reads at a glance in every theme. */
+  --fx-led-off: #242424;
+
+  --fx-lcd-bg: #080808;
+  --fx-lcd-text: #d8d8d8;
+
+  --fx-scrollbar-thumb-hover: #2e2e2e;
+
+  --fx-glow: 0 0 10px color-mix(in srgb, var(--fx-magenta) 60%, transparent);
+}
+
+:root[data-theme='light'] {
+  --fx-bg: #e6e0ee;
+  --fx-panel: #f6f3fa;
+  --fx-panel-hi: #fdfcff;
+  --fx-well: #ebe6f2;
+  --fx-edge: #3d3452;
+  --fx-line: #d2c8e0;
+  --fx-bevel-light: #ffffff;
+  --fx-bevel-dark: #b3a7c7;
+  --fx-viewer-bg: #d9d3e3;
+  --fx-checker-a: #d2cbdd;
+  --fx-checker-b: #c5bdd2;
+
+  --fx-text: #1e1829;
+  --fx-text-dim: #594f6d;
+  --fx-text-faint: #978dab;
+
+  --fx-accent: #7a3ff2;
+  --fx-accent-hi: #8f5cff;
+  --fx-accent-text: #ffffff;
+  --fx-accent-soft: #e3d6ff;
+  --fx-magenta: #d4199e;
+  --fx-drop: #b49de0;
+
+  /* Deeper LED colors: they double as warning and error text on pale grounds. */
+  --fx-led-green: #1f9d55;
+  --fx-led-amber: #a35f00;
+  --fx-led-red: #c8243f;
+  --fx-led-off: #cfc6dd;
+
+  --fx-lcd-bg: #efe7f8;
+  --fx-lcd-text: #8a1570;
+  --fx-lcd-glow: none;
+
+  --fx-scrollbar-thumb-hover: #eee8f6;
+  --fx-color-scheme: light;
+  --fx-glow: 0 0 6px color-mix(in srgb, var(--fx-magenta) 40%, transparent);
+}
+
+:root[data-theme='matrix'] {
+  --fx-bg: #010603;
+  --fx-panel: #04110a;
+  --fx-panel-hi: #0a2213;
+  --fx-well: #000402;
+  --fx-edge: #000000;
+  --fx-line: #0e3a1c;
+  --fx-bevel-light: #1a5c30;
+  --fx-bevel-dark: #000000;
+  --fx-viewer-bg: #010904;
+  --fx-checker-a: #0b1f10;
+  --fx-checker-b: #07150b;
+
+  --fx-text: #9dffb0;
+  --fx-text-dim: #45b865;
+  --fx-text-faint: #2a6e3c;
+
+  --fx-accent: #22ff77;
+  --fx-accent-hi: #8dffb5;
+  --fx-accent-text: #001a08;
+  --fx-accent-soft: #0e3d1d;
+  /* The "hot" accent is white phosphor: focus and the armed outline stand out from all the green. */
+  --fx-magenta: #e8ffe0;
+  --fx-drop: #0b4a1f;
+
+  --fx-led-off: #0f2a17;
+
+  --fx-lcd-bg: #000803;
+  --fx-lcd-text: #3dff7f;
+
+  --fx-scrollbar-thumb-hover: #0f2e19;
+  --fx-glow: 0 0 8px color-mix(in srgb, var(--fx-accent) 60%, transparent);
+}
+
+:root[data-theme='retro'] {
+  --fx-bg: #a8a8a8;
+  --fx-panel: #c0c0c0;
+  --fx-panel-hi: #c0c0c0;
+  --fx-well: #ffffff;
+  --fx-edge: #000000;
+  --fx-line: #808080;
+  --fx-bevel-light: #ffffff;
+  --fx-bevel-dark: #808080;
+  /* The classic teal desktop behind the image. */
+  --fx-viewer-bg: #008080;
+  --fx-checker-a: #c0c0c0;
+  --fx-checker-b: #a0a0a0;
+
+  --fx-text: #000000;
+  --fx-text-dim: #404040;
+  --fx-text-faint: #808080;
+
+  --fx-accent: #000080;
+  --fx-accent-hi: #1084d0;
+  --fx-accent-text: #ffffff;
+  --fx-accent-soft: #a6caf0;
+  --fx-magenta: #800080;
+  --fx-drop: #202020;
+
+  --fx-led-green: #00a000;
+  --fx-led-amber: #6b5000;
+  --fx-led-red: #a00000;
+  --fx-led-off: #808080;
+
+  /* Readouts are plain white fields, like every other input in this theme. */
+  --fx-lcd-bg: #ffffff;
+  --fx-lcd-text: #000000;
+  --fx-lcd-glow: none;
+
+  --fx-scrollbar-thumb-hover: #d4d4d4;
+  --fx-color-scheme: light;
+  --fx-glow: 0 0 0 transparent;
+
+  --fx-titlebar-bg: #000080;
+  --fx-titlebar-text: #ffffff;
+  --fx-titlebar-symbol: #ffffff;
+
+  /* Square corners everywhere. */
+  --fx-radius: 0px;
+  --fx-radius-md: 0px;
+  --fx-radius-lg: 0px;
+
+  --fx-font-display: Tahoma, Verdana, 'Segoe UI', system-ui, sans-serif;
+  --fx-font-ui: Tahoma, Verdana, 'Segoe UI', system-ui, sans-serif;
 }

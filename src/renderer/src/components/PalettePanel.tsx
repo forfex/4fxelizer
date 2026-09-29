@@ -20,9 +20,9 @@ import {
 } from '@/palette/palette'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
-import { Checkbox, Field, ParamSlider } from './ui/controls'
+import { Checkbox, Field, INPUT_CLASS, ParamSlider } from './ui/controls'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
-import { GroupBox, Led, PanelBody } from './ui/retro'
+import { GroupBox, LCD_CLASS, Led, PanelBody } from './ui/retro'
 import { Select } from './ui/select'
 
 export function PalettePanel() {
@@ -130,7 +130,7 @@ function NameField({ palette }: { palette: Palette }) {
   }
   return (
     <input
-      className="bevel-sunken mt-1.5 h-6 w-full rounded-fx bg-well px-1.5 outline-none"
+      className={cn(INPUT_CLASS, 'mt-1.5')}
       value={name}
       aria-label="Palette name"
       onChange={(e) => setName(e.target.value)}
@@ -268,6 +268,7 @@ function SwatchCanvas({
   onSelect(index: number): void
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const theme = useApp((s) => s.theme)
   const cols = colors.length <= 1024 ? 32 : 64
   const rows = Math.ceil(colors.length / cols)
 
@@ -294,13 +295,13 @@ function SwatchCanvas({
       }
       const lockColor = token('--fx-edge')
       colors.forEach((c, i) => c.locked && mark(i, lockColor, 1))
-      if (selected !== null && selected < colors.length) mark(selected, token('--fx-accent'), 0.5)
+      if (selected !== null && selected < colors.length) mark(selected, token('--fx-magenta'), 0.5)
     }
     draw()
     const observer = new ResizeObserver(draw)
     observer.observe(canvas)
     return () => observer.disconnect()
-  }, [colors, selected, cols, rows])
+  }, [colors, selected, cols, rows, theme])
 
   const indexAt = (e: React.MouseEvent<HTMLCanvasElement>): number => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -358,7 +359,7 @@ function ColorEditor({
         />
       </label>
       <input
-        className="bevel-sunken h-6 w-20 rounded-fx bg-lcd px-1.5 font-mono text-lcd-text outline-none"
+        className={cn(LCD_CLASS, 'w-22 outline-none focus-visible:ring-focus')}
         value={text}
         aria-label="Hex color"
         onChange={(e) => setText(e.target.value)}

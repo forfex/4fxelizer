@@ -4,8 +4,10 @@ import { App } from './App'
 import { collectGpuReport } from './gpu/report'
 import { installPixelSnap } from './lib/pixelSnap'
 import { startSettingsSync } from './settings'
+import { startThemeSync } from './theme'
 import { getEngine } from './engine'
 import { useApp } from './store'
+import './styles/fonts.css'
 import './styles/index.css'
 
 installPixelSnap()
@@ -20,6 +22,7 @@ if (new URLSearchParams(location.search).get('mode') === 'gpu-report') {
   collectGpuReport().then((report) => window.fx.submitGpuReport(report))
 } else {
   startSettingsSync()
+  startThemeSync()
   root.render(
     <StrictMode>
       <App />

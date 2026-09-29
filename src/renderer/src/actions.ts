@@ -1,4 +1,4 @@
-import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile } from '@shared/api'
+import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme } from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
 import { encodePattern, patternFromRgba } from '@/dither/customPattern'
 import { getEngine } from '@/engine'
@@ -496,6 +496,12 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'toggle-grid': return app.toggleGrid()
     case 'toggle-split': return app.toggleSplit()
     case 'toggle-tile': return app.toggleTile()
+    case 'theme-dark':
+    case 'theme-night':
+    case 'theme-light':
+    case 'theme-matrix':
+    case 'theme-retro':
+      return app.setTheme(command.slice('theme-'.length) as Theme)
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
   }
 }

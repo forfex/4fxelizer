@@ -4,7 +4,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { clamp, decimalsOf, LOG_POSITIONS, logToPosition, positionToLog, snapToStep, wheelLogValue } from '@/lib/sliderMath'
 import { cn } from '@/lib/utils'
+import { LCD_CLASS } from './retro'
 import { Slider } from './slider'
+
+/** A sunken text field (names, search). */
+export const INPUT_CLASS = cn(
+  'bevel-sunken h-control w-full min-w-0 rounded-fx border-px border-edge bg-well px-2 text-text outline-none',
+  'placeholder:text-faint focus-visible:ring-focus'
+)
 
 /** Editable numeric readout in an LCD box. Commits on Enter/blur; ↑/↓ step (Shift = ×10). */
 export function NumberField({
@@ -44,16 +51,11 @@ export function NumberField({
 
   return (
     <span
-      className={cn(
-        'bevel-sunken inline-flex h-6 min-w-12 items-center rounded-fx bg-lcd px-1.5',
-        'font-mono text-ui text-lcd-text tabular-nums',
-        disabled && 'opacity-45',
-        className
-      )}
+      className={cn(LCD_CLASS, 'focus-within:ring-focus', disabled && 'opacity-45', className)}
       title={title}
     >
       <input
-        className="w-full min-w-0 bg-transparent text-right outline-none"
+        className="w-full min-w-0 bg-transparent text-right outline-none focus-visible:outline-none"
         value={text}
         disabled={disabled}
         inputMode="decimal"
@@ -78,9 +80,24 @@ export function NumberField({
           }
         }}
       />
-      {suffix && <span className="pl-0.5 text-lcd-text/70">{suffix}</span>}
+      {suffix && <span className="pl-0.5 text-[10px] opacity-70">{suffix}</span>}
     </span>
   )
+}
+
+/*
+ * Responsive rows. Panel bodies and stage cards are size containers named `panel`; where one is
+ * narrower than 300px the label moves above its control, so sliders, selects and segmented
+ * choices keep a usable width instead of being squeezed next to the label column.
+ */
+/** A label + control row: stacked in narrow panels, side by side otherwise. */
+export const ROW_CLASS = 'flex min-w-0 flex-col gap-1 @min-[300px]/panel:flex-row @min-[300px]/panel:items-center @min-[300px]/panel:gap-2'
+/** The label column of a row (full width above the control when stacked). */
+export const ROW_LABEL_CLASS = 'min-w-0 truncate text-dim @min-[300px]/panel:w-22 @min-[300px]/panel:shrink-0'
+
+function RowLabel({ label }: { label: string }) {
+  // An empty label only keeps the column aligned; stacked, it takes no room.
+  return label ? <span className={ROW_LABEL_CLASS}>{label}</span> : <span className={cn(ROW_LABEL_CLASS, 'hidden @min-[300px]/panel:block')} />
 }
 
 /**
@@ -114,34 +131,36 @@ export function ParamSlider({
 }) {
   const log = scale === 'log'
   return (
-    <div className="flex items-center gap-2" title={hint}>
-      <span className="w-20 shrink-0 truncate text-dim">{label}</span>
-      <Slider
-        className="min-w-0 flex-1"
-        min={log ? 0 : min}
-        max={log ? LOG_POSITIONS : max}
-        step={log ? 1 : step}
-        ticks={ticks}
-        value={[log ? logToPosition(value, min, max) : clamp(value, min, max)]}
-        disabled={disabled}
-        onValueChange={([v]) => {
-          const next = log ? positionToLog(v!, min, max, step) : v!
-          if (next !== value) onChange(next)
-        }}
-        onWheelNotches={log ? (n, coarse) => onChange(wheelLogValue(value, n, min, max, step, coarse)) : undefined}
-        aria-label={label}
-      />
-      <NumberField className="w-16 shrink-0" value={value} onChange={onChange} min={min} max={max} step={step} suffix={suffix} disabled={disabled} />
+    <div className={ROW_CLASS} title={hint}>
+      <RowLabel label={label} />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <Slider
+          className="min-w-16 flex-1"
+          min={log ? 0 : min}
+          max={log ? LOG_POSITIONS : max}
+          step={log ? 1 : step}
+          ticks={ticks}
+          value={[log ? logToPosition(value, min, max) : clamp(value, min, max)]}
+          disabled={disabled}
+          onValueChange={([v]) => {
+            const next = log ? positionToLog(v!, min, max, step) : v!
+            if (next !== value) onChange(next)
+          }}
+          onWheelNotches={log ? (n, coarse) => onChange(wheelLogValue(value, n, min, max, step, coarse)) : undefined}
+          aria-label={label}
+        />
+        <NumberField className="w-16 shrink-0" value={value} onChange={onChange} min={min} max={max} step={step} suffix={suffix} disabled={disabled} />
+      </div>
     </div>
   )
 }
 
-/** Label column + control, for selects and other non-slider settings. */
+/** Label column + control, for selects and other non-slider settings. Controls wrap when they don't fit. */
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2" title={hint}>
-      <span className="w-20 shrink-0 truncate text-dim">{label}</span>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
+    <div className={ROW_CLASS} title={hint}>
+      <RowLabel label={label} />
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">{children}</div>
     </div>
   )
 }
@@ -194,7 +213,11 @@ export function Segmented<T extends string>({
   className?: string
 }) {
   return (
-    <div role="radiogroup" className={cn('flex min-w-0 gap-px', className)}>
+    <div
+      role="radiogroup"
+      // Choices wrap onto another line when they don't fit, rather than truncating.
+      className={cn('bevel-sunken flex min-h-control min-w-0 flex-wrap gap-0.5 rounded-fx border-px border-edge bg-well p-0.5', className)}
+    >
       {options.map((o) => (
         <button
           key={o.value}
@@ -206,8 +229,8 @@ export function Segmented<T extends string>({
           disabled={disabled}
           onClick={() => onChange(o.value)}
           className={cn(
-            'bevel-raised h-6 min-w-0 flex-1 truncate rounded-fx bg-panel-hi px-1.5 text-small',
-            'aria-pressed:bevel-sunken aria-pressed:bg-well aria-pressed:text-accent disabled:opacity-45'
+            'h-4.5 min-w-0 flex-auto truncate rounded-[2px] px-1.5 text-small font-medium text-dim hover:text-text disabled:opacity-45',
+            'aria-checked:bg-accent aria-checked:text-accent-text aria-checked:shadow-[inset_var(--px)_var(--px)_0_var(--fx-accent-hi)]'
           )}
         >
           {o.label}

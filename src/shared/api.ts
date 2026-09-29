@@ -30,6 +30,8 @@ export interface UserSettings {
   split: boolean
   /** Tiling view (copies of the texture around it). */
   tile: boolean
+  /** Interface theme. */
+  theme: Theme
   /** Last format chosen in the Export dialog. */
   exportFormat: ExportFormat
   /** Panel layout as last arranged (dockview JSON); null = build the active workspace fresh. */
@@ -46,6 +48,31 @@ export interface SavedWorkspace {
   layout: object
 }
 
+/**
+ * Interface themes (`data-theme` on <html>, values in styles/tokens.css). Dark is the plum desktop
+ * with purple and magenta accents; Night is neutral greyscale for dim rooms and color judging;
+ * Light is its daylight counterpart; Matrix is green phosphor on black; Retro is the classic
+ * silver-grey desktop with navy title bars and square corners.
+ */
+export const THEMES = ['dark', 'night', 'light', 'matrix', 'retro'] as const
+export type Theme = (typeof THEMES)[number]
+
+/** Names shown in the theme pickers (menu and toolbar), in THEMES order. */
+export const THEME_NAMES: Record<Theme, string> = { dark: 'Dark', night: 'Night', light: 'Light', matrix: 'Matrix', retro: 'Retro' }
+
+/**
+ * Title-bar ground (also the window background before the renderer has loaded its tokens) and the
+ * window-button symbol color per theme. Keep in sync with --fx-titlebar-bg / --fx-titlebar-symbol
+ * in styles/tokens.css.
+ */
+export const THEME_WINDOW_COLORS: Record<Theme, { background: string; symbol: string }> = {
+  dark: { background: '#16121e', symbol: '#f1e9dc' },
+  night: { background: '#090909', symbol: '#e3e3e3' },
+  light: { background: '#e6e0ee', symbol: '#1e1829' },
+  matrix: { background: '#010603', symbol: '#9dffb0' },
+  retro: { background: '#000080', symbol: '#ffffff' }
+}
+
 /** Most saved workspaces kept (oldest dropped first). */
 export const MAX_WORKSPACES = 32
 
@@ -60,6 +87,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   grid: false,
   split: true,
   tile: false,
+  theme: 'dark',
   exportFormat: 'png-indexed',
   layout: null,
   workspace: 'essentials',
@@ -89,6 +117,7 @@ export function normalizeSettings(raw: unknown): UserSettings {
     grid: bool('grid'),
     split: bool('split'),
     tile: bool('tile'),
+    theme: THEMES.includes(r.theme as Theme) ? (r.theme as Theme) : DEFAULT_SETTINGS.theme,
     exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
     layout: isObject(r.layout) ? r.layout : null,
     workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace.trim() : DEFAULT_SETTINGS.workspace,
@@ -131,6 +160,7 @@ export type MenuCommand =
   | 'toggle-grid'
   | 'toggle-split'
   | 'toggle-tile'
+  | `theme-${Theme}`
   | 'gpu-diagnostics'
 
 export interface FxApi {
