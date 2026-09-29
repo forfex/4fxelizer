@@ -1,14 +1,22 @@
-// Draws the model in the 3D view: into an offscreen framebuffer (low-res for the PSX look), then
-// scaled up to the canvas. Textures are the engine's own (the processed result, the source or a
-// map), so the view shows every change without reading anything back.
+// Draws the model in the 3D view: a shadow map from the key light (lit styles), then the model
+// into an offscreen framebuffer (low-res for the console looks, multisampled when antialiased),
+// then that framebuffer scaled up to the canvas. Textures are the engine's own (the processed
+// result, the source or a map), so the view shows every change without reading anything back.
 
-import type { View3dSettings } from '@shared/bake'
-import { basis, normalize, viewProjection, type OrbitCamera, type Vec3 } from '@/viewer3d/camera'
+import { VIEW3D_DITHERS, VIEW3D_FILTERS, VIEW3D_SHADINGS, VIEW3D_SURFACES, VIEW3D_WIREFRAMES, type View3dStyle } from '@shared/view3d'
+import { basis, eye, lightProjection, normalize, viewProjection, type OrbitCamera, type Vec3 } from '@/viewer3d/camera'
 import { WORK_FORMAT } from '../pass'
 import type { Rgba } from '../viewer'
 import blitShader from './blit.wgsl?raw'
 import shader from './model.wgsl?raw'
-import { VERTEX_FLOATS, type ModelGpu } from './modelGpu'
+import type { ModelGpu } from './modelGpu'
+
+/** A map the lit style reads, and which of its channels. */
+export interface FrameMap {
+  texture: GPUTexture
+  /** 0 = brightness, 1–4 = r, g, b, a (MAP_CHANNELS order). */
+  channel: number
+}
 
 export interface ModelFrame {
   model: ModelGpu | null
@@ -18,32 +26,57 @@ export interface ModelFrame {
   texture: GPUTexture | null
   /** 0 = the texture's colors; 1 + map channel index = that channel in gray (map views). */
   textureView: number
+  /** Maps the per-pixel shading reads (when the style uses maps). */
+  maps: { ao?: FrameMap; roughness?: FrameMap; metallic?: FrameMap }
   camera: OrbitCamera
-  settings: View3dSettings
+  style: View3dStyle
   background: Rgba
+  wireColor: Rgba
+  /** Device pixels per CSS pixel: wire width at full resolution. */
+  pixelRatio: number
 }
 
 /** Uniform slots per part are 256 bytes apart (minUniformBufferOffsetAlignment). */
 const PART_STRIDE = 256
 const FRAME_FORMAT: GPUTextureFormat = 'rgba8unorm'
-const AMBIENT = 0.35
+const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus'
+const FRAME_UNIFORM_BYTES = 304
+const SHADOW_SIZE = 2048
+const MSAA_SAMPLES = 4
 /** Line count vertices snap to when the view renders at full resolution. */
 const SNAP_LINES = 240
+const EXPOSURE = 1
+
+interface Target {
+  width: number
+  height: number
+  samples: number
+  color: GPUTexture
+  /** Multisampled color, resolved into `color` (antialiased styles only). */
+  multisampled: GPUTexture | null
+  depth: GPUTexture
+  blit: GPUBindGroup
+}
 
 export class ModelRenderer {
   private readonly context: GPUCanvasContext
-  private readonly pipeline: GPURenderPipeline
-  private readonly blitPipeline: GPURenderPipeline
+  private readonly module: GPUShaderModule
+  private readonly layout: GPUPipelineLayout
   private readonly frameLayout: GPUBindGroupLayout
   private readonly partLayout: GPUBindGroupLayout
+  private readonly pipelines = new Map<string, GPURenderPipeline>()
+  private readonly shadowPipeline: GPURenderPipeline
+  private readonly blitPipeline: GPURenderPipeline
   private readonly frameUniform: GPUBuffer
   private readonly blitUniform: GPUBuffer
-  private readonly samplers: { nearest: GPUSampler; linear: GPUSampler }
+  private readonly blitSampler: GPUSampler
+  private readonly shadowSampler: GPUSampler
   private readonly placeholder: GPUTexture
+  private readonly placeholderDepth: GPUTexture
+  private shadowMap: GPUTexture | null = null
   private partUniform: GPUBuffer | null = null
   private partGroup: GPUBindGroup | null = null
-  private target: { color: GPUTexture; depth: GPUTexture; blit: GPUBindGroup } | null = null
-  private textureGroup: { texture: GPUTexture; filter: boolean; group: GPUBindGroup } | null = null
+  private target: Target | null = null
 
   constructor(
     private readonly device: GPUDevice,
@@ -55,39 +88,35 @@ export class ModelRenderer {
     const format = navigator.gpu.getPreferredCanvasFormat()
     context.configure({ device, format, alphaMode: 'opaque' })
 
+    const both = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+    const texture = (binding: number): GPUBindGroupLayoutEntry => ({ binding, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } })
     this.frameLayout = device.createBindGroupLayout({
       label: '3d frame',
       entries: [
-        { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: {} },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
-        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} }
+        { binding: 0, visibility: both, buffer: {} },
+        texture(1),
+        texture(2),
+        texture(3),
+        texture(4),
+        { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
+        { binding: 6, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'comparison' } },
+        { binding: 7, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+        { binding: 8, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }
       ]
     })
     this.partLayout = device.createBindGroupLayout({
       label: '3d part',
       entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { hasDynamicOffset: true, minBindingSize: 32 } }]
     })
-    const module = device.createShaderModule({ label: '3d view', code: shader })
-    this.pipeline = device.createRenderPipeline({
-      label: '3d view',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.partLayout] }),
-      vertex: {
-        module,
-        entryPoint: 'vs',
-        buffers: [
-          {
-            arrayStride: VERTEX_FLOATS * 4,
-            attributes: [
-              { shaderLocation: 0, offset: 0, format: 'float32x3' },
-              { shaderLocation: 1, offset: 12, format: 'float32x3' },
-              { shaderLocation: 2, offset: 24, format: 'float32x2' }
-            ]
-          }
-        ]
-      },
-      fragment: { module, entryPoint: 'fs', targets: [{ format: FRAME_FORMAT }] },
+    this.module = device.createShaderModule({ label: '3d view', code: shader })
+    this.layout = device.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.partLayout] })
+    this.shadowPipeline = device.createRenderPipeline({
+      label: '3d shadow map',
+      layout: this.layout,
+      vertex: { module: this.module, entryPoint: 'vsShadow' },
+      fragment: { module: this.module, entryPoint: 'fsShadow', targets: [] },
       primitive: { topology: 'triangle-list', cullMode: 'none' },
-      depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' }
+      depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less', depthBias: 2, depthBiasSlopeScale: 2 }
     })
     const blitModule = device.createShaderModule({ label: '3d blit', code: blitShader })
     this.blitPipeline = device.createRenderPipeline({
@@ -97,59 +126,91 @@ export class ModelRenderer {
       fragment: { module: blitModule, entryPoint: 'fs', targets: [{ format }] },
       primitive: { topology: 'triangle-list' }
     })
-    this.frameUniform = device.createBuffer({ label: '3d frame', size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
+    this.frameUniform = device.createBuffer({ label: '3d frame', size: FRAME_UNIFORM_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
     this.blitUniform = device.createBuffer({ label: '3d blit', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
-    const sampler = (filter: GPUFilterMode): GPUSampler =>
-      device.createSampler({ magFilter: filter, minFilter: filter, addressModeU: 'repeat', addressModeV: 'repeat' })
-    this.samplers = { nearest: sampler('nearest'), linear: sampler('linear') }
+    this.blitSampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
+    this.shadowSampler = device.createSampler({ compare: 'less-equal', magFilter: 'linear', minFilter: 'linear' })
     this.placeholder = device.createTexture({ label: '3d placeholder', size: [1, 1], format: WORK_FORMAT, usage: GPUTextureUsage.TEXTURE_BINDING })
+    this.placeholderDepth = device.createTexture({
+      label: '3d placeholder depth',
+      size: [1, 1],
+      format: 'depth32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+    })
+  }
+
+  /** The main pipeline for a sample count and culling (built on first use). */
+  private pipeline(samples: number, cull: boolean): GPURenderPipeline {
+    const key = `${samples}:${cull}`
+    let p = this.pipelines.get(key)
+    if (!p) {
+      p = this.device.createRenderPipeline({
+        label: `3d view (${key})`,
+        layout: this.layout,
+        vertex: { module: this.module, entryPoint: 'vs' },
+        fragment: { module: this.module, entryPoint: 'fs', targets: [{ format: FRAME_FORMAT }] },
+        // Models are counter-clockwise (glTF); mirrored parts were re-wound on load.
+        primitive: { topology: 'triangle-list', cullMode: cull ? 'back' : 'none', frontFace: 'ccw' },
+        depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less' },
+        multisample: { count: samples }
+      })
+      this.pipelines.set(key, p)
+    }
+    return p
   }
 
   /** Framebuffer size for the canvas: its own size, or `lines` tall at the canvas's aspect ratio. */
-  private frameSize(resolution: View3dSettings['resolution']): [number, number] {
+  private frameSize(resolution: View3dStyle['resolution']): [number, number] {
     const { width, height } = this.canvas
     if (resolution === 'full' || height <= Number(resolution)) return [width, height]
     const h = Number(resolution)
     return [Math.max(1, Math.round((width * h) / height)), h]
   }
 
-  private ensureTarget(width: number, height: number): NonNullable<ModelRenderer['target']> {
+  private ensureTarget(width: number, height: number, samples: number): Target {
     const t = this.target
-    if (t && t.color.width === width && t.color.height === height) return t
-    t?.color.destroy()
-    t?.depth.destroy()
-    const color = this.device.createTexture({
-      label: '3d framebuffer',
-      size: [width, height],
-      format: FRAME_FORMAT,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-    })
-    const depth = this.device.createTexture({ label: '3d depth', size: [width, height], format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT })
+    if (t && t.width === width && t.height === height && t.samples === samples) return t
+    this.destroyTarget()
+    const usage = GPUTextureUsage.RENDER_ATTACHMENT
+    const color = this.device.createTexture({ label: '3d framebuffer', size: [width, height], format: FRAME_FORMAT, usage: usage | GPUTextureUsage.TEXTURE_BINDING })
+    const multisampled =
+      samples > 1 ? this.device.createTexture({ label: '3d framebuffer (MSAA)', size: [width, height], format: FRAME_FORMAT, usage, sampleCount: samples }) : null
+    const depth = this.device.createTexture({ label: '3d depth', size: [width, height], format: DEPTH_FORMAT, usage, sampleCount: samples })
     const blit = this.device.createBindGroup({
       layout: this.blitPipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: color.createView() },
-        { binding: 1, resource: { buffer: this.blitUniform } }
+        { binding: 1, resource: { buffer: this.blitUniform } },
+        { binding: 2, resource: this.blitSampler }
       ]
     })
-    this.target = { color, depth, blit }
+    this.target = { width, height, samples, color, multisampled, depth, blit }
     return this.target
   }
 
-  /** Bind group for a texture and filter; rebuilt only when either changes. */
-  private textureBindGroup(texture: GPUTexture, filter: boolean): GPUBindGroup {
-    const cached = this.textureGroup
-    if (cached && cached.texture === texture && cached.filter === filter) return cached.group
-    const group = this.device.createBindGroup({
+  private destroyTarget(): void {
+    this.target?.color.destroy()
+    this.target?.multisampled?.destroy()
+    this.target?.depth.destroy()
+    this.target = null
+  }
+
+  private frameGroup(frame: ModelFrame, model: ModelGpu, shadowMap: GPUTexture): GPUBindGroup {
+    const view = (t: GPUTexture | null | undefined): GPUTextureView => (t ?? this.placeholder).createView()
+    return this.device.createBindGroup({
       layout: this.frameLayout,
       entries: [
         { binding: 0, resource: { buffer: this.frameUniform } },
-        { binding: 1, resource: texture.createView() },
-        { binding: 2, resource: filter ? this.samplers.linear : this.samplers.nearest }
+        { binding: 1, resource: view(frame.texture) },
+        { binding: 2, resource: view(frame.maps.ao?.texture) },
+        { binding: 3, resource: view(frame.maps.roughness?.texture) },
+        { binding: 4, resource: view(frame.maps.metallic?.texture) },
+        { binding: 5, resource: shadowMap.createView() },
+        { binding: 6, resource: this.shadowSampler },
+        { binding: 7, resource: { buffer: model.vertexBuffer(frame.uvSet) } },
+        { binding: 8, resource: { buffer: model.index } }
       ]
     })
-    this.textureGroup = { texture, filter, group }
-    return group
   }
 
   private writeParts(frame: ModelFrame, model: ModelGpu): void {
@@ -171,50 +232,111 @@ export class ModelRenderer {
     this.device.queue.writeBuffer(this.partUniform, 0, data)
   }
 
+  private writeFrame(frame: ModelFrame, model: ModelGpu, lit: { key: Vec3; lightViewProj: Float32Array; shadowTexel: number; shadows: boolean }): void {
+    const { width, height } = this.canvas
+    const s = frame.style
+    const { min, max } = model.data.bounds
+    const radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2 || 1
+    const { right, up, forward } = basis(frame.camera)
+    const along = (r: number, u: number, f: number): Vec3 => normalize([0, 1, 2].map((a) => right[a]! * r + up[a]! * u + forward[a]! * f) as Vec3)
+    const lines = s.resolution === 'full' ? SNAP_LINES : Number(s.resolution)
+    const wireWidth = s.resolution === 'full' ? Math.max(1, frame.pixelRatio) : 1
+    const fogStart = frame.camera.distance - radius * 0.5
+    const lookup = <T>(list: readonly T[], v: T): number => Math.max(list.indexOf(v), 0)
+    const mapSlot = (m: FrameMap | undefined): number => (m && s.maps ? 1 + m.channel : 0)
+
+    const buffer = new ArrayBuffer(FRAME_UNIFORM_BYTES)
+    const f = new Float32Array(buffer)
+    const u = new Uint32Array(buffer)
+    f.set(viewProjection(frame.camera, width / height, radius), 0)
+    f.set(lit.lightViewProj, 16)
+    f.set([...eye(frame.camera), wireWidth], 32)
+    f.set([...lit.key, s.ambient], 36)
+    // Fill from the lower right, rim from behind (towards the camera, from above).
+    f.set([...along(-0.7, 0.3, 0.6), s.specular], 40)
+    f.set([...along(0.2, -0.5, -0.8), EXPOSURE], 44)
+    f.set([((lines * width) / height) / 2, lines / 2, s.snap ? 1 : 0, s.affine ? 1 : 0], 48)
+    f.set([fogStart, fogStart + radius * 2, s.fog, lit.shadowTexel], 52)
+    f.set(frame.background, 56)
+    f.set(frame.wireColor, 60)
+    u.set([lookup(VIEW3D_SHADINGS, s.shading), lookup(VIEW3D_SURFACES, s.surface), frame.textureView, lookup(VIEW3D_FILTERS, s.filter)], 64)
+    u.set([lookup(VIEW3D_WIREFRAMES, s.wireframe), s.colorDepth === 'rgb555' ? 1 : 0, lookup(VIEW3D_DITHERS, s.dither), lit.shadows ? 1 : 0], 68)
+    u.set([mapSlot(frame.maps.ao), mapSlot(frame.maps.roughness), mapSlot(frame.maps.metallic), 0], 72)
+    this.device.queue.writeBuffer(this.frameUniform, 0, buffer)
+  }
+
+  private drawParts(pass: GPURenderPassEncoder, model: ModelGpu): void {
+    model.data.parts.forEach((part, i) => {
+      if (!part.count) return
+      pass.setBindGroup(1, this.partGroup!, [i * PART_STRIDE])
+      pass.draw(part.count * 3, 1, part.first * 3)
+    })
+  }
+
   draw(frame: ModelFrame): void {
     const { width, height } = this.canvas
     if (!width || !height) return
-    const [fw, fh] = this.frameSize(frame.settings.resolution)
-    const target = this.ensureTarget(fw, fh)
+    const s = frame.style
+    const [fw, fh] = this.frameSize(s.resolution)
+    const samples = s.antialias ? MSAA_SAMPLES : 1
+    const target = this.ensureTarget(fw, fh, samples)
     const model = frame.model
-
     const encoder = this.device.createCommandEncoder({ label: '3d view' })
+
+    let group: GPUBindGroup | null = null
+    if (model) {
+      const { min, max } = model.data.bounds
+      const center: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]
+      const radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2 || 1
+      const { right, up, forward } = basis(frame.camera)
+      // The key light comes from the upper left, behind the viewer, so the model is lit from the camera side.
+      const key = normalize([0, 1, 2].map((a) => right[a]! * 0.75 - up[a]! * 0.9 + forward[a]! * 0.35) as Vec3)
+      const shadows = s.shadows && s.shading === 'pixel' && s.surface !== 'normals' && s.wireframe !== 'only'
+      const lightViewProj = lightProjection(key, center, radius)
+      this.writeFrame(frame, model, { key, lightViewProj, shadowTexel: (radius * 2) / SHADOW_SIZE, shadows })
+      this.writeParts(frame, model)
+
+      if (shadows) {
+        this.shadowMap ??= this.device.createTexture({
+          label: '3d shadow map',
+          size: [SHADOW_SIZE, SHADOW_SIZE],
+          format: 'depth32float',
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+        })
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [],
+          depthStencilAttachment: { view: this.shadowMap.createView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' }
+        })
+        pass.setPipeline(this.shadowPipeline)
+        // The shadow map can't be read while it's drawn: this pass binds a placeholder.
+        pass.setBindGroup(0, this.frameGroup(frame, model, this.placeholderDepth))
+        this.drawParts(pass, model)
+        pass.end()
+      }
+      group = this.frameGroup(frame, model, shadows ? this.shadowMap! : this.placeholderDepth)
+    }
+
     const bg = frame.background
     const pass = encoder.beginRenderPass({
       colorAttachments: [
-        { view: target.color.createView(), clearValue: { r: bg[0], g: bg[1], b: bg[2], a: 1 }, loadOp: 'clear', storeOp: 'store' }
+        {
+          view: (target.multisampled ?? target.color).createView(),
+          resolveTarget: target.multisampled ? target.color.createView() : undefined,
+          clearValue: { r: bg[0], g: bg[1], b: bg[2], a: 1 },
+          loadOp: 'clear',
+          storeOp: target.multisampled ? 'discard' : 'store'
+        }
       ],
       depthStencilAttachment: { view: target.depth.createView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'discard' }
     })
-    if (model) {
-      const { min, max } = model.data.bounds
-      const radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2 || 1
-      const { right, up, forward } = basis(frame.camera)
-      // A light from the upper left, behind the viewer, so the model is always lit from the camera side.
-      const light: Vec3 = normalize([0, 1, 2].map((a) => right[a]! * 0.5 - up[a]! * 0.8 + forward[a]! * 0.6) as Vec3)
-      const s = frame.settings
-      const lines = s.resolution === 'full' ? SNAP_LINES : Number(s.resolution)
-      const uniforms = new Float32Array(28)
-      uniforms.set(viewProjection(frame.camera, width / height, radius), 0)
-      uniforms.set([...light, AMBIENT], 16)
-      uniforms.set([((lines * width) / height) / 2, lines / 2, s.snap ? 1 : 0, s.affine ? 1 : 0], 20)
-      uniforms.set([s.lighting ? 1 : 0, s.dither ? 1 : 0, frame.textureView, 0], 24)
-      this.device.queue.writeBuffer(this.frameUniform, 0, uniforms)
-      this.writeParts(frame, model)
-
-      pass.setPipeline(this.pipeline)
-      pass.setBindGroup(0, this.textureBindGroup(frame.texture ?? this.placeholder, s.filter))
-      pass.setVertexBuffer(0, model.vertexBuffer(frame.uvSet))
-      pass.setIndexBuffer(model.index, 'uint32')
-      model.data.parts.forEach((part, i) => {
-        if (!part.count) return
-        pass.setBindGroup(1, this.partGroup!, [i * PART_STRIDE])
-        pass.drawIndexed(part.count * 3, 1, part.first * 3)
-      })
+    if (model && group) {
+      pass.setPipeline(this.pipeline(samples, !s.backfaces))
+      pass.setBindGroup(0, group)
+      this.drawParts(pass, model)
     }
     pass.end()
 
-    this.device.queue.writeBuffer(this.blitUniform, 0, new Float32Array([fw / width, fh / height, 0, 0]))
+    this.device.queue.writeBuffer(this.blitUniform, 0, new Float32Array([fw / width, fh / height, s.upscale === 'smooth' ? 1 : 0, 0]))
     const out = encoder.beginRenderPass({
       colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 } }]
     })
@@ -226,14 +348,14 @@ export class ModelRenderer {
   }
 
   dispose(): void {
-    this.target?.color.destroy()
-    this.target?.depth.destroy()
-    this.target = null
+    this.destroyTarget()
+    this.shadowMap?.destroy()
+    this.shadowMap = null
     this.partUniform?.destroy()
     this.frameUniform.destroy()
     this.blitUniform.destroy()
     this.placeholder.destroy()
-    this.textureGroup = null
+    this.placeholderDepth.destroy()
     this.context.unconfigure()
   }
 }

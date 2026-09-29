@@ -1,12 +1,13 @@
-// The 3D view (in the main view's 3D and 2D / 3D modes): the loaded model with the processed texture (or the source, or a map) on it, drawn
-// with switchable PSX quirks. Drag to orbit, right/middle/Shift-drag to pan, wheel to zoom,
-// double-click to frame the model.
+// The 3D view (in the main view's 3D and 2D / 3D modes): the loaded model with the processed
+// texture (or the source, or a map) on it, drawn in a look (Lit, Wireframe, PSX, …) or the user's
+// Custom style. Drag to orbit, right/middle/Shift-drag to pan, wheel to zoom, double-click to
+// frame the model.
 
-import { useEffect, useRef } from 'react'
-import { VIEW3D_RESOLUTIONS, type View3dResolution, type View3dSettings } from '@shared/bake'
-import { MAP_CHANNELS, MAP_SLOTS } from '@shared/maps'
+import { useEffect, useRef, useState } from 'react'
+import { MAP_CHANNELS, MAP_SLOTS, type MapSlot } from '@shared/maps'
+import { view3dStyle } from '@shared/view3d'
 import { getEngine } from '@/engine'
-import { ModelRenderer } from '@/gpu/model/modelRenderer'
+import { ModelRenderer, type FrameMap } from '@/gpu/model/modelRenderer'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
 import { openModel } from '@/modelActions'
@@ -14,22 +15,11 @@ import { savedSettings } from '@/settings'
 import { useApp, type View3dShow } from '@/store'
 import { dolly, frameBounds, orbit, panCamera, type OrbitCamera } from '@/viewer3d/camera'
 import { Button } from './ui/button'
-import { CaretIcon } from './ui/icons'
-import { Menu, MENU_MARK_CLASS, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/menu'
 import { Select } from './ui/select'
+import { LookSelect, View3dStylePanel } from './View3dStyle'
 
 /** Accumulated wheel delta per zoom step (see Viewer). */
 const WHEEL_STEP = 60
-
-const QUIRKS: { key: keyof Omit<View3dSettings, 'resolution'>; label: string; hint: string }[] = [
-  { key: 'snap', label: 'Vertex snapping', hint: 'Vertices snap to whole pixels, so the model wobbles as it moves.' },
-  { key: 'affine', label: 'Affine textures', hint: 'Textures map without perspective correction, so they warp across large faces.' },
-  { key: 'filter', label: 'Texture filtering', hint: 'Blend between texels (bilinear). Off shows each texel as a hard square, like the PSX.' },
-  { key: 'lighting', label: 'Lighting', hint: 'Shade the model with a light from the upper left.' },
-  { key: 'dither', label: '15-bit dither', hint: 'Reduce the picture to 15-bit color with the PSX’s 4×4 dither.' }
-]
-
-const RESOLUTION_LABELS: Record<View3dResolution, string> = { full: 'Full resolution', '480': '480 lines', '240': '240 lines (PSX)' }
 
 /** The 3D view's well (canvas, toolbar, model readout); the main view places it (see MainView). */
 export function View3d() {
@@ -45,6 +35,7 @@ export function View3d() {
     if (!gpuReady || !canvas || !engine) return
     const renderer = new ModelRenderer(engine.gpu.device, canvas)
     let background = cssColor('--fx-viewer-bg')
+    let wireColor = cssColor('--fx-accent')
     let theme = useApp.getState().theme
     let modelVersion = -1
     // The model the camera was framed for: a reload of the same file keeps the camera.
@@ -55,6 +46,7 @@ export function View3d() {
       if (s.theme !== theme) {
         theme = s.theme
         background = cssColor('--fx-viewer-bg')
+        wireColor = cssColor('--fx-accent')
       }
       const gpuModel = engine.model
       const aspect = canvas.width / Math.max(canvas.height, 1)
@@ -70,15 +62,23 @@ export function View3d() {
       const map = show !== 'result' && show !== 'source' ? s.maps[show] : undefined
       const texture = show === 'result' ? engine.shownTexture : show === 'source' ? engine.sourceTexture : map ? engine.mapTexture(show as keyof typeof s.maps) : null
       const textureView = map ? 1 + MAP_CHANNELS.findIndex((c) => c.id === map.channel) : 0
+      const frameMap = (slot: MapSlot): FrameMap | undefined => {
+        const info = s.maps[slot]
+        const t = info ? engine.mapTexture(slot) : null
+        return info && t ? { texture: t, channel: MAP_CHANNELS.findIndex((c) => c.id === info.channel) } : undefined
+      }
       renderer.draw({
         model: gpuModel,
         uvSet: s.modelUvSet,
         material: s.modelMaterial,
         texture,
         textureView,
+        maps: { ao: frameMap('ao'), roughness: frameMap('roughness'), metallic: frameMap('metallic') },
         camera: camera.current ?? { target: [0, 0, 0], yaw: 0, pitch: 0, distance: 1 },
-        settings: s.view3d,
-        background
+        style: view3dStyle(s.view3d),
+        background,
+        wireColor,
+        pixelRatio: window.devicePixelRatio || 1
       })
     }
 
@@ -206,8 +206,8 @@ export function View3d() {
 function View3dToolbar({ onFrame }: { onFrame(): void }) {
   const show = useApp((s) => s.view3dShow)
   const maps = useApp((s) => s.maps)
-  const view3d = useApp((s) => s.view3d)
-  const { setView3d, setView3dShow } = useApp.getState()
+  const setView3dShow = useApp((s) => s.setView3dShow)
+  const [styleOpen, setStyleOpen] = useState(false)
   const options: { value: View3dShow; label: string; hint?: string; group?: string }[] = [
     { value: 'result', label: 'Result', hint: 'The texture as the viewer shows it on the right: the result, or the stage you preview.' },
     { value: 'source', label: 'Source', hint: 'The texture as loaded.' },
@@ -216,37 +216,19 @@ function View3dToolbar({ onFrame }: { onFrame(): void }) {
   // A map view whose map was removed falls back to the result.
   const value = options.some((o) => o.value === show) ? show : 'result'
   return (
-    <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
-      <Select className="w-36" title="What to put on the model" value={value} onValueChange={setView3dShow} options={options} />
-      <Menu>
-        <MenuTrigger asChild>
-          <Button title="PSX look: switch each quirk on or off">
-            PSX
-            <CaretIcon open className="text-dim" />
-          </Button>
-        </MenuTrigger>
-        <MenuContent className="w-56">
-          <MenuLabel>PSX look</MenuLabel>
-          {QUIRKS.map((q) => (
-            <MenuItem key={q.key} title={q.hint} onSelect={(e) => (e.preventDefault(), setView3d({ [q.key]: !view3d[q.key] }))}>
-              {view3d[q.key] && <span className={MENU_MARK_CLASS} />}
-              {q.label}
-            </MenuItem>
-          ))}
-          <MenuSeparator />
-          <MenuLabel>Resolution</MenuLabel>
-          {VIEW3D_RESOLUTIONS.map((r) => (
-            <MenuItem key={r} onSelect={(e) => (e.preventDefault(), setView3d({ resolution: r }))}>
-              {view3d.resolution === r && <span className={MENU_MARK_CLASS} />}
-              {RESOLUTION_LABELS[r]}
-            </MenuItem>
-          ))}
-        </MenuContent>
-      </Menu>
-      <Button onClick={onFrame} title="Frame the model (double-click the view)">
-        Frame
-      </Button>
-    </div>
+    <>
+      <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
+        <Select className="w-36" title="What to put on the model" value={value} onValueChange={setView3dShow} options={options} />
+        <LookSelect />
+        <Button aria-pressed={styleOpen} className={cn(styleOpen && 'bg-well bevel-sunken')} onClick={() => setStyleOpen(!styleOpen)} title="Every setting of the look">
+          Style…
+        </Button>
+        <Button onClick={onFrame} title="Frame the model (double-click the view)">
+          Frame
+        </Button>
+      </div>
+      {styleOpen && <View3dStylePanel className="absolute top-11 right-2 z-20 max-h-[calc(100%-3.5rem)]" onClose={() => setStyleOpen(false)} />}
+    </>
   )
 }
 

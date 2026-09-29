@@ -2,6 +2,7 @@ import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile,
 import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
 import { isProjectFile } from '@shared/project'
+import type { View3dLookChoice } from '@shared/view3d'
 import { encodePattern, patternFromRgba } from '@/dither/customPattern'
 import { getEngine } from '@/engine'
 import type { DitherParams } from '@/gpu/passes/dither'
@@ -590,6 +591,16 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'view-split':
     case 'view-3d':
       return app.setViewMode(command.slice('view-'.length) as ViewMode)
+    case 'look-lit':
+    case 'look-unlit':
+    case 'look-wireframe':
+    case 'look-unlit-wire':
+    case 'look-clay':
+    case 'look-normals':
+    case 'look-psx':
+    case 'look-n64':
+    case 'look-custom':
+      return app.setView3d({ look: command.slice('look-'.length) as View3dLookChoice })
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
     case 'settings': return app.setSettingsOpen(true)
   }

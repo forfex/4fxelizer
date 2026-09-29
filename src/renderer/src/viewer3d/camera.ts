@@ -69,6 +69,18 @@ export function perspective(fovY: number, aspect: number, near: number, far: num
   ])
 }
 
+/** Orthographic projection of a box (view space) to WebGPU clip space (depth 0 at `near`, 1 at `far`). */
+export function orthographic(halfWidth: number, halfHeight: number, near: number, far: number): Mat4 {
+  const nf = 1 / (near - far)
+  // prettier-ignore
+  return new Float32Array([
+    1 / halfWidth, 0, 0, 0,
+    0, 1 / halfHeight, 0, 0,
+    0, 0, nf, 0,
+    0, 0, near * nf, 1
+  ])
+}
+
 export function multiply(a: Mat4, b: Mat4): Mat4 {
   const out = new Float32Array(16)
   for (let col = 0; col < 4; col++) {
@@ -93,6 +105,17 @@ export function viewProjection(c: OrbitCamera, aspect: number, radius: number): 
   const near = Math.max(c.distance - radius * 2, c.distance * 0.01, radius * 0.001)
   const far = c.distance + radius * 2
   return multiply(perspective(FOV, aspect, near, far), lookAt(eye(c), c.target))
+}
+
+/**
+ * View-projection of a directional light travelling along `direction`, covering a sphere (the
+ * model's bounds): for shadow maps.
+ */
+export function lightProjection(direction: Vec3, center: Vec3, radius: number): Mat4 {
+  const d = normalize(direction)
+  const from: Vec3 = [center[0] - d[0] * radius * 2, center[1] - d[1] * radius * 2, center[2] - d[2] * radius * 2]
+  const up: Vec3 = Math.abs(d[1]) > 0.99 ? [0, 0, 1] : [0, 1, 0]
+  return multiply(orthographic(radius, radius, radius * 0.5, radius * 3.5), lookAt(from, center, up))
 }
 
 /** A camera that shows the whole bounding box, seen slightly from above and in front. */

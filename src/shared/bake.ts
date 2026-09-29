@@ -1,4 +1,4 @@
-// Settings of the 3D view's PSX look and of map baking, remembered between sessions (UserSettings).
+// Settings of map baking, remembered between sessions (UserSettings).
 
 import type { MapSlot } from './maps'
 
@@ -153,38 +153,4 @@ export function normalizeBakePresets(raw: unknown): BakePreset[] {
     byName.set(trimmed, { name: trimmed, settings: normalizeBake(settings) })
   }
   return [...byName.values()].slice(-MAX_BAKE_PRESETS)
-}
-
-/** Framebuffer heights of the 3D view: the window's resolution, or PSX-like line counts. */
-export const VIEW3D_RESOLUTIONS = ['full', '480', '240'] as const
-export type View3dResolution = (typeof VIEW3D_RESOLUTIONS)[number]
-
-/** How the 3D view draws the model: each PSX quirk can be switched on or off. */
-export interface View3dSettings {
-  /** Vertices snap to whole pixels of a low-res grid (the PSX "wobble"). */
-  snap: boolean
-  /** Textures map linearly in screen space, not perspective-correct (the PSX warping). */
-  affine: boolean
-  resolution: View3dResolution
-  /** Bilinear texture filtering (off = nearest texel, like the PSX). */
-  filter: boolean
-  /** Simple directional light with ambient. */
-  lighting: boolean
-  /** 15-bit color with the PSX's 4×4 ordered dither. */
-  dither: boolean
-}
-
-export const DEFAULT_VIEW3D: View3dSettings = { snap: false, affine: false, resolution: 'full', filter: false, lighting: true, dither: false }
-
-export function normalizeView3d(raw: unknown): View3dSettings {
-  const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const bool = (k: 'snap' | 'affine' | 'filter' | 'lighting' | 'dither'): boolean => (typeof r[k] === 'boolean' ? (r[k] as boolean) : DEFAULT_VIEW3D[k])
-  return {
-    snap: bool('snap'),
-    affine: bool('affine'),
-    resolution: VIEW3D_RESOLUTIONS.includes(r.resolution as View3dResolution) ? (r.resolution as View3dResolution) : DEFAULT_VIEW3D.resolution,
-    filter: bool('filter'),
-    lighting: bool('lighting'),
-    dither: bool('dither')
-  }
 }

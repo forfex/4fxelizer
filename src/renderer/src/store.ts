@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { MIN_VIEW_SPLIT, type Theme, type ViewMode } from '@shared/api'
-import { DEFAULT_BAKE, DEFAULT_VIEW3D, type BakeSettings, type View3dSettings } from '@shared/bake'
+import { DEFAULT_BAKE, type BakeSettings } from '@shared/bake'
+import { customizeView3d, DEFAULT_VIEW3D, type View3dSettings, type View3dStyle } from '@shared/view3d'
 import type { MapChannel, MapSlot } from '@shared/maps'
 import type { StageSpec } from '@/gpu/plan'
 import type { Palette } from '@/palette/palette'
@@ -193,6 +194,8 @@ export interface AppState extends Doc {
   setViewMode(mode: ViewMode): void
   setViewSplit(split: number): void
   setView3d(patch: Partial<View3dSettings>): void
+  /** Edits the shown 3D style; a built-in look becomes the Custom style. */
+  editView3dStyle(patch: Partial<View3dStyle>): void
   setView3dShow(show: View3dShow): void
   setBake(patch: Partial<BakeSettings>): void
   setBakeJob(job: BakeJob | null): void
@@ -373,6 +376,7 @@ export const useApp = create<AppState>()((set, get) => ({
   setViewMode: (viewMode) => set({ viewMode }),
   setViewSplit: (split) => set({ viewSplit: Math.min(Math.max(split, MIN_VIEW_SPLIT), 1 - MIN_VIEW_SPLIT) }),
   setView3d: (patch) => set({ view3d: { ...get().view3d, ...patch } }),
+  editView3dStyle: (patch) => set({ view3d: customizeView3d(get().view3d, patch) }),
   setView3dShow: (view3dShow) => set({ view3dShow }),
   setBake: (patch) => set({ bake: { ...get().bake, ...patch } }),
   setBakeJob: (bakeJob) => set({ bakeJob }),

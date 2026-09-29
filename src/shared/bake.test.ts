@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BAKE_MAPS, BUILTIN_BAKE_PRESETS, DEFAULT_BAKE, DEFAULT_VIEW3D, MAX_BAKE_PRESETS, normalizeBake, normalizeBakePresets, normalizeView3d, sameBake } from './bake'
+import { BAKE_MAPS, BUILTIN_BAKE_PRESETS, DEFAULT_BAKE, MAX_BAKE_PRESETS, normalizeBake, normalizeBakePresets, sameBake } from './bake'
 import { MAP_SLOTS } from './maps'
 
 describe('bake settings', () => {
@@ -28,17 +28,7 @@ describe('bake settings', () => {
   })
 })
 
-describe('3D view settings', () => {
-  it('defaults to the full PSX look', () => {
-    expect(normalizeView3d(null)).toEqual(DEFAULT_VIEW3D)
-    expect(DEFAULT_VIEW3D).toMatchObject({ snap: false, affine: false, filter: false, lighting: true, dither: false, resolution: 'full' })
-  })
-
-  it('keeps valid values', () => {
-    expect(normalizeView3d({ snap: false, resolution: 'full', dither: 'no' })).toEqual({ ...DEFAULT_VIEW3D, snap: false, resolution: 'full' })
-    expect(normalizeView3d({ resolution: '720' }).resolution).toBe(DEFAULT_VIEW3D.resolution)
-  })
-
+describe('bake presets', () => {
   it('has distinct, valid built-in presets', () => {
     for (const p of BUILTIN_BAKE_PRESETS) expect(normalizeBake(p.settings)).toEqual(p.settings)
     for (const [i, a] of BUILTIN_BAKE_PRESETS.entries()) {

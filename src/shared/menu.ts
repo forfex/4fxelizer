@@ -1,7 +1,8 @@
 // The app menu, defined once. Main builds the native menu from it (keyboard shortcuts everywhere,
 // the menu bar on macOS); the renderer draws it in the custom title bar on Windows and Linux.
 
-import { THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type Keybinds, type MenuCommand } from './api'
+import { LOOK_CHOICES, THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type Keybinds, type MenuCommand } from './api'
+import { VIEW3D_LOOK_INFO } from './view3d'
 
 /** Actions main performs itself (clipboard, window, dev tools). */
 export type MenuRole = 'cut' | 'copy' | 'paste' | 'selectAll' | 'togglefullscreen' | 'quit' | 'close' | 'reload' | 'toggleDevTools'
@@ -74,6 +75,7 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
       label: 'View',
       items: [
         ...VIEW_MODES.map((m, i) => command(`${VIEW_MODE_NAMES[m]} View`, `view-${m}`, `CmdOrCtrl+Shift+${i + 1}`)),
+        { kind: 'submenu', label: '3D Look', items: LOOK_CHOICES.map((l) => command(l === 'custom' ? 'Custom' : VIEW3D_LOOK_INFO[l].label, `look-${l}`)) },
         separator,
         command('Fit to Window', 'zoom-fit', 'CmdOrCtrl+0'),
         command('Actual Pixels', 'zoom-actual', 'CmdOrCtrl+1'),

@@ -1,6 +1,7 @@
 // Contract between the preload bridge (window.fx) and the renderer.
 
-import { normalizeBake, normalizeBakePresets, normalizeView3d, DEFAULT_BAKE, DEFAULT_VIEW3D, type BakePreset, type BakeSettings, type View3dSettings } from './bake'
+import { normalizeBake, normalizeBakePresets, DEFAULT_BAKE, type BakePreset, type BakeSettings } from './bake'
+import { normalizeView3d, DEFAULT_VIEW3D, VIEW3D_LOOKS, type View3dLookChoice, type View3dSettings } from './view3d'
 import type { MenuRole } from './menu'
 import type { ProjectFileRef } from './project'
 
@@ -297,13 +298,17 @@ const PLAIN_COMMANDS = [
   'gpu-diagnostics'
 ] as const
 
-export type MenuCommand = (typeof PLAIN_COMMANDS)[number] | `theme-${Theme}` | `view-${ViewMode}`
+export type MenuCommand = (typeof PLAIN_COMMANDS)[number] | `theme-${Theme}` | `view-${ViewMode}` | `look-${View3dLookChoice}`
+
+/** The 3D view's looks and the Custom style, as View › 3D Look lists them. */
+export const LOOK_CHOICES: readonly View3dLookChoice[] = [...VIEW3D_LOOKS, 'custom']
 
 /** Every menu command (keybinds are checked against it). */
 export const MENU_COMMANDS: readonly MenuCommand[] = [
   ...PLAIN_COMMANDS,
   ...THEMES.map((t) => `theme-${t}` as const),
-  ...VIEW_MODES.map((m) => `view-${m}` as const)
+  ...VIEW_MODES.map((m) => `view-${m}` as const),
+  ...LOOK_CHOICES.map((l) => `look-${l}` as const)
 ]
 
 export interface FxApi {
