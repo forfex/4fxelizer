@@ -50,7 +50,7 @@ const SECTIONS: Section[] = [
     id: 'files',
     category: 'general',
     title: 'Open files',
-    keywords: 'live reload watch changed disk save photoshop blender export refresh',
+    keywords: 'live reload watch changed disk save photoshop blender export refresh per file texture model off',
     render: () => <FilesSection />
   },
   { id: 'reset', category: 'general', title: 'Settings file', keywords: 'reset defaults restore folder json', render: () => <ResetSection /> },

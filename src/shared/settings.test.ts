@@ -13,7 +13,7 @@ describe('settings', () => {
       split: true,
       tile: false,
       theme: 'dark',
-      liveReload: true,
+      liveReload: 'all',
       exportFormat: 'png-rgba',
       psxCheck: false,
       layout: null,
@@ -39,6 +39,13 @@ describe('settings', () => {
     for (const t of ['night', 'light', 'matrix', 'retro']) expect(normalizeSettings({ theme: t }).theme).toBe(t)
     expect(normalizeSettings({ theme: 'sepia' }).theme).toBe('dark')
     expect(normalizeSettings({}).theme).toBe('dark')
+  })
+
+  it('keeps a live reload mode and reads the old on/off setting', () => {
+    for (const m of ['all', 'per-file', 'off']) expect(normalizeSettings({ liveReload: m }).liveReload).toBe(m)
+    expect(normalizeSettings({ liveReload: true }).liveReload).toBe('all')
+    expect(normalizeSettings({ liveReload: false }).liveReload).toBe('off')
+    expect(normalizeSettings({ liveReload: 'some' }).liveReload).toBe('all')
   })
 
   it('keeps a known view mode and clamps the 2D / 3D split', () => {

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { MIN_VIEW_SPLIT, type Theme, type ViewMode } from '@shared/api'
+import { MIN_VIEW_SPLIT, type LiveReloadMode, type Theme, type ViewMode } from '@shared/api'
 import { DEFAULT_BAKE, type BakeSettings } from '@shared/bake'
 import { customizeView3d, DEFAULT_VIEW3D, type View3dSettings, type View3dStyle } from '@shared/view3d'
 import type { MapChannel, MapSlot } from '@shared/maps'
@@ -62,6 +62,8 @@ export interface ModelInfo {
   warnings: string[]
   /** Bumped on every load. */
   version: number
+  /** false: its files don't reload when live reload is set to per file (kept while it reloads). */
+  liveReload?: boolean
 }
 
 /** The project file the session was opened from or last saved to. */
@@ -146,8 +148,8 @@ export interface AppState extends Doc {
   modelMaterial: number
   /** UV set textures and bakes use. */
   modelUvSet: number
-  /** Reload the texture, its maps and the model when their files change on disk. */
-  liveReload: boolean
+  /** Reload textures, their maps and the model when their files change on disk: all, the ones switched on, or none. */
+  liveReload: LiveReloadMode
   /** Main view: the 2D viewer, 2D and 3D side by side, or the 3D view. */
   viewMode: ViewMode
   /** Share of the main view the 2D viewer gets side by side. */
@@ -220,7 +222,11 @@ export interface AppState extends Doc {
   setModel(model: Omit<ModelInfo, 'version'> | null, material?: number): void
   setModelMaterial(material: number): void
   setModelUvSet(uvSet: number): void
-  setLiveReload(on: boolean): void
+  setLiveReload(mode: LiveReloadMode): void
+  /** Switches live reload of one texture (and its maps) on or off, for the per-file mode. */
+  setTextureLiveReload(id: string, on: boolean): void
+  /** Switches live reload of the model (and its files) on or off, for the per-file mode. */
+  setModelLiveReload(on: boolean): void
   setViewMode(mode: ViewMode): void
   setViewSplit(split: number): void
   setView3d(patch: Partial<View3dSettings>): void
@@ -347,7 +353,7 @@ export const useApp = create<AppState>()((set, get) => ({
   model: null,
   modelMaterial: 0,
   modelUvSet: 0,
-  liveReload: true,
+  liveReload: 'all',
   viewMode: '2d',
   viewSplit: 0.5,
   view3d: DEFAULT_VIEW3D,
@@ -513,12 +519,24 @@ export const useApp = create<AppState>()((set, get) => ({
     else set({ textures: tex.updateTexture(s.textures, textureId, { maps: {} }) })
   },
   setModel: (model, material = 0) => {
-    const version = (get().model?.version ?? 0) + 1
-    set({ model: model && { ...model, version }, modelMaterial: material, modelUvSet: 0, bakeJob: null })
+    const prev = get().model
+    const version = (prev?.version ?? 0) + 1
+    // The same file loaded again (a live reload) keeps its switch.
+    const off = prev?.liveReload === false && !!model?.path && model.path === prev.path
+    set({ model: model && { ...model, version, ...(off ? { liveReload: false } : {}) }, modelMaterial: material, modelUvSet: 0, bakeJob: null })
   },
   setModelMaterial: (modelMaterial) => set({ modelMaterial }),
   setModelUvSet: (modelUvSet) => set({ modelUvSet }),
   setLiveReload: (liveReload) => set({ liveReload }),
+  setTextureLiveReload: (id, on) => {
+    const s = get()
+    const entry = s.textures.find((t) => t.id === id)
+    if (entry && (entry.liveReload !== false) !== on) set({ textures: tex.updateTexture(s.textures, id, { liveReload: on }) })
+  },
+  setModelLiveReload: (on) => {
+    const model = get().model
+    if (model && (model.liveReload !== false) !== on) set({ model: { ...model, liveReload: on } })
+  },
   setViewMode: (viewMode) => set({ viewMode }),
   setViewSplit: (split) => set({ viewSplit: Math.min(Math.max(split, MIN_VIEW_SPLIT), 1 - MIN_VIEW_SPLIT) }),
   setView3d: (patch) => set({ view3d: { ...get().view3d, ...patch } }),

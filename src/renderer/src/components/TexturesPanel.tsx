@@ -1,6 +1,7 @@
 // The open textures with previews of their source and result: click one to work on it, switch
 // it between the shared stack and a separate one, choose the model material it's drawn on, close
-// it, or open more. With a multi-material model, each material can get a texture of its own.
+// it, or open more. With a multi-material model, each material can get a texture of its own. With
+// live reload set to per file, each texture (and the model) has its own reload switch.
 
 import { useEffect, useState } from 'react'
 import { closeTexture, openImage } from '@/actions'
@@ -12,7 +13,7 @@ import { useApp } from '@/store'
 import type { TextureEntry } from '@/stack/textures'
 import { openExportAll } from './ExportDialog'
 import { Button } from './ui/button'
-import { Field, Segmented } from './ui/controls'
+import { Checkbox, Field, Segmented } from './ui/controls'
 import { Select } from './ui/select'
 import { GroupBox, PanelBody } from './ui/retro'
 import { CloseIcon } from './ui/retro'
@@ -70,8 +71,10 @@ export function TexturesPanel() {
   const gpuReady = useApp((s) => s.gpu.status === 'ready')
   const multiMaterial = useApp((s) => (s.model?.materials.length ?? 0) > 1)
   const previews = useResultPreviews()
+  const modelSwitch = useApp((s) => s.liveReload === 'per-file' && !!s.model?.path)
   return (
     <PanelBody>
+      {modelSwitch && <ModelReloadBox />}
       {multiMaterial && <MaterialsBox />}
       <GroupBox title={textures.length ? `Textures · ${textures.length}` : 'Textures'}>
         <div className="flex flex-col gap-2">
@@ -127,6 +130,21 @@ function MaterialsBox() {
   )
 }
 
+/** The model's live reload switch (per-file mode). */
+function ModelReloadBox() {
+  const model = useApp((s) => s.model)!
+  return (
+    <GroupBox title="Model">
+      <Checkbox
+        checked={model.liveReload !== false}
+        onCheckedChange={(on) => useApp.getState().setModelLiveReload(on)}
+        label={`Reload ${model.name} on change`}
+        hint="Load the model again when it (or its .bin / .mtl files) is saved from another app."
+      />
+    </GroupBox>
+  )
+}
+
 const NONE = '__none'
 
 /** Draws a material with a texture (NONE: its base color); the texture keeps its other materials. */
@@ -145,6 +163,7 @@ function TextureCard({ texture, preview }: { texture: TextureEntry; preview: str
   const active = useApp((s) => s.activeTextureId === texture.id)
   const separate = useApp((s) => !!s.docs.separate[texture.id])
   const materials = useApp((s) => (s.model && s.model.materials.length > 1 ? s.model.materials : null))
+  const reloadSwitch = useApp((s) => s.liveReload === 'per-file') && !!texture.image.path
   const { image } = texture
   const select = (): void => useApp.getState().selectTexture(texture.id)
   return (
@@ -180,6 +199,16 @@ function TextureCard({ texture, preview }: { texture: TextureEntry; preview: str
         <p className="truncate text-small text-dim" title="Model materials drawn with this texture (Materials, above)">
           {texture.materials.length ? `On ${texture.materials.map((m) => materials[m]?.name).join(', ')}` : 'On no material'}
         </p>
+      )}
+      {reloadSwitch && (
+        <span onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={texture.liveReload !== false}
+            onCheckedChange={(on) => useApp.getState().setTextureLiveReload(texture.id, on)}
+            label="Reload on change"
+            hint="Load this texture and its maps again when they are saved from another app."
+          />
+        </span>
       )}
       <div className="flex items-center gap-2 text-small text-dim">
         <span className="font-mono">

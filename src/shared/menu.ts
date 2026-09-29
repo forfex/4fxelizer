@@ -1,7 +1,7 @@
 // The app menu, defined once. Main builds the native menu from it (keyboard shortcuts everywhere,
 // the menu bar on macOS); the renderer draws it in the custom title bar on Windows and Linux.
 
-import { LOOK_CHOICES, THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type Keybinds, type MenuCommand } from './api'
+import { LIVE_RELOAD_MODES, LIVE_RELOAD_NAMES, LOOK_CHOICES, THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type Keybinds, type MenuCommand } from './api'
 import { VIEW3D_LOOK_INFO } from './view3d'
 
 /** Actions main performs itself (clipboard, window, dev tools). */
@@ -53,7 +53,7 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
         command('Presets…', 'presets', 'CmdOrCtrl+Shift+P'),
         command('Import Preset…', 'import-preset'),
         separator,
-        command('Reload Changed Files', 'toggle-live-reload'),
+        { kind: 'submenu', label: 'Reload Changed Files', items: LIVE_RELOAD_MODES.map((m) => command(LIVE_RELOAD_NAMES[m], `live-reload-${m}`)) },
         separator,
         isMac ? role('Close Window', 'close', 'Cmd+W') : role('Exit', 'quit', platform === 'win32' ? 'Alt+F4' : 'Ctrl+Q')
       ]

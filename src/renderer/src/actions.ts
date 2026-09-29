@@ -1,4 +1,4 @@
-import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme, ViewMode } from '@shared/api'
+import type { ExportFileType, ExportFormat, FileFilter, LiveReloadMode, MenuCommand, OpenedFile, Theme, ViewMode } from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, textureBase, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
 import { uniqueFileNames } from '@shared/exportNames'
@@ -303,10 +303,11 @@ export async function openMapFile(slot: MapSlot): Promise<void> {
   }
 }
 
-/** A map file changed on disk: loads it again into every slot still filled from it (same channels), in every texture. */
-export async function reloadMapFile(file: OpenedFile): Promise<void> {
+/** A map file changed on disk: loads it again into every slot still filled from it (same channels), in the given textures. */
+export async function reloadMapFile(file: OpenedFile, textureIds: readonly string[]): Promise<void> {
   let reloaded = false
   for (const texture of useApp.getState().textures) {
+    if (!textureIds.includes(texture.id)) continue
     const slots = (Object.entries(texture.maps) as [MapSlot, MapInfo][]).filter(([, m]) => m.path && m.path === file.path && !m.baked)
     if (!slots.length) continue
     try {
@@ -721,7 +722,10 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'toggle-grid': return app.toggleGrid()
     case 'toggle-split': return app.toggleSplit()
     case 'toggle-tile': return app.toggleTile()
-    case 'toggle-live-reload': return app.setLiveReload(!app.liveReload)
+    case 'live-reload-all':
+    case 'live-reload-per-file':
+    case 'live-reload-off':
+      return app.setLiveReload(command.slice('live-reload-'.length) as LiveReloadMode)
     case 'theme-dark':
     case 'theme-night':
     case 'theme-light':
