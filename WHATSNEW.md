@@ -2,3 +2,9 @@
   - The app tells you when a new version is out and installs it for you
   - Settings › Updates: check for updates, or update automatically at launch
   - Help › Check for Updates…
+- Live reload per file
+  - File › Reload Changed Files: All Files, Per File or Off
+  - Per File: a Reload on change switch on each texture and the model in the Textures panel
+- Separate alpha for Downscale and Upscale
+  - Alpha setting: Same as color, Nearest, Smooth or Cutout (with threshold)
+  - Upscale can keep the original image's alpha, so hard cutouts stay sharp
