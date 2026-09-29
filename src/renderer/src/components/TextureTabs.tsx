@@ -18,7 +18,7 @@ export function TextureTabs({ fallback }: { fallback: ReactNode }) {
     <div
       role="tablist"
       aria-label="Textures"
-      className="fx-texture-tabs flex h-full min-w-0 flex-1 items-end gap-0.5 overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
+      className="fx-texture-tabs flex h-full min-w-0 flex-1 items-end gap-(--fx-space-1) overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
       // Tabs are buttons, not a handle to drag the viewer panel by (dockview drags its tab on mousedown).
       onMouseDown={(e) => e.preventDefault()}
       onWheel={(e) => {
@@ -44,7 +44,7 @@ export function TextureTabs({ fallback }: { fallback: ReactNode }) {
               if (e.key === 'Delete') closeTexture(t.id)
             }}
             className={cn(
-              'group/tab flex h-[calc(var(--fx-dock-tab-height)-3px)] max-w-52 min-w-0 shrink-0 cursor-default items-center gap-1.5 rounded-t-fx-md border-px border-b-0 pr-1 pl-2.5 text-small',
+              'group/tab flex h-[calc(var(--fx-dock-tab-height)-3px)] max-w-52 min-w-0 shrink-0 cursor-default items-center gap-2 rounded-t-fx-md border-px border-b-0 pr-1.5 pl-3 text-small',
               selected
                 ? 'relative z-1 border-edge bg-panel text-text shadow-[inset_0_calc(2*var(--px))_0_var(--fx-accent),inset_var(--px)_0_0_var(--fx-bevel-light)]'
                 : 'border-transparent text-dim hover:text-text'
