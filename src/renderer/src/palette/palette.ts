@@ -35,6 +35,11 @@ export interface GeneratorSettings {
   auto: boolean
   /** Snap generated colors to PSX 15-bit color (5 bits per channel). Left out when off. */
   color15?: boolean
+  /**
+   * On the shared stack: 'all' generates one set of colors from every texture on it; left out,
+   * each texture gets colors generated from its own pixels.
+   */
+  scope?: 'all'
 }
 
 export interface Palette {
@@ -48,6 +53,16 @@ export interface Palette {
    * Generation key (input image + settings) the colors were generated for. Lives in the document,
    * so undo/redo restores it together with the colors; not saved in presets.
    */
+  generatedFor?: string
+  /**
+   * Generated colors of each texture on the shared stack (by texture id), for palettes generated
+   * per texture; `colors` holds the active texture's. Not saved in presets or projects.
+   */
+  variants?: Record<string, PaletteVariant>
+}
+
+export interface PaletteVariant {
+  colors: PaletteColor[]
   generatedFor?: string
 }
 

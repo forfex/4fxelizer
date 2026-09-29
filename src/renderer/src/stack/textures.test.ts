@@ -5,6 +5,8 @@ import {
   changedDocKeys,
   closeTexture,
   docAt,
+  docFor,
+  setGenerated,
   docKeyOf,
   makeSeparate,
   makeShared,
@@ -61,6 +63,42 @@ describe('texture documents', () => {
     expect(neighborOf(textures, 'b')).toBe('c')
     expect(neighborOf(textures, 'c')).toBe('b')
     expect(neighborOf([entry('a')], 'a')).toBeNull()
+  })
+})
+
+describe('generated palettes per texture', () => {
+  const base = initialDoc()
+  const generated = base.palettes.find((p) => p.generator)!
+  const docs: Docs = { shared: base, separate: {} }
+  const red = [{ hex: '#ff0000' }]
+  const blue = [{ hex: '#0000ff' }]
+
+  it('keeps colors per texture on the shared stack', () => {
+    let d = setGenerated(docs, 'a', generated.id, red, 'ka', 'a')
+    d = setGenerated(d, 'b', generated.id, blue, 'kb', 'a')
+    const pa = docFor(d, 'a').palettes.find((p) => p.id === generated.id)!
+    const pb = docFor(d, 'b').palettes.find((p) => p.id === generated.id)!
+    expect([pa.colors, pa.generatedFor]).toEqual([red, 'ka'])
+    expect([pb.colors, pb.generatedFor]).toEqual([blue, 'kb'])
+    // The shared stack's own colors stay the active texture's.
+    expect(d.shared.palettes.find((p) => p.id === generated.id)!.colors).toEqual(red)
+    // Closing a texture drops its colors.
+    const closed = closeTexture([entry('a'), entry('b')], d, 'b').docs
+    expect(closed.shared.palettes.find((p) => p.id === generated.id)!.variants).toEqual({ a: { colors: red, generatedFor: 'ka' } })
+  })
+
+  it('uses one set of colors when generated from all textures, or on a separate stack', () => {
+    const all: Docs = {
+      shared: { ...base, palettes: base.palettes.map((p) => (p.id === generated.id ? { ...p, generator: { ...p.generator!, scope: 'all' as const } } : p)) },
+      separate: {}
+    }
+    const d = setGenerated(all, null, generated.id, red, 'k', 'a')
+    expect(docFor(d, 'a').palettes.find((p) => p.id === generated.id)!.colors).toEqual(red)
+    expect(docFor(d, 'b').palettes.find((p) => p.id === generated.id)!.colors).toEqual(red)
+    const split = setGenerated(makeSeparate(docs, 'a'), 'a', generated.id, blue, 'k', 'a')
+    expect(split.separate.a!.palettes.find((p) => p.id === generated.id)!.variants).toBeUndefined()
+    expect(docFor(split, 'a').palettes.find((p) => p.id === generated.id)!.colors).toEqual(blue)
+    expect(docFor(split, 'b').palettes.find((p) => p.id === generated.id)!.colors).toEqual(generated.colors)
   })
 })
 

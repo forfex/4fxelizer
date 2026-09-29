@@ -41,7 +41,7 @@ export function serializeProject(project: ProjectData): string {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     // All colors, so the palettes are right even before they regenerate (or when the texture is missing).
-    doc: { stages: doc.stages, palettes: doc.palettes.map(({ generatedFor: _generatedFor, ...p }) => p), outputLock: doc.outputLock },
+    doc: { stages: doc.stages, palettes: doc.palettes.map(({ generatedFor: _generatedFor, variants: _variants, ...p }) => p), outputLock: doc.outputLock },
     presetName: project.presetName,
     texture: project.texture,
     maps: project.maps,
@@ -131,7 +131,7 @@ export interface ProjectState extends Doc {
  * follow from the rest (and regenerate after loading without changing anything).
  */
 export function projectSignature(s: ProjectState): string {
-  const palettes = s.palettes.map(({ generatedFor: _generatedFor, ...p }) => (p.generator?.auto ? { ...p, colors: p.colors.filter((c) => c.locked) } : p))
+  const palettes = s.palettes.map(({ generatedFor: _generatedFor, variants: _variants, ...p }) => (p.generator?.auto ? { ...p, colors: p.colors.filter((c) => c.locked) } : p))
   const maps = MAP_SLOTS.flatMap(({ id }) => {
     const m = s.maps[id]
     if (!m) return []

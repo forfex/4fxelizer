@@ -5,6 +5,7 @@
 import type { MapSlot } from '@shared/maps'
 import type { ImageInfo, MapInfo } from '@/store'
 import type { View } from '@/viewer/viewport'
+import type { Palette, PaletteColor } from '@/palette/palette'
 import type { Doc } from './doc'
 
 export type TextureMaps = Partial<Record<MapSlot, MapInfo>>
@@ -90,9 +91,68 @@ export function neighborOf(textures: readonly TextureEntry[], id: string): strin
   return textures[i + 1]?.id ?? textures[i - 1]?.id ?? null
 }
 
-/** Textures without the closed one, and the documents without its separate stack. */
+/** Textures without the closed one, and the documents without its separate stack or its generated colors. */
 export function closeTexture(textures: readonly TextureEntry[], docs: Docs, id: string): { textures: TextureEntry[]; docs: Docs } {
-  return { textures: textures.filter((t) => t.id !== id), docs: makeShared(docs, id) }
+  const shared = docs.shared.palettes.some((p) => p.variants?.[id])
+    ? {
+        ...docs.shared,
+        palettes: docs.shared.palettes.map((p) => {
+          if (!p.variants?.[id]) return p
+          const { [id]: _dropped, ...variants } = p.variants
+          return { ...p, variants }
+        })
+      }
+    : docs.shared
+  return { textures: textures.filter((t) => t.id !== id), docs: makeShared({ ...docs, shared }, id) }
+}
+
+/** Whether a palette gets colors of its own per texture (generated per texture, on the shared stack). */
+export function perTexture(palette: Palette, key: DocKey): boolean {
+  return key === SHARED && !!palette.generator && palette.generator.scope !== 'all'
+}
+
+/** A document as texture `id` sees it: palettes generated per texture show its colors. */
+export function withVariants(doc: Doc, textureId: string | null): Doc {
+  if (!textureId || !doc.palettes.some((p) => p.variants?.[textureId])) return doc
+  return {
+    ...doc,
+    palettes: doc.palettes.map((p) => {
+      const v = p.variants?.[textureId]
+      return v ? { ...p, colors: v.colors, generatedFor: v.generatedFor } : p
+    })
+  }
+}
+
+/** The document a texture is processed with (its stack, and the colors generated for it). */
+export function docFor(docs: Docs, textureId: string): Doc {
+  const key = docKeyOf(docs, textureId)
+  return key === SHARED ? withVariants(docs.shared, textureId) : docAt(docs, key)
+}
+
+/**
+ * Documents with new generated colors for a palette: for texture `textureId` (its own colors when
+ * generated per texture; the palette's colors change too when it's the `active` one), or for every
+ * texture on the stack (null, or a palette generated from all textures).
+ */
+export function setGenerated(
+  docs: Docs,
+  textureId: string | null,
+  paletteId: string,
+  colors: PaletteColor[],
+  generatedFor: string,
+  active: string | null
+): Docs {
+  const key = textureId ? docKeyOf(docs, textureId) : SHARED
+  const doc = docAt(docs, key)
+  const palettes = doc.palettes.map((p) => {
+    if (p.id !== paletteId) return p
+    if (textureId && perTexture(p, key)) {
+      const variants = { ...p.variants, [textureId]: { colors, generatedFor } }
+      return textureId === active ? { ...p, colors, generatedFor, variants } : { ...p, variants }
+    }
+    return { ...p, colors, generatedFor }
+  })
+  return withDoc(docs, key, { ...doc, palettes })
 }
 
 /** Replaces one texture's entry. */

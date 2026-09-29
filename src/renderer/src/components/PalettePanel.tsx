@@ -20,7 +20,7 @@ import {
 } from '@/palette/palette'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
-import { Checkbox, Field, INPUT_CLASS, ParamSlider } from './ui/controls'
+import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { GroupBox, LCD_CLASS, Led, PanelBody } from './ui/retro'
 import { Select } from './ui/select'
@@ -383,6 +383,8 @@ function GeneratorBox({ palette }: { palette: Palette }) {
   const job = useApp((s) => s.paletteJobs[palette.id])
   const stages = useApp((s) => s.stages)
   const hasImage = useApp((s) => s.image !== null)
+  // Textures on the shared stack, when the active one is on it too (the choice only matters there).
+  const sharedCount = useApp((s) => (s.activeTextureId && s.docs.separate[s.activeTextureId] ? 0 : s.textures.filter((t) => !s.docs.separate[t.id]).length))
   const gen = palette.generator
 
   if (!gen) {
@@ -425,6 +427,22 @@ function GeneratorBox({ palette }: { palette: Palette }) {
               options={[
                 { value: 'source', label: 'Source image' },
                 ...stages.map((s, i) => ({ value: s.uid, label: `Input of ${i + 1}. ${stageLabel(s.passId)}` }))
+              ]}
+            />
+          </Field>
+        )}
+        {sharedCount > 1 && (
+          <Field label="Textures" hint="On the shared stack: each texture gets colors from its own pixels, or all textures share one palette generated from all of them.">
+            <Segmented
+              className="flex-1"
+              value={gen.scope === 'all' ? 'all' : 'each'}
+              onChange={(v) => {
+                const { scope: _scope, ...rest } = gen
+                useApp.getState().updatePalette(palette.id, { generator: v === 'all' ? { ...rest, scope: 'all' } : rest })
+              }}
+              options={[
+                { value: 'each', label: 'Each its own', hint: 'Every texture on the shared stack gets colors generated from its own pixels.' },
+                { value: 'all', label: 'One for all', hint: 'One set of colors generated from every texture on the shared stack, used by all of them.' }
               ]}
             />
           </Field>

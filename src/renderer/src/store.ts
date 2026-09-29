@@ -174,6 +174,11 @@ export interface AppState extends Doc {
   setTextureStack(id: string, stack: 'shared' | 'separate'): void
   updateTexture(id: string, patch: Partial<Pick<TextureEntry, 'thumbnail' | 'materials'>>): void
   /**
+   * Stores generated colors for a palette (no undo step): of one texture (null = the palette's
+   * colors for every texture on its stack).
+   */
+  setGeneratedColors(textureId: string | null, paletteId: string, colors: Palette['colors'], generatedFor: string): void
+  /**
    * New pixels for a texture (the active one by default); `keepView` keeps the zoom and pan when its
    * size didn't change (a reload).
    */
@@ -267,9 +272,10 @@ function paletteSelection(doc: Doc, selected: string | null): string | null {
  * fields. The outgoing texture keeps its view.
  */
 function showTexture(s: AppState, id: string | null, docs: Docs, textures: TextureEntry[] = s.textures): Partial<AppState> {
-  const kept = s.activeTextureId ? tex.updateTexture(textures, s.activeTextureId, { view: s.view }) : textures
+  // The outgoing texture keeps its view (once the canvas has a size to fit it to).
+  const kept = s.activeTextureId && s.canvasSize.width ? tex.updateTexture(textures, s.activeTextureId, { view: s.view }) : textures
   const entry = id ? kept.find((t) => t.id === id) : undefined
-  const doc = tex.docAt(docs, tex.docKeyOf(docs, entry ? entry.id : null))
+  const doc = entry ? tex.docFor(docs, entry.id) : docs.shared
   return {
     textures: kept,
     activeTextureId: entry?.id ?? null,
@@ -293,7 +299,7 @@ function restoreDocs(s: AppState, docs: Docs): Partial<AppState> {
   const changed = tex.changedDocKeys(s.docs, docs)[0]
   const target = changed === undefined ? null : tex.textureForDoc(s.textures, docs, changed, s.activeTextureId)
   if (target && target !== s.activeTextureId) return { docs, ...showTexture(s, target, docs) }
-  const doc = tex.docAt(docs, tex.docKeyOf(docs, s.activeTextureId))
+  const doc = s.activeTextureId ? tex.docFor(docs, s.activeTextureId) : docs.shared
   return { docs, ...doc, selectedPaletteId: paletteSelection(doc, s.selectedPaletteId) }
 }
 
@@ -366,12 +372,18 @@ export const useApp = create<AppState>()((set, get) => ({
     const s = get()
     const docs = stack === 'separate' ? tex.makeSeparate(s.docs, id) : tex.makeShared(s.docs, id)
     if (docs === s.docs) return
-    const shown = id === s.activeTextureId ? tex.docAt(docs, tex.docKeyOf(docs, id)) : {}
+    const shown = id === s.activeTextureId ? tex.docFor(docs, id) : {}
     set({ docs, ...shown, past: [...s.past, s.docs].slice(-HISTORY_LIMIT), future: [], lastEdit: null })
   },
   updateTexture: (id, patch) => {
     const s = get()
     set({ textures: tex.updateTexture(s.textures, id, patch) })
+  },
+  setGeneratedColors: (textureId, paletteId, colors, generatedFor) => {
+    const s = get()
+    const docs = tex.setGenerated(s.docs, textureId, paletteId, colors, generatedFor, s.activeTextureId)
+    const shown = s.activeTextureId ? tex.docFor(docs, s.activeTextureId) : docs.shared
+    set({ docs, palettes: shown.palettes })
   },
   setImage: (image, opts = {}) => {
     const s = get()
@@ -401,7 +413,9 @@ export const useApp = create<AppState>()((set, get) => ({
     }
     const image = get().image
     const firstLayout = prev.width === 0 && image
-    set({ canvasSize, view: firstLayout ? fitView(image, canvasSize, undefined, tilesOf(get())) : shifted })
+    // Views fitted before the canvas had a size are refitted when shown.
+    const textures = prev.width === 0 ? get().textures.map((t) => (t.view ? { ...t, view: null } : t)) : get().textures
+    set({ canvasSize, textures, view: firstLayout ? fitView(image, canvasSize, undefined, tilesOf(get())) : shifted })
   },
   zoomFit: () => {
     const { image, canvasSize } = get()
