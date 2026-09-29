@@ -3,7 +3,8 @@
 ## Projects
 
 **File › Save Project** (Ctrl+S) saves everything you're working on to a `.pxproj` file: the stack, its
-palettes, the texture, its maps and the model with its texture set and UV set. **File › Open Project…** (or
+palettes, every open texture with its maps and separate stack, and the model with the materials each texture is
+drawn on and its UV set. **File › Open Project…** (or
 dropping a `.pxproj` on the window) brings it all back, with fresh undo history. **Save Project As…**
 (Ctrl+Shift+S) saves a copy under another name.
 
@@ -32,7 +33,8 @@ Presets are small `.pxlook` files (older `.4fxpreset` files still load) you can 
 
 ## Export
 
-**File › Export…** (Ctrl+E) writes **PNG, TGA or BMP**, full color or **indexed**.
+**File › Export…** (Ctrl+E) writes **PNG, TGA or BMP**, full color or **indexed**. With several textures open,
+**Textures: All** exports each of them into one folder.
 
 Indexed export keeps the palette's order and puts transparency at index 0. Indexed BMP has no alpha: transparent
 pixels use index 0, and semi-transparent ones become opaque.

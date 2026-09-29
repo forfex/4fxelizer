@@ -26,7 +26,8 @@ channels.
 You can also drop maps on the window or load them per slot in the **Maps** panel. They are sampled in UV, so
 their size doesn't need to match the texture's.
 
-Maps belong to the texture: opening another texture clears them and loads its own. Presets refer to maps by slot,
+Maps belong to the texture: every open texture has its own, and the Maps panel shows the ones of the texture
+you're on. Presets refer to maps by slot,
 so a preset that uses the AO map works on any texture that has one.
 
 No maps? [Bake them from the model](3d.md#map-baking).

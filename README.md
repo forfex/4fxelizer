@@ -36,6 +36,8 @@ Everything runs on your GPU, so changes show up instantly.
 - **3D view and map baking**: glTF, GLB, FBX and OBJ models in Lit, Unlit, Wireframe, Clay, Normals, PSX
   (vertex wobble, affine warping, 240 lines) or N64 looks, or your own style, and AO, cavity, curvature and more
   baked on the GPU. [More](guide/3d.md)
+- **Several textures at once**: tabs for every texture, one shared stack or a stack per texture, and models with
+  several materials, each with its own texture. [More](guide/textures.md)
 - **Projects, presets and export**: save your whole session as a project; console, computer and stylized
   presets built in; PNG, TGA or BMP, full color or indexed.
   [More](guide/presets-and-export.md)
@@ -64,7 +66,7 @@ yet, so Windows and macOS may warn on first launch; see [Troubleshooting](guide/
 
 ## Quick start
 
-1. **Open a texture**: drag it onto the window, or **File › Open Image…** (Ctrl+O).
+1. **Open a texture**: drag it onto the window, or **File › Open Textures…** (Ctrl+O). Several open as tabs.
 2. **Pick a preset**: toolbar › **Presets**, for example *PSX 8bpp*.
 3. **Tweak**: drag sliders, reorder stages, click a stage's preview button (the square target in its header) to preview the image at that point.
 4. **See it in 3D** (optional): drop the model on the window, or **File › Open Model…** (Ctrl+Shift+O).

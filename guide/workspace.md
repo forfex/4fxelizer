@@ -4,7 +4,7 @@
 
 Panels dock, tab together, float over the viewer and resize. The toolbar's workspace menu switches between
 built-in layouts (**Essentials**, **Wide viewer**, **Palette editing**, **3D**, **Floating**), saves your own and
-resets them.
+resets them. Open textures are tabs in the viewer's header; the **Textures** panel shows them with previews.
 
 ## Themes
 
@@ -36,7 +36,7 @@ everything; the search box finds a setting in any category.
 
 ## Good to know
 
-- Undo and redo cover the stack and palettes.
+- Undo and redo cover the stacks and palettes of every texture.
 - Sliders and dropdowns take the mouse wheel once you rest the pointer on them for a second (or click them), so
   scrolling a panel never changes a value by accident. **Settings › Mouse** changes this.
 - Settings, the theme, view options (including the 2D / 3D view mode), export format, 3D and bake settings, panel layout and window placement are
@@ -51,7 +51,9 @@ The defaults; change them in **Settings › Keybinds**. On macOS, use Cmd instea
 
 | Action | Shortcut |
 |---|---|
-| Open image | Ctrl+O |
+| Open textures | Ctrl+O |
+| Close texture | Ctrl+F4 (macOS: Shift+Cmd+W) |
+| Next / previous texture | Ctrl+Tab / Ctrl+Shift+Tab |
 | Open model | Ctrl+Shift+O |
 | Export | Ctrl+E |
 | Presets | Ctrl+Shift+P |
