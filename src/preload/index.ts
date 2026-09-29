@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 import { IPC, type FxApi, type MenuCommand } from '@shared/api'
+import type { UpdateState } from '@shared/update'
 
 const api: FxApi = {
   platform: process.platform,
+  version: ipcRenderer.sendSync(IPC.appVersion),
   // Synchronous so the first render already uses the saved settings (the file is tiny).
   settings: ipcRenderer.sendSync(IPC.settingsLoad),
   saveSettings: (patch) => ipcRenderer.send(IPC.settingsSave, patch),
@@ -50,7 +52,15 @@ const api: FxApi = {
   setUiScale: (scale) => webFrame.setZoomFactor(scale),
   relaunch: () => ipcRenderer.send(IPC.relaunch),
   showUserDataFolder: () => ipcRenderer.invoke(IPC.userDataShow),
-  suspendShortcuts: (suspend) => ipcRenderer.send(IPC.suspendShortcuts, suspend)
+  suspendShortcuts: (suspend) => ipcRenderer.send(IPC.suspendShortcuts, suspend),
+  getUpdateState: () => ipcRenderer.invoke(IPC.updateGetState),
+  onUpdateState: (listener) => {
+    const handler = (_: unknown, state: UpdateState): void => listener(state)
+    ipcRenderer.on(IPC.updateState, handler)
+    return () => ipcRenderer.removeListener(IPC.updateState, handler)
+  },
+  checkForUpdates: () => ipcRenderer.send(IPC.updateCheck),
+  installUpdate: () => ipcRenderer.send(IPC.updateInstall)
 }
 
 // Before the first render, so the page lays out at the saved scale.
