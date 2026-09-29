@@ -132,7 +132,11 @@ button.winbtn:hover{background:var(--fx-hover)}
 
 /* 3D before/after: two stacked renders, the after one clipped at --pos. A transparent range input on top
    does the dragging, so the keyboard and screen readers get a real slider. */
-.compare-win{max-width:720px;margin:0 auto}
+.model-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:48px;align-items:center}
+.model-text .sub{margin-bottom:24px}
+.quirks{display:grid;gap:10px;margin:0;padding:0;list-style:none;font:600 15px/20px var(--font-display)}
+.quirks li{display:flex;align-items:center;gap:10px}
+.compare-win{max-width:440px;margin:0 auto}
 .compare{position:relative;--pos:50%;background:#000;touch-action:pan-y}
 .compare img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none}
 .compare .after{position:absolute;inset:0;height:100%;clip-path:inset(0 0 0 var(--pos));image-rendering:pixelated}
@@ -185,6 +189,9 @@ footer a{color:var(--fx-text-dim)}
 footer a:hover{color:var(--fx-text)}
 footer .logo{margin-right:auto;font-size:14px}
 
+@media(max-width:860px){
+  .model-grid{grid-template-columns:1fr;gap:32px}
+}
 @media(max-width:640px){
   .gallery{--cols:2}
   .navlink{display:none}
@@ -231,9 +238,20 @@ footer .logo{margin-right:auto;font-size:14px}
 </div></header>
 
 <section id="model"><div class="wrap">
-  <div class="label">3D view</div>
-  <h2>See it on your model</h2>
-  <p class="sub">Open a glTF, GLB, FBX or OBJ model and the PSX look follows every tweak: wobbling vertices, warped textures, dithered color. Drag to compare.</p>
+  <div class="model-grid">
+  <div class="model-text">
+    <div class="label">3D view</div>
+    <h2>See it on your model</h2>
+    <p class="sub">Open a glTF, GLB, FBX or OBJ model and the PSX look follows every tweak. Drag the divider to compare.</p>
+    <ul class="quirks">
+      <li><span class="led"></span>Vertex wobble</li>
+      <li><span class="led"></span>Affine texture warping</li>
+      <li><span class="led"></span>240-line framebuffer</li>
+      <li><span class="led"></span>15-bit dither</li>
+      <li><span class="led"></span>AO, cavity and curvature baking</li>
+    </ul>
+  </div>
+  <div class="model-view">
   <div class="window compare-win">
     <div class="window-bar">
       <span class="window-title">3D view</span>
@@ -241,14 +259,16 @@ footer .logo{margin-right:auto;font-size:14px}
       <button class="winbtn" type="button" data-expand="#compare" aria-label="View the 3D comparison full screen"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M2 5.5V2h3.5M8.5 2H12v3.5M12 8.5V12H8.5M5.5 12H2V8.5"/></svg></button>
     </div>
     <div class="compare" id="compare">
-      <img src="images/3d-before.png" width="1024" height="1024" alt="A scanned stone statue rendered with its original texture" loading="lazy">
-      <img class="after" src="images/3d-after.png" width="1024" height="1024" alt="The same statue in the PSX-style 3D view, with a dithered low-color texture" loading="lazy">
+      <img src="images/3d-before.png" width="696" height="928" alt="A scanned stone statue rendered with its original texture" loading="lazy">
+      <img class="after" src="images/3d-after.png" width="696" height="928" alt="The same statue in the PSX-style 3D view, with a dithered low-color texture" loading="lazy">
       <span class="chip l">Before*</span><span class="chip r">After</span>
       <span class="divider"><span class="handle"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M5 3.5L1.5 7 5 10.5M9 3.5L12.5 7 9 10.5"/></svg></span></span>
       <input type="range" min="0" max="100" value="50" step="0.1" aria-label="Before and after divider position">
     </div>
   </div>
   <p class="credit">* Model: <a href="https://sketchfab.com/3d-models/prague-statue-01-82e35234fc3044f5bf7413a85bb45a20">Prague Statue</a> by Amanpreet Bajwa.</p>
+  </div>
+  </div>
 </div></section>
 
 <section id="gallery"><div class="wrap">
@@ -364,7 +384,8 @@ footer .logo{margin-right:auto;font-size:14px}
   function fit() {
     const el = body.firstElementChild
     if (!el) return
-    const aspect = el.naturalWidth ? el.naturalWidth / el.naturalHeight : 1
+    const img = el.naturalWidth ? el : el.querySelector('img')
+    const aspect = img && img.naturalWidth ? img.naturalWidth / img.naturalHeight : 1
     const maxW = innerWidth * 0.94 - 4, maxH = innerHeight * 0.94 - 40
     const w = Math.floor(Math.min(maxW, maxH * aspect))
     el.style.width = w + 'px'
