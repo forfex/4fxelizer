@@ -1,7 +1,8 @@
 // The app menu, defined once. Main builds the native menu from it (keyboard shortcuts everywhere,
 // the menu bar on macOS); the renderer draws it in the custom title bar on Windows and Linux.
 
-import { THEME_NAMES, THEMES, type MenuCommand } from './api'
+import { LOOK_CHOICES, THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type Keybinds, type MenuCommand } from './api'
+import { VIEW3D_LOOK_INFO } from './view3d'
 
 /** Actions main performs itself (clipboard, window, dev tools). */
 export type MenuRole = 'cut' | 'copy' | 'paste' | 'selectAll' | 'togglefullscreen' | 'quit' | 'close' | 'reload' | 'toggleDevTools'
@@ -21,13 +22,29 @@ const command = (label: string, cmd: MenuCommand, accelerator?: string): MenuEnt
 const role = (label: string, r: MenuRole, accelerator?: string): MenuEntry => ({ kind: 'role', label, role: r, accelerator })
 const separator: MenuEntry = { kind: 'separator' }
 
-export function appMenu(platform: string, isDev: boolean): MenuSection[] {
+/** The menu with `keybinds` (the user's changed shortcuts) in place of the default accelerators. */
+export function appMenu(platform: string, isDev: boolean, keybinds: Keybinds = {}): MenuSection[] {
+  const rebind = (entry: MenuEntry): MenuEntry => {
+    if (entry.kind === 'submenu') return { ...entry, items: entry.items.map(rebind) }
+    if (entry.kind !== 'command' || keybinds[entry.command] === undefined) return entry
+    return { ...entry, accelerator: keybinds[entry.command] || undefined }
+  }
+  return defaultMenu(platform, isDev).map((section) => ({ ...section, items: section.items.map(rebind) }))
+}
+
+function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
   const isMac = platform === 'darwin'
   return [
     {
       label: 'File',
       items: [
-        command('Open Image…', 'open', 'CmdOrCtrl+O'),
+        command('New Project', 'new-project', 'CmdOrCtrl+N'),
+        command('Open Project…', 'open-project'),
+        command('Save Project', 'save-project', 'CmdOrCtrl+S'),
+        command('Save Project As…', 'save-project-as', 'CmdOrCtrl+Shift+S'),
+        separator,
+        command('Open Textures…', 'open', 'CmdOrCtrl+O'),
+        command('Close Texture', 'close-texture', isMac ? 'Shift+Cmd+W' : 'Ctrl+F4'),
         command('Open Model…', 'open-model', 'CmdOrCtrl+Shift+O'),
         command('Export…', 'export', 'CmdOrCtrl+E'),
         separator,
@@ -35,6 +52,8 @@ export function appMenu(platform: string, isDev: boolean): MenuSection[] {
         separator,
         command('Presets…', 'presets', 'CmdOrCtrl+Shift+P'),
         command('Import Preset…', 'import-preset'),
+        separator,
+        command('Reload Changed Files', 'toggle-live-reload'),
         separator,
         isMac ? role('Close Window', 'close', 'Cmd+W') : role('Exit', 'quit', platform === 'win32' ? 'Alt+F4' : 'Ctrl+Q')
       ]
@@ -49,12 +68,20 @@ export function appMenu(platform: string, isDev: boolean): MenuSection[] {
         role('Cut', 'cut', 'CmdOrCtrl+X'),
         role('Copy', 'copy', 'CmdOrCtrl+C'),
         role('Paste', 'paste', 'CmdOrCtrl+V'),
-        role('Select All', 'selectAll', 'CmdOrCtrl+A')
+        role('Select All', 'selectAll', 'CmdOrCtrl+A'),
+        separator,
+        command('Settings…', 'settings', 'CmdOrCtrl+,')
       ]
     },
     {
       label: 'View',
       items: [
+        ...VIEW_MODES.map((m, i) => command(`${VIEW_MODE_NAMES[m]} View`, `view-${m}`, `CmdOrCtrl+Shift+${i + 1}`)),
+        { kind: 'submenu', label: '3D Look', items: LOOK_CHOICES.map((l) => command(l === 'custom' ? 'Custom' : VIEW3D_LOOK_INFO[l].label, `look-${l}`)) },
+        separator,
+        command('Next Texture', 'next-texture', 'Ctrl+Tab'),
+        command('Previous Texture', 'previous-texture', 'Ctrl+Shift+Tab'),
+        separator,
         command('Fit to Window', 'zoom-fit', 'CmdOrCtrl+0'),
         command('Actual Pixels', 'zoom-actual', 'CmdOrCtrl+1'),
         command('Zoom In', 'zoom-in', 'CmdOrCtrl+='),

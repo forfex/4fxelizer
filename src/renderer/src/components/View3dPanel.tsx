@@ -1,41 +1,52 @@
-// The 3D view: the loaded model with the processed texture (or the source, or a map) on it, drawn
-// with switchable PSX quirks. Drag to orbit, right/middle/Shift-drag to pan, wheel to zoom,
+// The 3D view (in the main view's 3D and 2D / 3D modes): the loaded model with the processed
+// texture (or the source, or a map) on it, drawn in a look (Lit, Wireframe, PSX, …) or the user's
+// Custom style. With a texture but no model it shows a built-in shape (cube, plane, sphere, torus).
+// Drag to orbit, right/middle/Shift-drag to pan, wheel to zoom, Alt-drag to turn the sun,
 // double-click to frame the model.
 
-import { useEffect, useRef } from 'react'
-import { VIEW3D_RESOLUTIONS, type View3dResolution, type View3dSettings } from '@shared/bake'
-import { MAP_CHANNELS, MAP_SLOTS } from '@shared/maps'
+import { useEffect, useRef, useState } from 'react'
+import { MAP_CHANNELS, MAP_SLOTS, type MapSlot } from '@shared/maps'
+import { VIEW3D_SHAPE_NAMES, VIEW3D_SHAPES, view3dStyle, type View3dShape } from '@shared/view3d'
 import { getEngine } from '@/engine'
-import { ModelRenderer } from '@/gpu/model/modelRenderer'
+import { ModelGpu } from '@/gpu/model/modelGpu'
+import { ModelRenderer, type FrameMap, type PartTexture } from '@/gpu/model/modelRenderer'
+import type { ModelData } from '@/model/model'
+import { shapeModel } from '@/model/shapes'
+import { partTextures } from '@/stack/textures'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
 import { openModel } from '@/modelActions'
+import { savedSettings } from '@/settings'
 import { useApp, type View3dShow } from '@/store'
 import { dolly, frameBounds, orbit, panCamera, type OrbitCamera } from '@/viewer3d/camera'
 import { Button } from './ui/button'
-import { CaretIcon } from './ui/icons'
-import { Menu, MENU_MARK_CLASS, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/menu'
 import { Select } from './ui/select'
+import { LookSelect, View3dStylePanel } from './View3dStyle'
 
 /** Accumulated wheel delta per zoom step (see Viewer). */
 const WHEEL_STEP = 60
+/** Sun rotation per CSS pixel of Alt-drag, radians. */
+const SUN_SPEED = 0.01
 
-const QUIRKS: { key: keyof Omit<View3dSettings, 'resolution'>; label: string; hint: string }[] = [
-  { key: 'snap', label: 'Vertex snapping', hint: 'Vertices snap to whole pixels, so the model wobbles as it moves.' },
-  { key: 'affine', label: 'Affine textures', hint: 'Textures map without perspective correction, so they warp across large faces.' },
-  { key: 'filter', label: 'Texture filtering', hint: 'Blend between texels (bilinear). Off shows each texel as a hard square, like the PSX.' },
-  { key: 'lighting', label: 'Lighting', hint: 'Shade the model with a light from the upper left.' },
-  { key: 'dither', label: '15-bit dither', hint: 'Reduce the picture to 15-bit color with the PSX’s 4×4 dither.' }
+const NAVIGATION: [keys: string, action: string][] = [
+  ['Drag', 'orbit'],
+  ['Right / Shift-drag', 'pan'],
+  ['Wheel', 'zoom'],
+  ['Alt-drag', 'turn the sun'],
+  ['Double-click', 'frame']
 ]
 
-const RESOLUTION_LABELS: Record<View3dResolution, string> = { full: 'Full resolution', '480': '480 lines', '240': '240 lines (PSX)' }
-
-export function View3dPanel() {
+/** The 3D view's well (canvas, toolbar, model readout); the main view places it (see MainView). */
+export function View3d() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const camera = useRef<OrbitCamera | null>(null)
   const redraw = useRef<() => void>(() => {})
+  /** The model or shape drawn last (wheel zoom and framing measure it). */
+  const shown = useRef<ModelData | null>(null)
+  const lightYaw = useRef(0)
   const gpuReady = useApp((s) => s.gpu.status === 'ready')
   const model = useApp((s) => s.model)
+  const hasImage = useApp((s) => !!s.image)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -43,34 +54,82 @@ export function View3dPanel() {
     if (!gpuReady || !canvas || !engine) return
     const renderer = new ModelRenderer(engine.gpu.device, canvas)
     let background = cssColor('--fx-viewer-bg')
+    let wireColor = cssColor('--fx-accent')
     let theme = useApp.getState().theme
-    let modelVersion = -1
+    // The model (or shape) the camera was framed for: a reload of the same file keeps the camera.
+    let framed: string | null = null
+    let shape: { name: View3dShape; gpu: ModelGpu } | null = null
+    const shapeGpu = (name: View3dShape): ModelGpu => {
+      if (shape?.name !== name) {
+        shape?.gpu.dispose()
+        shape = { name, gpu: new ModelGpu(engine.gpu.device, shapeModel(name), null) }
+      }
+      return shape.gpu
+    }
 
     const frame = (): void => {
       const s = useApp.getState()
       if (s.theme !== theme) {
         theme = s.theme
         background = cssColor('--fx-viewer-bg')
+        wireColor = cssColor('--fx-accent')
       }
-      const gpuModel = engine.model
+      const isShape = !s.model && !!s.image
+      const gpuModel = s.model ? engine.model : isShape ? shapeGpu(s.view3d.shape) : null
+      shown.current = gpuModel?.data ?? null
       const aspect = canvas.width / Math.max(canvas.height, 1)
-      if (s.model?.version !== modelVersion) {
-        modelVersion = s.model?.version ?? -1
+      const identity = s.model ? `model:${s.model.path ?? s.model.name}` : isShape ? `shape:${s.view3d.shape}` : null
+      if (identity !== framed || !camera.current) {
+        framed = identity
         camera.current = gpuModel ? frameBounds(gpuModel.data.bounds, aspect) : null
       }
-      const show = s.view3dShow
-      const map = show !== 'result' && show !== 'source' ? s.maps[show] : undefined
-      const texture = show === 'result' ? engine.shownTexture : show === 'source' ? engine.sourceTexture : map ? engine.mapTexture(show as keyof typeof s.maps) : null
-      const textureView = map ? 1 + MAP_CHANNELS.findIndex((c) => c.id === map.channel) : 0
+      // A map view whose map the texture doesn't have (any more) shows the result, like the toolbar.
+      const show = s.view3dShow !== 'result' && s.view3dShow !== 'source' && !s.maps[s.view3dShow as MapSlot] ? 'result' : s.view3dShow
+      const channelIndex = (channel: string): number => MAP_CHANNELS.findIndex((c) => c.id === channel)
+      // What a texture puts on the materials drawn with it: its result (the active one as the
+      // viewer shows it), its source or one of its maps, plus its maps for the lit style.
+      const partOf = (id: string | null): PartTexture | null => {
+        const entry = id ? s.textures.find((t) => t.id === id) : undefined
+        if (!entry) return null
+        const map = show !== 'result' && show !== 'source' ? entry.maps[show] : undefined
+        const texture =
+          show === 'result'
+            ? entry.id === s.activeTextureId
+              ? engine.shownTexture
+              : engine.outputOf(entry.id)
+            : show === 'source'
+              ? engine.sourceOf(entry.id)
+              : map
+                ? engine.mapTexture(show as MapSlot, entry.id)
+                : null
+        if (!texture) return null
+        const frameMap = (slot: MapSlot): FrameMap | undefined => {
+          const info = entry.maps[slot]
+          const t = info ? engine.mapTexture(slot, entry.id) : null
+          return info && t ? { texture: t, channel: channelIndex(info.channel) } : undefined
+        }
+        return {
+          texture,
+          view: map ? 1 + channelIndex(map.channel) : 0,
+          maps: { ao: frameMap('ao'), roughness: frameMap('roughness'), metallic: frameMap('metallic') }
+        }
+      }
+      const ids = isShape ? [s.activeTextureId] : partTextures(gpuModel?.data.materials.length ?? 0, s.textures, s.activeTextureId, s.modelMaterial)
+      const byTexture = new Map<string | null, PartTexture | null>()
+      const parts = ids.map((id) => {
+        if (!byTexture.has(id)) byTexture.set(id, partOf(id))
+        return byTexture.get(id)!
+      })
       renderer.draw({
         model: gpuModel,
-        uvSet: s.modelUvSet,
-        material: s.modelMaterial,
-        texture,
-        textureView,
+        uvSet: isShape ? 0 : s.modelUvSet,
+        parts,
         camera: camera.current ?? { target: [0, 0, 0], yaw: 0, pitch: 0, distance: 1 },
-        settings: s.view3d,
-        background
+        style: view3dStyle(s.view3d),
+        background,
+        wireColor,
+        pixelRatio: window.devicePixelRatio || 1,
+        lightYaw: lightYaw.current
       })
     }
 
@@ -100,6 +159,8 @@ export function View3dPanel() {
         s.view3dShow !== prev.view3dShow ||
         s.maps !== prev.maps ||
         s.image !== prev.image ||
+        s.textures !== prev.textures ||
+        s.activeTextureId !== prev.activeTextureId ||
         s.theme !== prev.theme
       ) {
         schedule()
@@ -114,6 +175,7 @@ export function View3dPanel() {
       resize.disconnect()
       cancelAnimationFrame(raf)
       redraw.current = () => {}
+      shape?.gpu.dispose()
       renderer.dispose()
     }
   }, [gpuReady])
@@ -126,13 +188,13 @@ export function View3dPanel() {
     const onWheel = (e: WheelEvent): void => {
       e.preventDefault()
       const c = camera.current
-      const data = getEngine()?.model?.data
+      const data = shown.current
       if (!c || !data) return
       accumulated += e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 33 : e.deltaY
       if (Math.abs(accumulated) < WHEEL_STEP) return
       const { min, max } = data.bounds
       const size = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2])
-      camera.current = dolly(c, accumulated < 0 ? 1 : -1, size * 0.01)
+      camera.current = dolly(c, (accumulated < 0 ? 1 : -1) * (savedSettings().invertZoom ? -1 : 1), size * 0.01)
       accumulated = 0
       redraw.current()
     }
@@ -140,12 +202,18 @@ export function View3dPanel() {
     return () => canvas.removeEventListener('wheel', onWheel)
   }, [])
 
-  const drag = useRef<{ x: number; y: number; pan: boolean } | null>(null)
+  const drag = useRef<{ x: number; y: number; mode: 'orbit' | 'pan' | 'sun' } | null>(null)
+  const [turningSun, setTurningSun] = useState(false)
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>): void => {
     if (e.button > 2) return
     e.currentTarget.setPointerCapture(e.pointerId)
-    drag.current = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey }
+    const mode = e.button === 0 && e.altKey ? 'sun' : e.button !== 0 || e.shiftKey ? 'pan' : 'orbit'
+    if (mode === 'sun') {
+      e.preventDefault()
+      setTurningSun(true)
+    }
+    drag.current = { x: e.clientX, y: e.clientY, mode }
   }
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>): void => {
     const d = drag.current
@@ -154,14 +222,17 @@ export function View3dPanel() {
     const dx = e.clientX - d.x
     const dy = e.clientY - d.y
     drag.current = { ...d, x: e.clientX, y: e.clientY }
-    camera.current = d.pan ? panCamera(c, dx, dy, e.currentTarget.clientHeight) : orbit(c, dx, dy)
+    // The sun turns only around the vertical axis: horizontal movement.
+    if (d.mode === 'sun') lightYaw.current += dx * SUN_SPEED
+    else camera.current = d.mode === 'pan' ? panCamera(c, dx, dy, e.currentTarget.clientHeight) : orbit(c, dx, dy)
     redraw.current()
   }
   const endDrag = (): void => {
     drag.current = null
+    setTurningSun(false)
   }
   const frameModel = (): void => {
-    const data = getEngine()?.model?.data
+    const data = shown.current
     const canvas = canvasRef.current
     if (!data || !canvas) return
     camera.current = frameBounds(data.bounds, canvas.width / Math.max(canvas.height, 1))
@@ -169,39 +240,59 @@ export function View3dPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-panel p-1.5">
-      <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
-        <canvas
-          ref={canvasRef}
-          className={cn('block size-full', model && 'cursor-grab active:cursor-grabbing')}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onDoubleClick={frameModel}
-          onContextMenu={(e) => e.preventDefault()}
-          onAuxClick={(e) => e.preventDefault()}
-        />
-        {model ? (
-          <>
-            <View3dToolbar onFrame={frameModel} />
-            <span className="bevel-raised pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-fx bg-panel/90 px-1.5 py-px text-small text-dim">
-              {model.name} · {model.triangles.toLocaleString('en-US')} tris
+    <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
+      <canvas
+        ref={canvasRef}
+        className={cn('block size-full', (model || hasImage) && (turningSun ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'))}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onDoubleClick={frameModel}
+        onContextMenu={(e) => e.preventDefault()}
+        onAuxClick={(e) => e.preventDefault()}
+      />
+      {model || hasImage ? (
+        <>
+          <View3dToolbar onFrame={frameModel} />
+          <div className="pointer-events-none absolute right-2 bottom-2 left-2 flex flex-wrap items-end justify-between gap-1">
+            <span className={cn(BADGE_CLASS, 'max-w-full truncate')}>
+              {model ? `${model.name} · ${model.triangles.toLocaleString('en-US')} tris` : 'No model open: a preview shape'}
             </span>
-          </>
-        ) : (
-          <EmptyState />
-        )}
-      </div>
+            <NavigationHints />
+          </div>
+        </>
+      ) : (
+        <EmptyState />
+      )}
     </div>
   )
 }
 
+const BADGE_CLASS = 'bevel-raised rounded-fx bg-panel/90 px-1.5 py-px text-small text-dim'
+
+/** The view's mouse controls, at the bottom right. */
+function NavigationHints() {
+  return (
+    <span className={cn(BADGE_CLASS, 'ml-auto flex flex-wrap justify-end gap-x-2.5')}>
+      {NAVIGATION.map(([keys, action]) => (
+        <span key={keys} className="whitespace-nowrap">
+          <span className="text-text">{keys}</span> {action}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+const SHAPE_OPTIONS = VIEW3D_SHAPES.map((shape) => ({ value: shape, label: VIEW3D_SHAPE_NAMES[shape] }))
+
 function View3dToolbar({ onFrame }: { onFrame(): void }) {
+  const hasModel = useApp((s) => !!s.model)
+  const shape = useApp((s) => s.view3d.shape)
   const show = useApp((s) => s.view3dShow)
   const maps = useApp((s) => s.maps)
-  const view3d = useApp((s) => s.view3d)
-  const { setView3d, setView3dShow } = useApp.getState()
+  const setView3dShow = useApp((s) => s.setView3dShow)
+  const [styleOpen, setStyleOpen] = useState(false)
   const options: { value: View3dShow; label: string; hint?: string; group?: string }[] = [
     { value: 'result', label: 'Result', hint: 'The texture as the viewer shows it on the right: the result, or the stage you preview.' },
     { value: 'source', label: 'Source', hint: 'The texture as loaded.' },
@@ -210,37 +301,33 @@ function View3dToolbar({ onFrame }: { onFrame(): void }) {
   // A map view whose map was removed falls back to the result.
   const value = options.some((o) => o.value === show) ? show : 'result'
   return (
-    <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
-      <Select className="w-36" title="What to put on the model" value={value} onValueChange={setView3dShow} options={options} />
-      <Menu>
-        <MenuTrigger asChild>
-          <Button title="PSX look: switch each quirk on or off">
-            PSX
-            <CaretIcon open className="text-dim" />
+    <>
+      <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
+        <Select className="w-36" title="What to put on the model" value={value} onValueChange={setView3dShow} options={options} />
+        <LookSelect />
+        {!hasModel && (
+          <Select<View3dShape>
+            className="w-40"
+            title="Shape to show the texture on (open a model to see yours)"
+            value={shape}
+            onValueChange={(v) => useApp.getState().setView3d({ shape: v })}
+            options={SHAPE_OPTIONS}
+          />
+        )}
+        <Button aria-pressed={styleOpen} className={cn(styleOpen && 'bg-well bevel-sunken')} onClick={() => setStyleOpen(!styleOpen)} title="Every setting of the look">
+          Style…
+        </Button>
+        <Button onClick={onFrame} title="Frame the model (double-click the view)">
+          Frame
+        </Button>
+        {!hasModel && (
+          <Button onClick={openModel} title="Open a glTF, GLB, FBX or OBJ model">
+            Open Model…
           </Button>
-        </MenuTrigger>
-        <MenuContent className="w-56">
-          <MenuLabel>PSX look</MenuLabel>
-          {QUIRKS.map((q) => (
-            <MenuItem key={q.key} title={q.hint} onSelect={(e) => (e.preventDefault(), setView3d({ [q.key]: !view3d[q.key] }))}>
-              {view3d[q.key] && <span className={MENU_MARK_CLASS} />}
-              {q.label}
-            </MenuItem>
-          ))}
-          <MenuSeparator />
-          <MenuLabel>Resolution</MenuLabel>
-          {VIEW3D_RESOLUTIONS.map((r) => (
-            <MenuItem key={r} onSelect={(e) => (e.preventDefault(), setView3d({ resolution: r }))}>
-              {view3d.resolution === r && <span className={MENU_MARK_CLASS} />}
-              {RESOLUTION_LABELS[r]}
-            </MenuItem>
-          ))}
-        </MenuContent>
-      </Menu>
-      <Button onClick={onFrame} title="Frame the model (double-click the view)">
-        Frame
-      </Button>
-    </div>
+        )}
+      </div>
+      {styleOpen && <View3dStylePanel className="absolute top-11 right-2 z-20 max-h-[calc(100%-3.5rem)]" onClose={() => setStyleOpen(false)} />}
+    </>
   )
 }
 

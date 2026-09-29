@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Menubar } from 'radix-ui'
 import { useShallow } from 'zustand/react/shallow'
 import type { MenuCommand } from '@shared/api'
@@ -7,13 +7,15 @@ import { runMenuCommand } from '@/actions'
 import iconUrl from '@/assets/icon.svg'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
+import { useProjectDirty } from '@/projectActions'
+import { useSavedSettings } from '@/settings'
 import { useApp } from '@/store'
+import { CAPTURE_KEYS_ATTR } from './settings/Keybinds'
 import { CaretIcon } from './ui/icons'
 import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_MARK_CLASS, MENU_SEPARATOR_CLASS } from './ui/menu'
 
 const platform = window.fx.platform
 const isMac = platform === 'darwin'
-const MENU = appMenu(platform, import.meta.env.DEV)
 
 /** CSS color token → "rgb(r g b)" for Electron's title bar overlay. */
 function tokenRgb(token: string): string {
@@ -30,18 +32,23 @@ function tokenRgb(token: string): string {
 export function TitleBar() {
   const header = useRef<HTMLElement>(null)
   const imageName = useApp((s) => s.image?.name ?? null)
+  const projectName = useApp((s) => s.project?.name ?? null)
+  const dirty = useProjectDirty()
   const theme = useApp((s) => s.theme)
-  const title = imageName ? `${imageName} — 4FXELIZER` : '4FXELIZER'
+  const uiScale = useSavedSettings().uiScale
+  // The project when one is open (* = unsaved changes), else the texture.
+  const document_ = projectName ? `${projectName}${dirty ? '*' : ''}` : imageName
+  const title = document_ ? `${document_} — 4FXELIZER` : '4FXELIZER'
 
   useEffect(() => {
     document.title = title
   }, [title])
 
   useEffect(() => {
-    // The rendered height, so the token may use any CSS unit.
-    const height = header.current?.getBoundingClientRect().height || 32
+    // The rendered height, so the token may use any CSS unit; the overlay is sized in unzoomed pixels.
+    const height = (header.current?.getBoundingClientRect().height || 32) * uiScale
     window.fx.setTitleBarOverlay({ color: tokenRgb('--fx-titlebar-bg'), symbolColor: tokenRgb('--fx-titlebar-symbol'), height })
-  }, [theme])
+  }, [theme, uiScale])
 
   // Only the icon and the empty area around the title are drag regions. The menus sit outside
   // any drag region: a drag region layered over them (even a click-through one) swallows real
@@ -64,7 +71,7 @@ export function TitleBar() {
       )}
       <span className="flex h-full min-w-0 flex-1 items-center justify-center px-4 [-webkit-app-region:drag]">
         <span className="truncate text-[12px] leading-4 font-medium text-(--fx-titlebar-text)">
-          {imageName && `${imageName} — `}
+          {document_ && `${document_} — `}
           <b className="font-display font-bold tracking-[0.08em] text-(--fx-titlebar-symbol)">4FXELIZER</b>
         </span>
       </span>
@@ -79,13 +86,19 @@ export function TitleBar() {
 function AppMenuBar() {
   const root = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState('')
+  const keybinds = useSavedSettings().keybinds
+  const menu = useMemo(() => appMenu(platform, import.meta.env.DEV, keybinds), [keybinds])
+  const menuRef = useRef(menu)
+  menuRef.current = menu
   // Commands that are on/off states show the selected mark in the menu.
   const checked = useApp(
     useShallow((s): Partial<Record<MenuCommand, boolean>> => ({
       'toggle-grid': s.grid,
       'toggle-split': s.split,
       'toggle-tile': s.tile,
-      [`theme-${s.theme}`]: true
+      'toggle-live-reload': s.liveReload,
+      [`theme-${s.theme}`]: true,
+      [`view-${s.viewMode}`]: true
     }))
   )
   // Clipboard actions must reach the field that was focused before the menu took focus. Recorded
@@ -99,14 +112,20 @@ function AppMenuBar() {
   useEffect(() => {
     let altAlone = false
     const firstTrigger = (): HTMLElement | null => root.current?.querySelector('button') ?? null
+    // A shortcut being recorded in Settings takes every key, Alt and F10 included.
+    const captured = (e: KeyboardEvent): boolean => !!(e.target as Element | null)?.closest?.(`[${CAPTURE_KEYS_ATTR}]`)
     const onKeyDown = (e: KeyboardEvent): void => {
+      if (captured(e)) {
+        altAlone = false
+        return
+      }
       altAlone = e.key === 'Alt' && !e.ctrlKey && !e.shiftKey && !e.metaKey
       if (e.key === 'F10' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
         e.preventDefault()
         remember()
         firstTrigger()?.focus()
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.length === 1) {
-        const section = MENU.find((m) => m.label[0]!.toLowerCase() === e.key.toLowerCase())
+        const section = menuRef.current.find((m) => m.label[0]!.toLowerCase() === e.key.toLowerCase())
         if (section) {
           e.preventDefault()
           remember()
@@ -187,7 +206,7 @@ function AppMenuBar() {
         if (root.current?.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
       }}
     >
-      {MENU.map((section) => (
+      {menu.map((section) => (
         <Menubar.Menu key={section.label} value={section.label}>
           <Menubar.Trigger
             className={cn(

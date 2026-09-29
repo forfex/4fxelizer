@@ -19,7 +19,8 @@ export interface ModelMaterial {
 
 export interface ModelData {
   name: string
-  format: ModelFormat
+  /** The file format, or 'shape' for the 3D view's built-in shapes. */
+  format: ModelFormat | 'shape'
   /** World-space positions, 3 floats per vertex. */
   positions: Float32Array
   /** World-space normals, 3 floats per vertex. */

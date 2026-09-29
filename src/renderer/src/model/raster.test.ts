@@ -65,4 +65,9 @@ describe('rasterizeUv', () => {
     expect(g.covered).toBeLessThan(40)
     expect(g.covered).toBeGreaterThan(24)
   })
+
+  it('draws several triangle ranges (materials sharing a texture)', () => {
+    const both = rasterizeUv({ ...quad(0, 0, 1, 1), ranges: [{ first: 0, count: 1 }, { first: 1, count: 1 }] }, 8, 8)
+    expect(both.covered).toBe(64)
+  })
 })

@@ -72,6 +72,20 @@ describe('generatePalette', () => {
     expect(new Set(out)).toEqual(new Set(['#00ff00', '#0000ff', '#141414']))
   })
 
+  it('keeps exact colors with a gamma other than 1', () => {
+    const out = generatePalette(four, { method: 'kmeans', count: 4, quality: 8, lumaWeight: 1, chromaWeight: 1, gamma: 2.2, locked: [] })
+    expect(new Set(out)).toEqual(new Set(['#ff0000', '#00ff00', '#0000ff', '#141414']))
+  })
+
+  it('gamma above 1 spends more colors on the darks', () => {
+    const ramp = image(Array.from({ length: 256 }, (_, v) => [v, v, v, 255] as [number, number, number, number]), 4)
+    const darks = (gamma: number): number =>
+      generatePalette(ramp, { method: 'kmeans', count: 8, quality: 8, lumaWeight: 1, chromaWeight: 1, gamma, locked: [] })
+        .filter((hex) => parseInt(hex.slice(1, 3), 16) < 128).length
+    expect(darks(2.5)).toBeGreaterThan(darks(1))
+    expect(darks(1)).toBeGreaterThan(darks(0.4))
+  })
+
   it('sorts dark to light', () => {
     const out = generatePalette(four, { method: 'median-cut', count: 4, quality: 0, lumaWeight: 1, chromaWeight: 1, locked: [] })
     expect(out[0]).toBe('#141414')

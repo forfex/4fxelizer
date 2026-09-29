@@ -4,7 +4,9 @@ import { getEngine } from '@/engine'
 import { cssColor } from '@/lib/pixelSnap'
 import { stageLabel } from '@/gpu/passes'
 import { cn } from '@/lib/utils'
+import { savedSettings } from '@/settings'
 import { tilesOf, useApp } from '@/store'
+import { docAt, docFor, docKeyOf } from '@/stack/textures'
 import { pan, pixelAt, splitPosAt, splitScreenX, stepZoom, uvAt, zoomAt } from '@/viewer/viewport'
 import { Button } from './ui/button'
 
@@ -44,6 +46,33 @@ export function Viewer() {
     let colors = readColors()
     let theme = useApp.getState().theme
     let processed: unknown[] | null = null
+    /** Inputs each other texture was last processed with. */
+    const others = new Map<string, unknown[]>()
+
+    // The other textures run in the background, one per frame, so the 3D view, their previews,
+    // palettes generated from every texture and exports stay current.
+    const processOther = (s: ReturnType<typeof useApp.getState>): boolean => {
+      for (const id of others.keys()) if (!s.textures.some((t) => t.id === id)) others.delete(id)
+      for (const t of s.textures) {
+        if (t.id === s.activeTextureId) continue
+        const inputs = [t.image.version, docAt(s.docs, docKeyOf(s.docs, t.id)), t.maps]
+        const last = others.get(t.id)
+        if (last && inputs.every((v, i) => v === last[i])) continue
+        others.set(t.id, inputs)
+        const doc = docFor(s.docs, t.id)
+        try {
+          engine.processTexture(t.id, {
+            ...doc,
+            previewUid: null,
+            mapChannels: Object.fromEntries(Object.entries(t.maps).map(([slot, map]) => [slot, map.channel]))
+          })
+        } catch (e) {
+          s.setMessage({ kind: 'error', text: `Processing ${t.image.name} failed: ${(e as Error).message}` })
+        }
+        return true
+      }
+      return false
+    }
 
     // Processing happens inside the frame, so dragging a slider runs the stack at most once per frame.
     const frame = (): void => {
@@ -52,7 +81,7 @@ export function Viewer() {
         theme = s.theme
         colors = readColors()
       }
-      const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid, s.maps]
+      const inputs = [s.activeTextureId, s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid, s.maps]
       if (s.image && (!processed || inputs.some((v, i) => v !== processed![i]))) {
         processed = inputs
         try {
@@ -67,7 +96,9 @@ export function Viewer() {
         } catch (e) {
           s.setMessage({ kind: 'error', text: `Processing failed: ${(e as Error).message}` })
         }
-      }
+        // Then the other textures, in the frames that follow.
+        if (s.textures.length > 1) schedule()
+      } else if (processOther(s)) schedule()
       engine.draw({
         view: s.view,
         image: s.image,
@@ -121,7 +152,7 @@ export function Viewer() {
       }
       accumulated += e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 33 : e.deltaY
       if (Math.abs(accumulated) < WHEEL_STEP) return
-      const dir = accumulated < 0 ? 1 : -1
+      const dir = (accumulated < 0) !== savedSettings().invertZoom ? 1 : -1
       accumulated = 0
       const rect = canvas.getBoundingClientRect()
       const anchor = { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale }
@@ -289,7 +320,7 @@ function EmptyState() {
         <>
           <p>Drop an image here, or</p>
           <Button variant="primary" onClick={openImage} disabled={gpu.status !== 'ready'}>
-            Open Image…
+            Open Textures…
           </Button>
           <p className="text-small">PNG · JPG · WebP · BMP · GIF · TGA</p>
         </>

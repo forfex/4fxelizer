@@ -2,6 +2,7 @@
 // texture can be reapplied to others. Loading validates everything, fills in missing settings with
 // defaults (older presets keep working) and gives stages and palettes fresh ids.
 
+import { MASK_COMBINE, MASK_SOURCES, MAX_MASK_BLUR, normalizeMask, type MaskSource, type MaskSpec } from '@/gpu/mask'
 import { BLEND_MODES, DEFAULT_BLEND, type StageBlend } from '@/gpu/pass'
 import { STAGE_TYPES } from '@/gpu/passes'
 import type { StageSpec } from '@/gpu/plan'
@@ -10,7 +11,9 @@ import { newId, type Doc, type PaletteParams } from './doc'
 
 export const PRESET_FORMAT = '4fxelizer-preset'
 export const PRESET_VERSION = 1
-export const PRESET_EXTENSION = '4fxpreset'
+export const PRESET_EXTENSION = 'pxlook'
+/** Extension presets had before; such files still load. */
+export const LEGACY_PRESET_EXTENSION = '4fxpreset'
 
 export interface PresetFile extends Doc {
   format: typeof PRESET_FORMAT
@@ -25,7 +28,7 @@ export class PresetError extends Error {}
  * (only locked ones), since they are rebuilt from whatever texture the preset is applied to.
  */
 export function serializePreset(doc: Doc, name: string): string {
-  const palettes = doc.palettes.map(({ generatedFor: _generatedFor, ...p }) =>
+  const palettes = doc.palettes.map(({ generatedFor: _generatedFor, variants: _variants, ...p }) =>
     p.generator?.auto ? { ...p, colors: p.colors.filter((c) => c.locked) } : p
   )
   // Pick the document fields explicitly: callers may pass the whole app state.
@@ -59,11 +62,30 @@ function cleanParams(defaults: object, raw: unknown): Record<string, unknown> {
 function cleanBlend(raw: unknown): StageBlend {
   if (!isObject(raw)) return { ...DEFAULT_BLEND }
   const mode = BLEND_MODES.find((m) => m.id === raw.mode)?.id ?? DEFAULT_BLEND.mode
-  return { opacity: Math.min(Math.max(num(raw.opacity, 1), 0), 1), mode }
+  const mask = cleanMask(raw.mask)
+  return { opacity: Math.min(Math.max(num(raw.opacity, 1), 0), 1), mode, ...(mask ? { mask } : {}) }
+}
+
+function cleanMask(raw: unknown): MaskSpec | null {
+  if (!isObject(raw)) return null
+  const source = (v: unknown): MaskSource => MASK_SOURCES.find((m) => m.id === v)?.id ?? 'none'
+  const amount = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? Math.min(Math.max(v, 0), 1) : undefined)
+  return normalizeMask({
+    a: source(raw.a),
+    aInvert: raw.aInvert === true,
+    aAmount: amount(raw.aAmount),
+    b: source(raw.b),
+    bInvert: raw.bInvert === true,
+    bAmount: amount(raw.bAmount),
+    combine: MASK_COMBINE.find((m) => m.id === raw.combine)?.id ?? 'multiply',
+    blur: Math.min(Math.max(num(raw.blur, 0), 0), MAX_MASK_BLUR),
+    wrap: raw.wrap === true
+  })
 }
 
 function cleanGenerator(raw: unknown): GeneratorSettings | undefined {
   if (!isObject(raw)) return undefined
+  const gamma = Math.min(Math.max(num(raw.gamma, 1), 0.2), 5)
   const from = isObject(raw.from) && raw.from.kind === 'stage' && str(raw.from.uid)
     ? { kind: 'stage' as const, uid: raw.from.uid as string }
     : { kind: 'source' as const }
@@ -75,8 +97,10 @@ function cleanGenerator(raw: unknown): GeneratorSettings | undefined {
     chromaWeight: num(raw.chromaWeight, 1),
     from,
     auto: raw.auto !== false,
-    // Only when on, so palettes without it keep their generation key.
-    ...(raw.color15 === true ? { color15: true } : {})
+    // Only when set, so palettes without them keep their generation key.
+    ...(gamma !== 1 ? { gamma } : {}),
+    ...(raw.color15 === true ? { color15: true } : {}),
+    ...(raw.scope === 'all' ? { scope: 'all' as const } : {})
   }
 }
 
@@ -109,6 +133,16 @@ export function parsePreset(json: string): ParsedPreset {
     throw new PresetError('This preset was made by a newer version of 4FXELIZER. Update the app to load it.')
   }
   const warnings: string[] = []
+  const doc = parseDoc(raw, warnings)
+  if (!doc.stages.length && !doc.palettes.length) warnings.push('The preset is empty.')
+  return { name: str(raw.name)?.slice(0, 100) || 'Preset', doc, warnings }
+}
+
+/**
+ * The document fields (stages, palettes, output lock) of a preset or project: validated, with
+ * defaults filled in and fresh ids. Skipped parts are added to `warnings`.
+ */
+export function parseDoc(raw: Record<string, unknown>, warnings: string[]): Doc {
 
   // Fresh ids, so a preset can be loaded any number of times.
   const stageIds = new Map<string, string>()
@@ -158,15 +192,13 @@ export function parsePreset(json: string): ParsedPreset {
       const had = params.paletteId
       params.paletteId = remapPalette(had)
       params.projectPaletteId = remapPalette(params.projectPaletteId)
-      if (had && !params.paletteId) warnings.push('A stage referenced a palette that is not in the preset.')
+      if (had && !params.paletteId) warnings.push('A stage referenced a palette that is missing from the file.')
     }
   }
 
   const lock = isObject(raw.outputLock) ? raw.outputLock : {}
   const outputLock = { enabled: lock.enabled === true, paletteId: remapPalette(lock.paletteId) }
-  if (!stages.length && !palettes.length) warnings.push('The preset is empty.')
-
-  return { name: str(raw.name)?.slice(0, 100) || 'Preset', doc: { stages, palettes, outputLock }, warnings }
+  return { stages, palettes, outputLock }
 }
 
 /** File-system-safe preset name (the main process sanitizes again). */

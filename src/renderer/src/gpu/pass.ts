@@ -35,6 +35,11 @@ export type BlendMode = (typeof BLEND_MODES)[number]['id']
 export interface StageBlend {
   opacity: number
   mode: BlendMode
+  /**
+   * Where the stage applies (white = its full result, black = its input shows through), built
+   * before the stage runs like a pass mask. Left out when there is none.
+   */
+  mask?: MaskSpec
 }
 
 export const DEFAULT_BLEND: StageBlend = { opacity: 1, mode: 'normal' }
@@ -90,6 +95,11 @@ export interface PassDef<P = unknown> {
   serialSteps?(params: P, size: Size): number
   /** The mask to build before the pass runs (read with `maskAt`); null = none (maskAt is 1). */
   mask?(params: P): MaskSpec | null
+  /**
+   * The pass places its effect with a mask of its own (Dither), so the stage blend offers none:
+   * blending with the input would bring back colors the pass removed.
+   */
+  ownMask?: boolean
 }
 
 export function definePass<P>(def: PassDef<P>): PassDef<P> {
@@ -120,7 +130,7 @@ function shaderSource(def: PassDef<never>): string {
   const hasParams = /\bstruct\s+Params\b/.test(def.wgsl)
   return /* wgsl */ `
 ${hasParams ? '' : 'struct Params { _unused: vec4f }'}
-struct Stage { opacity: f32, blendMode: u32, paletteCount: u32, step: u32 }
+struct Stage { opacity: f32, blendMode: u32, paletteCount: u32, step: u32, blendMask: u32, _s0: u32, _s1: u32, _s2: u32 }
 struct PaletteEntry { color: vec4f, lab: vec4f }
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -133,16 +143,21 @@ struct PaletteEntry { color: vec4f, lab: vec4f }
 @group(0) @binding(7) var<storage, read_write> scratch: array<vec4f>;
 @group(0) @binding(8) var maskTex: texture_2d<f32>;
 @group(0) @binding(9) var customPattern: texture_2d<f32>;
+@group(0) @binding(10) var blendMaskTex: texture_2d<f32>;
 
 const ROW_THREADS = ${ROW_THREADS}u;
 
 ${WGSL_LIB}
 
+fn blends() -> bool {
+  return stage.opacity < 1.0 || stage.blendMode != 0u || stage.blendMask == 1u;
+}
+
 /** Applies the stage blend and writes output texel p (for serial passes). */
 fn emit(p: vec2u, size: vec2u, color: vec4f) {
   var c = color;
-  if (stage.opacity < 1.0 || stage.blendMode != 0u) {
-    c = blendStage(inputAt(p, size), c);
+  if (blends()) {
+    c = blendStage(inputAt(p, size), c, p, size);
   }
   textureStore(dst, p, c);
 }
@@ -154,8 +169,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   let size = textureDimensions(dst);
   if (id.x >= size.x || id.y >= size.y) { return; }
   var c = run(id.xy, size);
-  if (stage.opacity < 1.0 || stage.blendMode != 0u) {
-    c = blendStage(inputAt(id.xy, size), c);
+  if (blends()) {
+    c = blendStage(inputAt(id.xy, size), c, id.xy, size);
   }
   textureStore(dst, id.xy, c);
 }
@@ -182,6 +197,8 @@ export interface PassBindings {
   mask?: GPUTexture | null
   /** Custom pattern thresholds (r32float); defaults to a single 0.5. */
   customPattern?: GPUTexture | null
+  /** The stage blend's mask (see StageBlend.mask); needs `blendMask` set in the stage uniforms. */
+  blendMask?: GPUTexture | null
 }
 
 export class PassRunner {
@@ -208,7 +225,8 @@ export class PassRunner {
         { binding: 6, visibility: compute, buffer: { type: 'uniform' } },
         { binding: 7, visibility: compute, buffer: { type: 'storage' } },
         { binding: 8, visibility: compute, texture: { sampleType: 'float' } },
-        { binding: 9, visibility: compute, texture: { sampleType: 'unfilterable-float' } }
+        { binding: 9, visibility: compute, texture: { sampleType: 'unfilterable-float' } },
+        { binding: 10, visibility: compute, texture: { sampleType: 'float' } }
       ]
     })
     this.emptyScratch = device.createBuffer({ label: 'empty scratch', size: 16, usage: GPUBufferUsage.STORAGE })
@@ -284,7 +302,13 @@ export class PassRunner {
     const stage = (step: number): GPUBuffer =>
       this.uniform(
         `${def.id} stage`,
-        packStruct(['f', Math.min(Math.max(blend.opacity, 0), 1)], ['u', Math.max(mode, 0)], ['u', paletteCount], ['u', step])
+        packStruct(
+          ['f', Math.min(Math.max(blend.opacity, 0), 1)],
+          ['u', Math.max(mode, 0)],
+          ['u', paletteCount],
+          ['u', step],
+          ['u', blend.mask ? 1 : 0]
+        )
       )
     return [this.uniform(`${def.id} params`, def.pack?.(params) ?? new Float32Array(4)), ...Array.from({ length: Math.max(1, steps) }, (_, i) => stage(i))]
   }
@@ -310,7 +334,8 @@ export class PassRunner {
           { binding: 6, resource: { buffer: stage } },
           { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } },
           { binding: 8, resource: (bindings.mask ?? this.noMask).createView() },
-          { binding: 9, resource: (bindings.customPattern ?? this.noPattern).createView() }
+          { binding: 9, resource: (bindings.customPattern ?? this.noPattern).createView() },
+          { binding: 10, resource: (bindings.blendMask ?? this.noMask).createView() }
         ]
       })
     const pass = encoder.beginComputePass({ label: def.id })

@@ -34,6 +34,28 @@ describe('app menu', () => {
     ])
   })
 
+  it('switches the view mode from the View menu', () => {
+    const view = appMenu('win32', false).find((s) => s.label === 'View')!
+    const commands = view.items.flatMap((i) => (i.kind === 'command' ? [i.command] : []))
+    expect(commands).toEqual(expect.arrayContaining(['view-2d', 'view-split', 'view-3d']))
+  })
+
+  it('lists every 3D look and Custom in View › 3D Look', () => {
+    const view = appMenu('win32', false).find((s) => s.label === 'View')!
+    const looks = view.items.find((i) => i.kind === 'submenu' && i.label === '3D Look')
+    expect(looks?.kind === 'submenu' && looks.items.map((i) => (i.kind === 'command' ? i.command : null))).toEqual([
+      'look-lit',
+      'look-unlit',
+      'look-wireframe',
+      'look-unlit-wire',
+      'look-clay',
+      'look-normals',
+      'look-psx',
+      'look-n64',
+      'look-custom'
+    ])
+  })
+
   it('formats shortcuts per platform', () => {
     expect(formatAccelerator('CmdOrCtrl+Shift+P', 'win32')).toBe('Ctrl+Shift+P')
     expect(formatAccelerator('CmdOrCtrl+\\', 'linux')).toBe('Ctrl+\\')

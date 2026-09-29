@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_MASK_BLUR } from '@/gpu/mask'
 import type { DitherParams } from '@/gpu/passes/dither'
 import type { DownscaleParams } from '@/gpu/passes/downscale'
 import { analyzeStack } from './analyze'
-import { BUILTIN_PRESETS } from './builtinPresets'
+import { BUILTIN_PRESETS, PRESET_CATEGORIES } from './builtinPresets'
 import { initialDoc, ownedPalette, toProjectPalette } from './doc'
 import { parsePreset, presetFileName, PresetError, serializePreset } from './preset'
 
@@ -89,6 +90,22 @@ describe('presets', () => {
     expect(warnings[0]).toMatch(/sparkles/)
   })
 
+  it('keeps a stage blend mask, cleaning it up', () => {
+    const json = JSON.stringify({
+      format: '4fxelizer-preset',
+      version: 1,
+      name: 'masked',
+      stages: [
+        { uid: 'a', passId: 'adjust', params: {}, blend: { opacity: 0.5, mode: 'normal', mask: { a: 'none', b: 'map-ao', bInvert: true, combine: 'max', blur: 99 } } },
+        { uid: 'b', passId: 'adjust', params: {}, blend: { opacity: 1, mode: 'normal', mask: { a: 'nope', b: 'none' } } }
+      ],
+      palettes: []
+    })
+    const { doc } = parsePreset(json)
+    expect(doc.stages[0]!.blend.mask).toMatchObject({ a: 'map-ao', aInvert: true, b: 'none', combine: 'max', blur: MAX_MASK_BLUR, wrap: false })
+    expect(doc.stages[1]!.blend).toEqual({ opacity: 1, mode: 'normal' })
+  })
+
   it('writes only the document, even when given the whole app state', () => {
     const state = { ...initialDoc(), past: [1, 2, 3], image: { name: 'x' }, setView: () => {} }
     expect(Object.keys(JSON.parse(serializePreset(state, 'x'))).sort()).toEqual(
@@ -103,8 +120,8 @@ describe('presets', () => {
   })
 
   it('makes safe file names', () => {
-    expect(presetFileName('PSX: 8bpp / test?')).toBe('PSX_ 8bpp _ test_.4fxpreset')
-    expect(presetFileName('  ...  ')).toBe('preset.4fxpreset')
+    expect(presetFileName('PSX: 8bpp / test?')).toBe('PSX_ 8bpp _ test_.pxlook')
+    expect(presetFileName('  ...  ')).toBe('preset.pxlook')
   })
 
   it('switching a stage to a project palette survives a round trip', () => {
@@ -113,6 +130,11 @@ describe('presets', () => {
     doc = { ...doc, ...toProjectPalette(doc, doc.stages[2]!.uid, 'proj') }
     const { doc: loaded } = parsePreset(serializePreset(doc, 'x'))
     expect((loaded.stages[2]!.params as DitherParams).paletteId).toBe(loaded.palettes[0]!.id)
+  })
+
+  it('files every built-in under a category, with unique names', () => {
+    for (const c of PRESET_CATEGORIES) expect(BUILTIN_PRESETS.some((p) => p.category === c.id)).toBe(true)
+    expect(new Set(BUILTIN_PRESETS.map((p) => p.name)).size).toBe(BUILTIN_PRESETS.length)
   })
 
   for (const preset of BUILTIN_PRESETS) {

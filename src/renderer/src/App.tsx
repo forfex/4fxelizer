@@ -7,9 +7,11 @@ import { useApp } from '@/store'
 import { ExportDialog } from './components/ExportDialog'
 import { GpuDiagnostics } from './components/GpuDiagnostics'
 import { PresetsDialog } from './components/Presets'
+import { SettingsDialog } from './components/settings/SettingsDialog'
 import { StatusBar } from './components/StatusBar'
 import { TitleBar } from './components/TitleBar'
 import { Toolbar } from './components/Toolbar'
+import { UnsavedDialog } from './components/UnsavedDialog'
 import { DockArea } from './components/Workspace'
 
 export function App() {
@@ -24,6 +26,23 @@ export function App() {
       .then((engine) => {
         if (cancelled) return
         stopController = startPaletteController(engine)
+        // The engine keeps a slot per open texture and shows the active one.
+        const follow = (): void => {
+          const s = useApp.getState()
+          engine.syncTextures(
+            s.textures.map((t) => t.id),
+            s.activeTextureId
+          )
+        }
+        follow()
+        const unfollow = useApp.subscribe((s, prev) => {
+          if (s.textures !== prev.textures || s.activeTextureId !== prev.activeTextureId) follow()
+        })
+        const stopPalettes = stopController
+        stopController = () => {
+          stopPalettes()
+          unfollow()
+        }
         setGpu({ status: 'ready', adapter: adapterLabel(engine.gpu.adapter) })
         engine.gpu.device.lost.then((info) => {
           setGpu({ status: 'error', message: `GPU device lost (${info.reason}): ${info.message}` })
@@ -83,6 +102,8 @@ export function App() {
       <GpuDiagnostics />
       <ExportDialog />
       <PresetsDialog />
+      <SettingsDialog />
+      <UnsavedDialog />
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 border-2 border-dashed border-accent bg-accent/5" />
       )}

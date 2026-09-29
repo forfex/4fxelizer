@@ -24,9 +24,15 @@ export const PANELS: PanelDef[] = [
   { id: 'palettes', title: 'Palettes', minWidth: 220 },
   { id: 'generate', title: 'Generate', minWidth: 220 },
   { id: 'maps', title: 'Maps', minWidth: 240 },
-  { id: 'view3d', title: '3D view', minWidth: 240 },
-  { id: 'bake', title: 'Bake', minWidth: 240 }
+  { id: 'bake', title: 'Bake', minWidth: 240 },
+  { id: 'textures', title: 'Textures', minWidth: 220 }
 ]
+
+/**
+ * The 3D view's former panel id. It now lives in the main view (the view mode switch), so layouts
+ * saved with it still load, and the panel is closed and the view shown side by side instead.
+ */
+export const LEGACY_VIEW3D = 'view3d'
 
 interface BuiltinWorkspace {
   id: string
@@ -38,13 +44,19 @@ interface BuiltinWorkspace {
 const panelDef = (id: string): PanelDef => PANELS.find((p) => p.id === id)!
 
 /** Components a stored layout may use (they match the components registered in Workspace.tsx). */
-const KNOWN = { components: [VIEWER, ...PANELS.map((p) => p.id)], tabComponents: [VIEWER], required: VIEWER }
+const KNOWN = { components: [VIEWER, ...PANELS.map((p) => p.id), LEGACY_VIEW3D], tabComponents: [VIEWER], required: VIEWER }
 
 /** Restores a stored layout, after checking it only uses panels this version has. */
 function restore(dock: DockviewApi, layout: unknown): void {
   const problem = layoutProblem(layout, KNOWN)
   if (problem) throw new Error(problem)
   dock.fromJSON(layout as SerializedDockview)
+  const view3d = dock.getPanel(LEGACY_VIEW3D)
+  if (view3d) {
+    dock.removePanel(view3d)
+    const app = useApp.getState()
+    if (app.viewMode === '2d') app.setViewMode('split')
+  }
 }
 
 /** Adds the viewer, unless it is still there (kept so switching workspaces doesn't remount it). */
@@ -85,6 +97,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'generate', 'palettes', 'below', 330)
       addTool(api, 'maps', 'generate', 'within')
       addTool(api, 'bake', 'generate', 'within')
+      addTool(api, 'textures', 'palettes', 'within')
     }
   },
   {
@@ -98,6 +111,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'generate', 'palettes', 'within')
       addTool(api, 'maps', 'palettes', 'within')
       addTool(api, 'bake', 'palettes', 'within')
+      addTool(api, 'textures', 'palettes', 'within')
     }
   },
   {
@@ -110,6 +124,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'generate', 'stack', 'within')
       addTool(api, 'maps', 'stack', 'within')
       addTool(api, 'bake', 'stack', 'within')
+      addTool(api, 'textures', 'stack', 'within')
       addTool(api, 'palettes', VIEWER, 'right', 400)
     }
   },
@@ -124,8 +139,10 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'bake', null, 'right', 300)
       addTool(api, 'maps', 'bake', 'below')
       addTool(api, 'generate', 'maps', 'within')
-      // The texture and the model share what's left.
-      addTool(api, 'view3d', VIEWER, 'right', Math.max((api.width - 600) / 2, 320))
+      addTool(api, 'textures', 'bake', 'within')
+      // The texture and the model share the main view.
+      const app = useApp.getState()
+      if (app.viewMode === '2d') app.setViewMode('split')
     }
   },
   {
@@ -143,6 +160,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       float('generate', Math.max(width - 312, 344), 356, 300, 330)
       addTool(api, 'maps', 'generate', 'within')
       addTool(api, 'bake', 'generate', 'within')
+      addTool(api, 'textures', 'generate', 'within')
     }
   }
 ]
@@ -305,23 +323,6 @@ export function deleteWorkspace(name: string): void {
 
 export function isPanelOpen(id: string): boolean {
   return !!api?.getPanel(id)
-}
-
-/**
- * Brings a tool panel to the front, opening it if it's closed. The 3D view opens beside the viewer;
- * other panels open like togglePanel places them.
- */
-export function showPanel(id: string): void {
-  if (!api) return
-  const panel = api.getPanel(id)
-  if (panel) {
-    panel.api.setActive()
-    return
-  }
-  if (id === 'view3d' && api.getPanel(VIEWER)?.api.location.type === 'grid') {
-    addTool(api, id, VIEWER, 'right', Math.max(api.width * 0.35, 320))
-    api.getPanel(id)?.api.setActive()
-  } else togglePanel(id)
 }
 
 /** Shows a closed tool panel (docked to the right of the viewer) or closes an open one. */

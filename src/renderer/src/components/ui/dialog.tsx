@@ -13,9 +13,10 @@ export const DialogClose = DialogPrimitive.Close
 export function DialogContent({
   title,
   className,
+  bodyClassName,
   children,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content> & { title: ReactNode }) {
+}: ComponentProps<typeof DialogPrimitive.Content> & { title: ReactNode; bodyClassName?: string }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-bg/70" />
@@ -40,7 +41,7 @@ export function DialogContent({
           </DialogPrimitive.Close>
         </div>
         <DialogPrimitive.Description className="sr-only">{title}</DialogPrimitive.Description>
-        <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
+        <div className={cn('min-h-0 flex-1 overflow-auto p-4', bodyClassName)}>{children}</div>
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   )

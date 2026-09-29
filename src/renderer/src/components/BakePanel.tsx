@@ -1,12 +1,16 @@
 // Bakes maps (AO, cavity, curvature, edge, thickness, height, up-facing) from the loaded model into
 // the map slots, for the texture set the open texture belongs to.
 
-import { BAKE_MAPS, BAKE_NUMBERS, BAKE_SIZES, type BakeSettings } from '@shared/bake'
+import { useState } from 'react'
+import { BAKE_MAPS, BAKE_NUMBERS, BAKE_SIZES, BUILTIN_BAKE_PRESETS, MAX_BAKE_PRESETS, sameBake, type BakeSettings } from '@shared/bake'
 import { MAP_SLOTS } from '@shared/maps'
+import { cn } from '@/lib/utils'
+import { saveSettings, useSavedSettings } from '@/settings'
 import { closeModel, openModel, openTextureOf, startBake, stopBake } from '@/modelActions'
 import { useApp } from '@/store'
+import { activeMaterials, unboundPick } from '@/stack/textures'
 import { Button } from './ui/button'
-import { Checkbox, Field, ParamSlider, Segmented } from './ui/controls'
+import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
 import { GroupBox, Led, PanelBody } from './ui/retro'
 import { Select } from './ui/select'
 
@@ -61,7 +65,12 @@ export function BakePanel() {
 
 function ModelBox() {
   const model = useApp((s) => s.model)!
-  const material = useApp((s) => s.modelMaterial)
+  // The texture set the active texture is drawn on.
+  // (or a picked one no texture is drawn on yet: a bake makes one for it).
+  const material = useApp((s) => {
+    const count = s.model?.materials.length ?? 0
+    return unboundPick(count, s.textures, s.activeTextureId, s.modelMaterial) ?? activeMaterials(count, s.textures, s.activeTextureId, s.modelMaterial)[0]!
+  })
   const uvSet = useApp((s) => s.modelUvSet)
   const image = useApp((s) => s.image?.name)
   const { setModelMaterial, setModelUvSet } = useApp.getState()
@@ -81,11 +90,17 @@ function ModelBox() {
           {model.triangles.toLocaleString('en-US')} triangles · {model.vertices.toLocaleString('en-US')} vertices · {model.materials.length}{' '}
           {model.materials.length === 1 ? 'material' : 'materials'}
         </span>
-        <Field label="Texture set" hint="The material the open texture belongs to: the 3D view puts the texture on it, and bakes use its UVs.">
+        <Field label="Texture set" hint="The material being worked on: picking one shows the texture drawn on it. Bakes use its UVs, and the maps go to its texture.">
           <Select
             className="min-w-0 flex-1"
             value={String(material)}
-            onValueChange={(v) => setModelMaterial(Number(v))}
+            onValueChange={(v) => {
+              // Work on that material: its texture, when one is drawn on it.
+              const m = Number(v)
+              const bound = useApp.getState().textures.find((t) => t.materials.includes(m))
+              if (bound) useApp.getState().selectTexture(bound.id)
+              else setModelMaterial(m)
+            }}
             options={model.materials.map((m, i) => ({
               value: String(i),
               label: `${m.name} · ${m.triangles.toLocaleString('en-US')} tris`,
@@ -151,6 +166,7 @@ function SettingsBox() {
   return (
     <GroupBox title="Settings">
       <div className="flex flex-col gap-2">
+        <PresetRow />
         <Field label="Size" hint="Resolution of the baked maps. Masks read maps by UV, so it doesn't need to match the texture.">
           <Select
             className="w-32"
@@ -196,6 +212,86 @@ function SettingsBox() {
         )}
       </div>
     </GroupBox>
+  )
+}
+
+/**
+ * Bake presets: built-in ones and the user's (UserSettings.bakePresets). The dropdown shows the
+ * preset the settings match, or "Custom" once they're changed.
+ */
+function PresetRow() {
+  const bake = useApp((s) => s.bake)
+  const saved = useSavedSettings().bakePresets
+  const [naming, setNaming] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const builtin = BUILTIN_BAKE_PRESETS.find((p) => sameBake(p.settings, bake))
+  const mine = saved.find((p) => sameBake(p.settings, bake))
+  const current = mine ? `user:${mine.name}` : builtin ? `builtin:${builtin.name}` : 'custom'
+  const options = [
+    ...(current === 'custom' ? [{ value: 'custom', label: 'Custom' }] : []),
+    ...BUILTIN_BAKE_PRESETS.map((p) => ({ value: `builtin:${p.name}`, label: p.name, hint: p.hint, group: 'Built-in' })),
+    ...saved.map((p) => ({ value: `user:${p.name}`, label: p.name, group: 'My presets' }))
+  ]
+  const choose = (value: string): void => {
+    const preset = value.startsWith('user:')
+      ? saved.find((p) => `user:${p.name}` === value)
+      : BUILTIN_BAKE_PRESETS.find((p) => `builtin:${p.name}` === value)
+    if (preset) useApp.getState().setBake(preset.settings)
+    setConfirmDelete(false)
+  }
+  const save = (): void => {
+    const name = naming?.trim()
+    if (!name) return
+    const rest = saved.filter((p) => p.name.toLowerCase() !== name.toLowerCase())
+    saveSettings({ bakePresets: [...rest, { name, settings: useApp.getState().bake }].slice(-MAX_BAKE_PRESETS) })
+    setNaming(null)
+  }
+  const remove = (): void => {
+    if (!confirmDelete) return setConfirmDelete(true)
+    saveSettings({ bakePresets: saved.filter((p) => p !== mine) })
+    setConfirmDelete(false)
+  }
+
+  if (naming !== null) {
+    const taken = saved.some((p) => p.name.toLowerCase() === naming.trim().toLowerCase())
+    return (
+      <Field label="Save preset as" hint="Saves the settings below (size, maps and their settings) under a name.">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+          <input
+            className={cn(INPUT_CLASS, 'min-w-24 flex-1')}
+            value={naming}
+            aria-label="Bake preset name"
+            autoFocus
+            onChange={(e) => setNaming(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') save()
+              if (e.key === 'Escape') setNaming(null)
+            }}
+          />
+          <Button size="sm" variant="primary" onClick={save} disabled={!naming.trim()} title={taken ? 'Replace the preset with this name' : undefined}>
+            {taken ? 'Replace' : 'Save'}
+          </Button>
+          <Button size="sm" onClick={() => setNaming(null)}>
+            Cancel
+          </Button>
+        </div>
+      </Field>
+    )
+  }
+  return (
+    <Field label="Preset" hint="Bake settings for a kind of model or a speed. Save your own with Save as.">
+      <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+        <Select className="min-w-32 flex-1" value={current} onValueChange={choose} options={options} />
+        <Button size="sm" onClick={() => setNaming(mine?.name ?? '')} title="Save the current bake settings as a preset">
+          Save as…
+        </Button>
+        {mine && (
+          <Button size="sm" className={cn(confirmDelete && 'text-led-error')} onClick={remove} onBlur={() => setConfirmDelete(false)} title="Delete this preset">
+            {confirmDelete ? 'Really delete?' : 'Delete'}
+          </Button>
+        )}
+      </div>
+    </Field>
   )
 }
 

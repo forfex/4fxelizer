@@ -2,14 +2,39 @@ import { useMemo, useRef, useState } from 'react'
 import { STAGE_TYPES, stageLabel } from '@/gpu/passes'
 import type { StageSpec } from '@/gpu/plan'
 import { cn } from '@/lib/utils'
-import { analyzeStack, type StageInfo } from '@/stack/analyze'
+import { analyzeStack, blendMaskOf, type StageInfo } from '@/stack/analyze'
 import { useApp } from '@/store'
 import { BlendRow, PaletteSelect, StageEditor } from './stages/editors'
 import { Button } from './ui/button'
-import { Checkbox } from './ui/controls'
+import { Checkbox, Field, Segmented } from './ui/controls'
 import { CaretIcon, MoreIcon, PlusIcon, PreviewIcon } from './ui/icons'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './ui/menu'
 import { GroupBox, Led, LedToggle, PanelBody } from './ui/retro'
+
+/** Whether the active texture uses the shared stack or one of its own (shown once several textures are open, or it has its own). */
+function StackChoice() {
+  const id = useApp((s) => s.activeTextureId)
+  const separate = useApp((s) => !!id && !!s.docs.separate[id])
+  const sharedCount = useApp((s) => s.textures.filter((t) => !s.docs.separate[t.id]).length)
+  const count = useApp((s) => s.textures.length)
+  if (!id || (count < 2 && !separate)) return null
+  return (
+    <Field
+      label="Stack"
+      hint="Shared: every texture on the shared stack is processed the same way. Separate: this texture gets a stack of its own (starting as a copy of the shared one)."
+    >
+      <Segmented
+        className="flex-1"
+        value={separate ? 'separate' : 'shared'}
+        onChange={(v) => useApp.getState().setTextureStack(id, v)}
+        options={[
+          { value: 'shared', label: `Shared · ${sharedCount}`, hint: 'Use the stack shared by the textures (drops this texture’s own stack; Undo brings it back).' },
+          { value: 'separate', label: 'Separate', hint: 'Give this texture a stack of its own, starting as a copy of the shared one.' }
+        ]}
+      />
+    </Field>
+  )
+}
 
 export function StackPanel() {
   const image = useApp((s) => s.image)
@@ -29,12 +54,15 @@ export function StackPanel() {
     <PanelBody>
       <GroupBox title="Source">
         {image ? (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-            <dt className="text-dim">File</dt>
-            <dd className="truncate" title={image.name}>{image.name}</dd>
-            <dt className="text-dim">Size</dt>
-            <dd className="font-mono">{image.width} × {image.height}</dd>
-          </dl>
+          <div className="flex flex-col gap-2">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              <dt className="text-dim">File</dt>
+              <dd className="truncate" title={image.name}>{image.name}</dd>
+              <dt className="text-dim">Size</dt>
+              <dd className="font-mono">{image.width} × {image.height}</dd>
+            </dl>
+            <StackChoice />
+          </div>
         ) : (
           <p className="text-dim">No image loaded.</p>
         )}
@@ -177,6 +205,8 @@ function StageCard({
   const warnings = info?.warnings ?? []
   const resized = info && (info.input.width !== info.output.width || info.input.height !== info.output.height)
   const blended = stage.blend.opacity < 1 || stage.blend.mode !== 'normal'
+  const masked = !!blendMaskOf(stage)
+  const blendSummary = [blended && stage.blend.mode, blended && `${Math.round(stage.blend.opacity * 100)}%`, masked && 'masked'].filter(Boolean).join(', ')
 
   return (
     <div
@@ -189,7 +219,18 @@ function StageCard({
         dragging && 'opacity-50'
       )}
     >
-      <div className="flex h-8 min-w-0 items-center gap-1 pr-1 pl-1">
+      <div
+        className="flex h-8 min-w-0 items-center gap-1 pr-1 pl-1 select-none"
+        title={open ? 'Double-click to collapse' : 'Double-click to expand'}
+        // Double-clicking the header (not one of its controls) collapses or expands the card. Every
+        // second click of a series toggles (not only dblclick's second one), so quick double-clicks
+        // in a row keep working without waiting for the click count to reset.
+        onClick={(e) => {
+          if (e.detail < 2 || e.detail % 2 !== 0) return
+          if ((e.target as HTMLElement).closest('button, [role="switch"], [role="checkbox"], input')) return
+          setOpen((o) => !o)
+        }}
+      >
         <span
           className="flex h-full w-3 shrink-0 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
           title="Drag to reorder"
@@ -204,18 +245,20 @@ function StageCard({
           checked={stage.enabled}
           onCheckedChange={(enabled) => updateStage(stage.uid, { enabled })}
         />
-        <button
-          type="button"
+        {/* Only the preview button previews: a stray click on the name must not change the view. */}
+        <span
           className={cn(
-            'min-w-0 flex-1 truncate text-left font-display text-[14px] leading-[18px] font-semibold',
+            'min-w-0 flex-1 truncate font-display text-[14px] leading-[18px] font-semibold',
             !stage.enabled && 'text-faint line-through'
           )}
-          title={previewing ? 'Showing the image after this stage. Click to show the final result.' : 'Show the image after this stage'}
-          onClick={() => setPreview(previewing ? null : stage.uid)}
         >
           {stageLabel(stage.passId)}
-          {blended && <span className="pl-1 font-ui text-small font-normal text-dim">· {Math.round(stage.blend.opacity * 100)}%</span>}
-        </button>
+          {(blended || masked) && (
+            <span className="pl-1 font-ui text-small font-normal text-dim">
+              · {blended ? `${Math.round(stage.blend.opacity * 100)}%` : 'masked'}
+            </span>
+          )}
+        </span>
         {resized && (
           <span className="hidden shrink-0 font-mono text-[10px] text-dim @min-[280px]/card:inline" title="Output size">
             {info.output.width}×{info.output.height}
@@ -229,9 +272,8 @@ function StageCard({
         <Button
           variant="ghost"
           size="icon"
-          // Narrow cards drop it: clicking the stage name does the same.
-          className="hidden size-5 shrink-0 @min-[220px]/card:inline-flex"
-          title={previewing ? 'Previewing this stage' : 'Preview the image at this stage'}
+          className="size-5 shrink-0"
+          title={previewing ? 'Showing the image after this stage. Click to show the final result.' : 'Show the image after this stage'}
           aria-label="Preview this stage"
           aria-pressed={previewing}
           onClick={() => setPreview(previewing ? null : stage.uid)}
@@ -281,7 +323,7 @@ function StageCard({
             onClick={() => setBlendOpen(!blendOpen)}
             aria-expanded={blendOpen}
           >
-            <CaretIcon open={blendOpen} /> Blending{blended ? ` (${stage.blend.mode}, ${Math.round(stage.blend.opacity * 100)}%)` : ''}
+            <CaretIcon open={blendOpen} /> Blending{blendSummary ? ` (${blendSummary})` : ''}
           </button>
           {blendOpen && <BlendRow stage={stage} />}
         </div>

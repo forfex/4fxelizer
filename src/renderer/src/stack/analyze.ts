@@ -3,13 +3,13 @@
 import type { Size } from '@/gpu/pass'
 import type { StageSpec } from '@/gpu/plan'
 import { MAP_SLOTS } from '@shared/maps'
-import { maskMaps } from '@/gpu/mask'
+import { maskMaps, type MaskSpec } from '@/gpu/mask'
 import { decodePattern } from '@/dither/customPattern'
 import { ditherMask, ditherTiling, usesPattern, type DitherParams } from '@/gpu/passes/dither'
 import { downscaleSize, type DownscaleParams } from '@/gpu/passes/downscale'
 import { upscaleSize, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
-import { stageLabel } from '@/gpu/passes'
+import { PASSES, stageLabel } from '@/gpu/passes'
 import type { Palette } from '@/palette/palette'
 
 export interface OutputLock {
@@ -24,8 +24,13 @@ export interface StageInfo {
   warnings: string[]
 }
 
+/** The blend mask a stage uses (none for passes with a mask of their own, see PassDef.ownMask). */
+export function blendMaskOf(s: StageSpec): MaskSpec | null {
+  return s.blend.mask && !PASSES.get(s.passId)?.ownMask ? s.blend.mask : null
+}
+
 function isFullStrength(s: StageSpec): boolean {
-  return s.blend.opacity >= 1 && s.blend.mode === 'normal'
+  return s.blend.opacity >= 1 && s.blend.mode === 'normal' && !blendMaskOf(s)
 }
 
 /** Stage output only contains colors from a fixed set (palette or levels). */
@@ -76,6 +81,14 @@ export function analyzeStack(
 
   stages.forEach((s, i) => {
     const warnings: string[] = []
+    const missingMaps = (mask: MaskSpec): void => {
+      for (const slot of loadedMaps ? maskMaps(mask) : []) {
+        if (loadedMaps!.has(slot)) continue
+        const label = MAP_SLOTS.find((m) => m.id === slot)?.label ?? slot
+        const message = `No ${label} map is loaded, so the mask ignores it. Load one in the Maps panel.`
+        if (!warnings.includes(message)) warnings.push(message)
+      }
+    }
     const input = size
     let output = size
     if (s.enabled && s.passId === 'downscale' && source) output = downscaleSize(input, s.params as DownscaleParams)
@@ -108,10 +121,15 @@ export function analyzeStack(
         const tiling = ditherTiling(p, input)
         if (tiling && source) warnings.push(tiling)
         const mask = ditherMask(p)
-        for (const slot of mask && loadedMaps ? maskMaps(mask) : []) {
-          if (loadedMaps!.has(slot)) continue
-          const label = MAP_SLOTS.find((m) => m.id === slot)?.label ?? slot
-          warnings.push(`No ${label} map is loaded, so the mask ignores it. Load one in the Maps panel.`)
+        if (mask) missingMaps(mask)
+      }
+
+      const blendMask = blendMaskOf(s)
+      if (blendMask) {
+        missingMaps(blendMask)
+        const filtered = blendMask.blur > 0 || [blendMask.a, blendMask.b].some((m) => m === 'edges' || m === 'flats')
+        if (filtered && !blendMask.wrap && source) {
+          warnings.push('The blend mask stops at the image edges. Turn on "Wrap edges" in Blending for tiling textures.')
         }
       }
     }

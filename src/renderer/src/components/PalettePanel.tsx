@@ -20,7 +20,7 @@ import {
 } from '@/palette/palette'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
-import { Checkbox, Field, INPUT_CLASS, ParamSlider } from './ui/controls'
+import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { GroupBox, LCD_CLASS, Led, PanelBody } from './ui/retro'
 import { Select } from './ui/select'
@@ -383,6 +383,8 @@ function GeneratorBox({ palette }: { palette: Palette }) {
   const job = useApp((s) => s.paletteJobs[palette.id])
   const stages = useApp((s) => s.stages)
   const hasImage = useApp((s) => s.image !== null)
+  // Textures on the shared stack, when the active one is on it too (the choice only matters there).
+  const sharedCount = useApp((s) => (s.activeTextureId && s.docs.separate[s.activeTextureId] ? 0 : s.textures.filter((t) => !s.docs.separate[t.id]).length))
   const gen = palette.generator
 
   if (!gen) {
@@ -429,6 +431,22 @@ function GeneratorBox({ palette }: { palette: Palette }) {
             />
           </Field>
         )}
+        {sharedCount > 1 && (
+          <Field label="Textures" hint="On the shared stack: each texture gets colors from its own pixels, or all textures share one palette generated from all of them.">
+            <Segmented
+              className="flex-1"
+              value={gen.scope === 'all' ? 'all' : 'each'}
+              onChange={(v) => {
+                const { scope: _scope, ...rest } = gen
+                useApp.getState().updatePalette(palette.id, { generator: v === 'all' ? { ...rest, scope: 'all' } : rest })
+              }}
+              options={[
+                { value: 'each', label: 'Each its own', hint: 'Every texture on the shared stack gets colors generated from its own pixels.' },
+                { value: 'all', label: 'One for all', hint: 'One set of colors generated from every texture on the shared stack, used by all of them.' }
+              ]}
+            />
+          </Field>
+        )}
         <Field label="Method" hint={GENERATE_METHODS.find((m) => m.id === gen.method)?.hint}>
           <Select
             className="flex-1"
@@ -443,6 +461,15 @@ function GeneratorBox({ palette }: { palette: Palette }) {
         )}
         <ParamSlider label="Light weight" hint="Above 1 keeps more light/dark steps." value={gen.lumaWeight} min={0.25} max={3} step={0.05} onChange={(lumaWeight) => set({ lumaWeight })} />
         <ParamSlider label="Hue weight" hint="Above 1 keeps more distinct hues." value={gen.chromaWeight} min={0.25} max={3} step={0.05} onChange={(chromaWeight) => set({ chromaWeight })} />
+        <ParamSlider
+          label="Gamma"
+          hint="Above 1 spends more colors on the darks, below 1 on the lights."
+          value={gen.gamma ?? 1}
+          min={0.25}
+          max={4}
+          step={0.05}
+          onChange={(gamma) => set({ gamma: gamma === 1 ? undefined : gamma })}
+        />
         <Field label="">
           <Checkbox
             checked={!!gen.color15}

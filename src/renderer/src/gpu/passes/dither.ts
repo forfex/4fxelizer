@@ -443,8 +443,14 @@ fn ordered(c: vec4f, p: vec2u, pattern: u32, s: f32) -> vec4f {
   }
 
   var a = c.a;
-  if (params.alphaMode == 1u) { a = select(0.0, 1.0, a > 1.0 - t); }
+  if (params.alphaMode == 1u) { a = ditherAlpha(a, t); }
   return vec4f(rgb, a);
+}
+
+// Dithered cutout: 0 or 1 by the threshold. Fully opaque and fully clear texels stay as they are
+// (a threshold texture can hold exactly 0 or 1).
+fn ditherAlpha(a: f32, t: f32) -> f32 {
+  return select(0.0, 1.0, a >= 1.0 || (a > 0.0 && a > 1.0 - t));
 }
 
 fn run(p: vec2u, size: vec2u) -> vec4f {
@@ -542,7 +548,7 @@ fn diffusePixel(p: vec2u, size: vec2u, rows: u32, dir: i32, write: bool) {
 
   if (write) {
     var alpha = c.a;
-    if (params.alphaMode == 1u) { alpha = select(0.0, 1.0, alpha > 1.0 - blueNoise(p)); }
+    if (params.alphaMode == 1u) { alpha = ditherAlpha(alpha, blueNoise(p)); }
     emit(p, size, vec4f(out, alpha));
   }
 }
@@ -629,6 +635,7 @@ fn runRows(thread: u32, size: vec2u) {
     }
   },
   mask: (p) => ditherMask(p),
+  ownMask: true,
   serial: (p) => {
     const outside = outsidePattern(p)
     return (isDiffusion(p.pattern) || (!!outside && isDiffusion(outside))) && p.mode !== 'pattern' && !p.showMask

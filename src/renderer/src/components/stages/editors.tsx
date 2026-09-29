@@ -16,7 +16,8 @@ import {
   type DitherParams,
   type DitherPattern
 } from '@/gpu/passes/dither'
-import { MASK_COMBINE, maskMapSlot, MAX_MASK_BLUR } from '@/gpu/mask'
+import { EMPTY_MASK, MASK_COMBINE, maskMapSlot, MAX_MASK_BLUR, normalizeMask, type MaskSpec } from '@/gpu/mask'
+import { PASSES } from '@/gpu/passes'
 import { decodePattern } from '@/dither/customPattern'
 import { loadPatternImage } from '@/actions'
 import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
@@ -734,6 +735,90 @@ export function BlendRow({ stage }: { stage: StageSpec }) {
           options={BLEND_MODES.map((m) => ({ value: m.id, label: m.label }))}
         />
       </Field>
+      {!PASSES.get(stage.passId)?.ownMask && <BlendMaskSettings stage={stage} />}
+    </>
+  )
+}
+
+/** Where the stage applies: its result where the mask is white, its input where it's black. */
+function BlendMaskSettings({ stage }: { stage: StageSpec }) {
+  const maskShown = useApp((s) => s.maskUid === stage.uid)
+  const spec = stage.blend.mask ?? EMPTY_MASK
+  const hasMask = !!stage.blend.mask
+  const update = (patch: Partial<MaskSpec>): void => {
+    const mask = normalizeMask({ ...spec, ...patch })
+    const { mask: _old, ...rest } = stage.blend
+    const { updateStage, setMaskView } = useApp.getState()
+    updateStage(stage.uid, { blend: mask ? { ...rest, mask } : rest }, `blend:${stage.uid}:mask:${Object.keys(patch)}`)
+    if (maskShown && !mask) setMaskView(null)
+  }
+  const filtered = spec.blur > 0 || [spec.a, spec.b].some((m) => m === 'edges' || m === 'flats')
+  return (
+    <>
+      <MaskSourceField
+        label="Mask"
+        hint="Where this stage applies. White = its full result, black = its input shows through."
+        value={spec.a}
+        invert={spec.aInvert}
+        onChange={(a) => update({ a })}
+        onInvert={(aInvert) => update({ aInvert })}
+        none="Everywhere"
+      >
+        <Button
+          size="sm"
+          aria-pressed={maskShown}
+          disabled={!hasMask}
+          title={maskShown ? 'Showing the mask (white = full effect). Click to show the image.' : 'Show the mask in the viewer (white = full effect, black = none)'}
+          onClick={() => useApp.getState().setMaskView(maskShown ? null : stage.uid)}
+        >
+          View
+        </Button>
+      </MaskSourceField>
+      {hasMask && (
+        <MaskSourceField
+          label="Combine with"
+          hint="A second mask source, combined with the first."
+          value={spec.b}
+          invert={spec.bInvert}
+          onChange={(b) => update({ b })}
+          onInvert={(bInvert) => update({ bInvert })}
+          none="Nothing"
+        />
+      )}
+      {spec.a !== 'none' && spec.b !== 'none' && (
+        <Field label="" hint={MASK_COMBINE.find((m) => m.id === spec.combine)?.hint}>
+          <Segmented
+            className="flex-1"
+            value={spec.combine}
+            onChange={(combine) => update({ combine })}
+            options={MASK_COMBINE.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
+          />
+        </Field>
+      )}
+      {hasMask && (
+        <>
+          <ParamSlider
+            label="Mask blur"
+            hint="Softens the mask, in pixels of this stage's image."
+            value={spec.blur}
+            min={0}
+            max={MAX_MASK_BLUR}
+            step={0.5}
+            onChange={(blur) => update({ blur })}
+            suffix="px"
+          />
+          {filtered && (
+            <Field label="">
+              <Checkbox
+                checked={spec.wrap}
+                onCheckedChange={(wrap) => update({ wrap })}
+                label="Wrap edges"
+                hint="Edge detection and blur wrap around the image edges, for tiling textures."
+              />
+            </Field>
+          )}
+        </>
+      )}
     </>
   )
 }

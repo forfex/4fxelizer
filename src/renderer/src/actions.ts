@@ -1,6 +1,9 @@
-import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme } from '@shared/api'
-import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
+import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme, ViewMode } from '@shared/api'
+import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, textureBase, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
+import { uniqueFileNames } from '@shared/exportNames'
+import { isProjectFile } from '@shared/project'
+import type { View3dLookChoice } from '@shared/view3d'
 import { encodePattern, patternFromRgba } from '@/dither/customPattern'
 import { getEngine } from '@/engine'
 import type { DitherParams } from '@/gpu/passes/dither'
@@ -14,73 +17,172 @@ import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
 import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
 import { loadModelFile, openModel } from '@/modelActions'
+import { newProject, openProject, openProjectFile, saveProject } from '@/projectActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
-import { parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
-import { useApp, type MapInfo } from '@/store'
+import { LEGACY_PRESET_EXTENSION, parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
+import { newId, useApp, type MapInfo } from '@/store'
+import { docFor } from '@/stack/textures'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
 export const PALETTE_EXTENSIONS = ['hex', 'gpl', 'pal', 'act', 'ase', 'txt']
 const PALETTE_FILTERS: FileFilter[] = [{ name: 'Palettes', extensions: PALETTE_EXTENSIONS }]
 
+/** Thumbnail size of textures (Textures panel and tabs). */
+const TEXTURE_THUMBNAIL = 96
+
+/** The open texture loaded from `path`, if any. */
+export function textureAtPath(path: string | undefined): string | null {
+  if (!path) return null
+  const lower = path.toLowerCase()
+  return useApp.getState().textures.find((t) => t.image.path?.toLowerCase() === lower)?.id ?? null
+}
+
 /**
- * Opens a texture. Its maps (AO, cavity, … named like it, e.g. rock_ao.png next to rock.png) are
- * loaded too when the file's path is known; the previous texture's maps are dropped (maps baked
- * from the model stay: they belong to the model's UVs).
+ * Opens a texture as a new tab (a file that's already open is selected instead) and returns its
+ * id. Its maps (AO, cavity, … named like it, e.g. rock_ao.png next to rock.png) are loaded too
+ * when the file's path is known.
  */
-export async function loadImageFile(name: string, bytes: Uint8Array, path?: string): Promise<void> {
+export async function loadImageFile(
+  name: string,
+  bytes: Uint8Array,
+  path?: string,
+  opts: { findMaps?: boolean; materials?: number[] } = {}
+): Promise<string | null> {
   const engine = getEngine()
-  const { setMessage, setImage } = useApp.getState()
-  if (!engine) return
+  const { setMessage } = useApp.getState()
+  if (!engine) return null
+  const open = textureAtPath(path)
+  if (open) {
+    useApp.getState().selectTexture(open)
+    return open
+  }
   try {
     const bitmap = await decodeImage(name, bytes)
-    engine.loadBitmap(bitmap)
-    setImage({ name, width: bitmap.width, height: bitmap.height })
+    const id = newId('tex')
+    engine.loadBitmap(bitmap, id)
+    useApp.getState().addTexture({
+      id,
+      image: { name, width: bitmap.width, height: bitmap.height, path },
+      thumbnail: thumbnail(bitmap, TEXTURE_THUMBNAIL),
+      materials: opts.materials
+    })
     bitmap.close()
-    clearMaps({ keepBaked: true })
-    const maps = path ? await window.fx.findMaps(path).catch(() => []) : []
-    const loaded = maps.length ? await importMapFiles(maps, { quiet: true }) : []
+    const maps = path && opts.findMaps !== false ? await window.fx.findMaps(path).catch(() => []) : []
+    const loaded = maps.length ? await importMapFiles(maps, { quiet: true, textureId: id }) : []
     setMessage({ kind: 'info', text: loaded.length ? `Loaded ${name} with its ${mapList(loaded)} maps` : `Loaded ${name}` })
+    return id
   } catch (e) {
     setMessage({ kind: 'error', text: errorText(e) })
+    return null
   }
 }
 
+/**
+ * A texture changed on disk: loads it again in place (into `textureId`, else the texture loaded
+ * from that path, else the active one). The stack, the maps and (when the size is unchanged) the
+ * zoom stay.
+ */
+export async function reloadImageFile(file: OpenedFile, textureId?: string): Promise<void> {
+  const engine = getEngine()
+  const { setMessage } = useApp.getState()
+  const id = textureId ?? textureAtPath(file.path) ?? useApp.getState().activeTextureId
+  if (!engine || !id) return
+  try {
+    const bitmap = await decodeImage(file.name, file.bytes)
+    if (!useApp.getState().textures.some((t) => t.id === id)) {
+      bitmap.close() // closed while it was read
+      return
+    }
+    engine.loadBitmap(bitmap, id)
+    useApp.getState().setImage({ name: file.name, width: bitmap.width, height: bitmap.height, path: file.path }, { keepView: true, textureId: id })
+    useApp.getState().updateTexture(id, { thumbnail: thumbnail(bitmap, TEXTURE_THUMBNAIL) })
+    bitmap.close()
+    setMessage({ kind: 'info', text: `Reloaded ${file.name}` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't reload ${file.name}: ${errorText(e)}` })
+  }
+}
+
+/** Opens a plain white texture (to hold maps baked from a model when no texture is open). Returns its id. */
+export async function addBlankTexture(name: string, size: number): Promise<string> {
+  const engine = getEngine()
+  if (!engine) throw new Error('The GPU is not ready.')
+  const canvas = new OffscreenCanvas(size, size)
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, size, size)
+  const bitmap = await createImageBitmap(canvas)
+  const id = newId('tex')
+  engine.loadBitmap(bitmap, id)
+  useApp.getState().addTexture({ id, image: { name, width: size, height: size }, thumbnail: thumbnail(bitmap, TEXTURE_THUMBNAIL) })
+  bitmap.close()
+  return id
+}
+
+/** Opens textures from a file dialog (several at once), each in a tab of its own. */
 export async function openImage(): Promise<void> {
-  const file = await window.fx.openImage()
-  if (file) await loadImageFile(file.name, file.bytes, file.path)
+  const files = await window.fx.openImages()
+  for (const file of files) await loadImageFile(file.name, file.bytes, file.path)
+}
+
+/** Closes a texture's tab (its maps and separate stack go with it). */
+export function closeTexture(id: string): void {
+  useApp.getState().closeTexture(id)
+}
+
+/** Selects the next (1) or previous (-1) texture tab, wrapping around. */
+export function stepTexture(dir: 1 | -1): void {
+  const { textures, activeTextureId, selectTexture } = useApp.getState()
+  if (textures.length < 2) return
+  const i = textures.findIndex((t) => t.id === activeTextureId)
+  selectTexture(textures[(i + dir + textures.length) % textures.length]!.id)
+}
+
+/** The open texture a map file belongs to by name (rock_ao.png → rock.png), if any. */
+function textureOfMap(fileName: string): string | null {
+  const base = detectMap(fileName)?.base
+  if (base === undefined) return null
+  return useApp.getState().textures.find((t) => textureBase(t.image.name) === base)?.id ?? null
 }
 
 const extensionOf = (name: string): string => /\.([^.]+)$/.exec(name)?.[1]?.toLowerCase() ?? ''
 
 /**
  * Dropped files: models open in the 3D view, presets load, palette files become palettes, images
- * open as the texture. Images named like maps (rock_ao.png) fill map slots instead when a texture
- * is open or comes with them.
+ * open as textures (a tab each). Images named like maps (rock_ao.png) fill map slots instead: of
+ * the texture named like them, else of the active one, when a texture is open or comes with them.
  */
 export async function openDroppedFiles(files: OpenedFile[]): Promise<void> {
+  // A project replaces everything, so it opens alone.
+  const project = files.find((f) => isProjectFile(f.name))
+  if (project) return openProjectFile(project)
   const images: OpenedFile[] = []
   const model = files.find((f) => isModelFile(f.name))
   if (model) await loadModelFile(model.name, model.bytes, model.path)
   for (const file of files) {
     const ext = extensionOf(file.name)
     if (file === model || isModelFile(file.name)) continue
-    if (ext === PRESET_EXTENSION) loadPresetJson(new TextDecoder().decode(file.bytes), file.name)
+    if (ext === PRESET_EXTENSION || ext === LEGACY_PRESET_EXTENSION) loadPresetJson(new TextDecoder().decode(file.bytes), file.name)
     else if (PALETTE_EXTENSIONS.includes(ext) && ext !== 'txt') importPaletteBytes(file.name, file.bytes)
     else images.push(file)
   }
   if (!images.length) return
-  const maps = images.filter((f) => detectMap(f.name))
-  const texture = images.find((f) => !detectMap(f.name)) ?? (useApp.getState().image ? undefined : images[0])
-  if (texture) await loadImageFile(texture.name, texture.bytes, texture.path)
-  const dropped = maps.filter((f) => f !== texture)
-  if (dropped.length) {
-    const loaded = await importMapFiles(dropped, { quiet: true })
-    if (loaded.length) {
-      const image = useApp.getState().image
-      useApp.getState().setMessage({ kind: 'info', text: `Loaded the ${mapList(loaded)} maps${texture && image ? ` for ${image.name}` : ''}` })
-    }
+  const textures = images.filter((f) => !detectMap(f.name))
+  // Only map-named images and nothing open: the first one is the texture.
+  if (!textures.length && !useApp.getState().textures.length) textures.push(images[0]!)
+  for (const texture of textures) await loadImageFile(texture.name, texture.bytes, texture.path)
+  const dropped = images.filter((f) => !textures.includes(f))
+  if (!dropped.length) return
+  // Maps go to the texture they're named after, else to the active one.
+  const byTexture = new Map<string | null, OpenedFile[]>()
+  for (const f of dropped) {
+    const owner = textureOfMap(f.name) ?? useApp.getState().activeTextureId
+    byTexture.set(owner, [...(byTexture.get(owner) ?? []), f])
   }
+  const loaded: MapSlot[] = []
+  for (const [owner, files] of byTexture) if (owner) loaded.push(...(await importMapFiles(files, { quiet: true, textureId: owner })))
+  if (loaded.length) useApp.getState().setMessage({ kind: 'info', text: `Loaded the ${mapList(loaded)} maps` })
 }
 
 // ── Custom dither patterns ─────────────────────────────────────────────────
@@ -125,17 +227,28 @@ export function thumbnail(bitmap: ImageBitmap, side = 48): string | null {
   return canvas.toDataURL()
 }
 
-/** Decodes a map image once and puts it into each slot it fills. */
-async function loadMapInto(assignments: { slot: MapSlot; channel: MapChannel }[], name: string, bytes: Uint8Array): Promise<void> {
+/**
+ * Decodes a map image once and puts it into each slot it fills, of a texture (the active one by
+ * default). `baked`: it was baked from the model (projects store those).
+ */
+export async function loadMapInto(
+  assignments: { slot: MapSlot; channel: MapChannel }[],
+  name: string,
+  bytes: Uint8Array,
+  path?: string,
+  opts: { baked?: boolean; textureId?: string } = {}
+): Promise<void> {
   const engine = getEngine()
   if (!engine) throw new Error('The GPU is not ready.')
+  const textureId = opts.textureId ?? useApp.getState().activeTextureId
+  if (!textureId) throw new Error('Open a texture first: maps belong to a texture.')
   const bitmap = await decodeImage(name, bytes)
   try {
     const thumb = thumbnail(bitmap)
     for (const { slot, channel } of assignments) {
       const version = ++mapVersion
-      engine.loadMap(slot, bitmap, version)
-      useApp.getState().setMap(slot, { name, width: bitmap.width, height: bitmap.height, channel, version, thumbnail: thumb })
+      engine.loadMap(slot, bitmap, version, textureId)
+      useApp.getState().setMap(slot, { name, width: bitmap.width, height: bitmap.height, channel, version, thumbnail: thumb, path, ...(opts.baked ? { baked: true } : {}) }, textureId)
     }
   } finally {
     bitmap.close()
@@ -146,7 +259,7 @@ async function loadMapInto(assignments: { slot: MapSlot; channel: MapChannel }[]
  * Loads map files into the slots their names point to (rock_ao.png → AO; rock_orm.png → AO,
  * roughness and metallic from its channels). Returns the slots filled.
  */
-export async function importMapFiles(files: OpenedFile[], opts: { quiet?: boolean } = {}): Promise<MapSlot[]> {
+export async function importMapFiles(files: OpenedFile[], opts: { quiet?: boolean; textureId?: string } = {}): Promise<MapSlot[]> {
   const { setMessage } = useApp.getState()
   const filled: MapSlot[] = []
   const unknown: string[] = []
@@ -159,7 +272,7 @@ export async function importMapFiles(files: OpenedFile[], opts: { quiet?: boolea
       continue
     }
     try {
-      await loadMapInto(detected.maps, file.name, file.bytes)
+      await loadMapInto(detected.maps, file.name, file.bytes, file.path, { textureId: opts.textureId })
       filled.push(...detected.maps.map((m) => m.slot))
     } catch (e) {
       setMessage({ kind: 'error', text: `Couldn't load ${file.name}: ${errorText(e)}` })
@@ -183,11 +296,28 @@ export async function openMapFile(slot: MapSlot): Promise<void> {
   if (!file) return
   const channel = detectMap(file.name)?.maps.find((m) => m.slot === slot)?.channel ?? 'luma'
   try {
-    await loadMapInto([{ slot, channel }], file.name, file.bytes)
+    await loadMapInto([{ slot, channel }], file.name, file.bytes, file.path)
     useApp.getState().setMessage({ kind: 'info', text: `Loaded ${file.name} as the ${mapLabel(slot)} map` })
   } catch (e) {
     useApp.getState().setMessage({ kind: 'error', text: `Couldn't load ${file.name}: ${errorText(e)}` })
   }
+}
+
+/** A map file changed on disk: loads it again into every slot still filled from it (same channels), in every texture. */
+export async function reloadMapFile(file: OpenedFile): Promise<void> {
+  let reloaded = false
+  for (const texture of useApp.getState().textures) {
+    const slots = (Object.entries(texture.maps) as [MapSlot, MapInfo][]).filter(([, m]) => m.path && m.path === file.path && !m.baked)
+    if (!slots.length) continue
+    try {
+      await loadMapInto(slots.map(([slot, m]) => ({ slot, channel: m.channel })), file.name, file.bytes, file.path, { textureId: texture.id })
+      reloaded = true
+    } catch (e) {
+      useApp.getState().setMessage({ kind: 'error', text: `Couldn't reload ${file.name}: ${errorText(e)}` })
+      return
+    }
+  }
+  if (reloaded) useApp.getState().setMessage({ kind: 'info', text: `Reloaded ${file.name}` })
 }
 
 export function clearMap(slot: MapSlot): void {
@@ -195,13 +325,15 @@ export function clearMap(slot: MapSlot): void {
   useApp.getState().setMap(slot, null)
 }
 
-/** Removes the loaded maps (all, or all but the ones baked from the model). */
-export function clearMaps(opts: { keepBaked?: boolean; onlyBaked?: boolean } = {}): void {
-  const { maps, setMap } = useApp.getState()
+/** Removes a texture's maps (the active one's by default; all, or all but the ones baked from the model). */
+export function clearMaps(opts: { keepBaked?: boolean; onlyBaked?: boolean; textureId?: string } = {}): void {
+  const { textures, activeTextureId, setMap } = useApp.getState()
+  const id = opts.textureId ?? activeTextureId
+  const maps = textures.find((t) => t.id === id)?.maps ?? {}
   for (const [slot, map] of Object.entries(maps) as [MapSlot, MapInfo][]) {
     if ((opts.keepBaked && map.baked) || (opts.onlyBaked && !map.baked)) continue
-    getEngine()?.loadMap(slot, null, ++mapVersion)
-    setMap(slot, null)
+    getEngine()?.loadMap(slot, null, ++mapVersion, id ?? undefined)
+    setMap(slot, null, id ?? undefined)
   }
 }
 
@@ -285,6 +417,16 @@ export async function describeOutput(): Promise<OutputSummary | null> {
   }
 }
 
+/** An exported file's bytes, and how it was stored (for the message). */
+async function encodeOutput(rgba: RgbaImage, options: ExportOptions, palettes: Palette[]): Promise<{ bytes: Uint8Array; detail: string }> {
+  const { type, indexed } = parseExportFormat(options.format)
+  const encoder = ENCODERS[type]
+  if (!indexed) return { bytes: await encoder.rgba(rgba), detail: 'RGBA' }
+  const palette = options.paletteId ? palettes.find((p) => p.id === options.paletteId) : undefined
+  const image = toIndexed(rgba, palette?.colors.map((c) => c.hex), { alpha: encoder.indexedAlpha })
+  return { bytes: await encoder.indexed(image), detail: `${image.palette.length} colors, ${encoder.indexedDepth(image.palette.length)}-bit indexed` }
+}
+
 /** Returns true when the file was written. */
 export async function exportImage(options: ExportOptions): Promise<boolean> {
   const engine = getEngine()
@@ -292,19 +434,8 @@ export async function exportImage(options: ExportOptions): Promise<boolean> {
   if (!engine || !image) return false
   try {
     const rgba = await engine.readOutput()
-    const { type, indexed } = parseExportFormat(options.format)
-    const encoder = ENCODERS[type]
-    let bytes: Uint8Array
-    let detail: string
-    if (indexed) {
-      const palette = options.paletteId ? palettes.find((p) => p.id === options.paletteId) : undefined
-      const image = toIndexed(rgba, palette?.colors.map((c) => c.hex), { alpha: encoder.indexedAlpha })
-      bytes = await encoder.indexed(image)
-      detail = `${image.palette.length} colors, ${encoder.indexedDepth(image.palette.length)}-bit indexed`
-    } else {
-      bytes = await encoder.rgba(rgba)
-      detail = 'RGBA'
-    }
+    const encoder = ENCODERS[parseExportFormat(options.format).type]
+    const { bytes, detail } = await encodeOutput(rgba, options, palettes)
     const path = await window.fx.saveFile(`${baseName()}_4fx.${encoder.filter.extensions[0]}`, bytes, [encoder.filter])
     if (!path) return false
     setMessage({ kind: 'info', text: `Saved ${path} (${rgba.width}×${rgba.height}, ${detail})` })
@@ -313,6 +444,52 @@ export async function exportImage(options: ExportOptions): Promise<boolean> {
     setMessage({ kind: 'error', text: `Export failed: ${errorText(e)}` })
     return false
   }
+}
+
+/** Runs a texture's stack now (a texture not shown may not be up to date yet). */
+function processTextureNow(id: string): void {
+  const engine = getEngine()
+  const s = useApp.getState()
+  const t = s.textures.find((x) => x.id === id)
+  if (!engine || !t || id === s.activeTextureId) return
+  engine.processTexture(id, {
+    ...docFor(s.docs, id),
+    previewUid: null,
+    mapChannels: Object.fromEntries(Object.entries(t.maps).map(([slot, map]) => [slot, map.channel]))
+  })
+}
+
+/**
+ * Exports every open texture into a folder picked once, named like its texture (rock_4fx.png).
+ * An indexed export against a palette uses each texture's own colors of it. Returns true when
+ * any file was written.
+ */
+export async function exportAllTextures(options: ExportOptions): Promise<boolean> {
+  const engine = getEngine()
+  const { textures, setMessage } = useApp.getState()
+  if (!engine || !textures.length) return false
+  const folder = await window.fx.chooseExportFolder()
+  if (!folder) return false
+  const ext = ENCODERS[parseExportFormat(options.format).type].filter.extensions[0]
+  const names = uniqueFileNames(textures.map((t) => `${t.image.name.replace(/\.[^.]+$/, '')}_4fx.${ext}`))
+  const failed: string[] = []
+  let written = 0
+  for (const [i, t] of textures.entries()) {
+    try {
+      processTextureNow(t.id)
+      const rgba = await engine.readOutput(t.id)
+      const { bytes } = await encodeOutput(rgba, options, docFor(useApp.getState().docs, t.id).palettes)
+      await window.fx.writeExportFile(folder, names[i]!, bytes)
+      written++
+    } catch (e) {
+      failed.push(`${t.image.name} (${errorText(e)})`)
+    }
+  }
+  setMessage({
+    kind: failed.length ? 'error' : 'info',
+    text: `Exported ${written} of ${textures.length} textures to ${folder}${failed.length ? `. Couldn't export ${failed.join(', ')}` : ''}`
+  })
+  return written > 0
 }
 
 function importPaletteBytes(name: string, bytes: Uint8Array): void {
@@ -420,7 +597,9 @@ export async function pickColor(side: 'before' | 'after', uv: { u: number; v: nu
 
 // ── Presets ────────────────────────────────────────────────────────────────
 
-const PRESET_FILTERS: FileFilter[] = [{ name: '4FXELIZER preset', extensions: [PRESET_EXTENSION] }]
+const PRESET_FILTERS: FileFilter[] = [{ name: '4FXELIZER preset', extensions: [PRESET_EXTENSION, LEGACY_PRESET_EXTENSION] }]
+/** Saving offers only the current extension. */
+const PRESET_SAVE_FILTERS: FileFilter[] = [{ name: '4FXELIZER preset', extensions: [PRESET_EXTENSION] }]
 
 function applyPreset({ name, doc, warnings }: ParsedPreset): void {
   const app = useApp.getState()
@@ -490,7 +669,7 @@ export async function exportPresetFile(): Promise<void> {
   const app = useApp.getState()
   const name = app.presetName ?? `${baseName()} look`
   const bytes = new TextEncoder().encode(serializePreset(app, name))
-  const path = await window.fx.saveFile(presetFileName(name), bytes, PRESET_FILTERS)
+  const path = await window.fx.saveFile(presetFileName(name), bytes, PRESET_SAVE_FILTERS)
   if (path) app.setMessage({ kind: 'info', text: `Saved ${path}` })
 }
 
@@ -517,12 +696,22 @@ export function redo(): void {
 export function runMenuCommand(command: MenuCommand): void {
   const app = useApp.getState()
   switch (command) {
+    case 'new-project': return void newProject()
+    case 'open-project': return void openProject()
+    case 'save-project': return void saveProject()
+    case 'save-project-as': return void saveProject({ as: true })
     case 'open': return void openImage()
     case 'open-model': return void openModel()
     case 'export': return app.image ? app.setExportOpen(true) : undefined
     case 'import-palette': return void importPalette()
     case 'presets': return app.setPresetsOpen(true)
     case 'import-preset': return void importPresetFile()
+    case 'close-texture': {
+      const id = app.activeTextureId
+      return id ? closeTexture(id) : undefined
+    }
+    case 'next-texture': return stepTexture(1)
+    case 'previous-texture': return stepTexture(-1)
     case 'undo': return undo()
     case 'redo': return redo()
     case 'zoom-fit': return app.zoomFit()
@@ -532,12 +721,28 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'toggle-grid': return app.toggleGrid()
     case 'toggle-split': return app.toggleSplit()
     case 'toggle-tile': return app.toggleTile()
+    case 'toggle-live-reload': return app.setLiveReload(!app.liveReload)
     case 'theme-dark':
     case 'theme-night':
     case 'theme-light':
     case 'theme-matrix':
     case 'theme-retro':
       return app.setTheme(command.slice('theme-'.length) as Theme)
+    case 'view-2d':
+    case 'view-split':
+    case 'view-3d':
+      return app.setViewMode(command.slice('view-'.length) as ViewMode)
+    case 'look-lit':
+    case 'look-unlit':
+    case 'look-wireframe':
+    case 'look-unlit-wire':
+    case 'look-clay':
+    case 'look-normals':
+    case 'look-psx':
+    case 'look-n64':
+    case 'look-custom':
+      return app.setView3d({ look: command.slice('look-'.length) as View3dLookChoice })
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
+    case 'settings': return app.setSettingsOpen(true)
   }
 }

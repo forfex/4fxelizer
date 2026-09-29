@@ -66,6 +66,14 @@ fn maskAt(p: vec2u, size: vec2u) -> f32 {
   return textureSampleLevel(maskTex, linearSampler, uv, 0.0).r;
 }
 
+/** The stage blend's mask at output texel p (see StageBlend.mask): 1 = the stage's full result. */
+fn blendMaskAt(p: vec2u, size: vec2u) -> f32 {
+  let dims = textureDimensions(blendMaskTex);
+  if (all(dims == size)) { return textureLoad(blendMaskTex, p, 0).r; }
+  let uv = (vec2f(p) + 0.5) / vec2f(size);
+  return textureSampleLevel(blendMaskTex, linearSampler, uv, 0.0).r;
+}
+
 // ── Palette ─────────────────────────────────────────────────────────────────
 
 fn paletteCount() -> u32 { return stage.paletteCount; }
@@ -205,8 +213,10 @@ fn blendRgb(mode: u32, b: vec3f, t: vec3f) -> vec3f {
   }
 }
 
-fn blendStage(base: vec4f, top: vec4f) -> vec4f {
-  let rgb = mix(base.rgb, blendRgb(stage.blendMode, base.rgb, top.rgb), stage.opacity);
-  return vec4f(rgb, mix(base.a, top.a, stage.opacity));
+fn blendStage(base: vec4f, top: vec4f, p: vec2u, size: vec2u) -> vec4f {
+  var amount = stage.opacity;
+  if (stage.blendMask == 1u) { amount *= clamp(blendMaskAt(p, size), 0.0, 1.0); }
+  let rgb = mix(base.rgb, blendRgb(stage.blendMode, base.rgb, top.rgb), amount);
+  return vec4f(rgb, mix(base.a, top.a, amount));
 }
 `

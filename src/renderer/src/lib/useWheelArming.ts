@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { savedSettings } from '@/settings'
 
 /** Accumulated wheel delta per notch (a mouse notch is ~100; touchpads send small deltas). */
 const WHEEL_NOTCH = 100
-/**
- * The wheel only adjusts a control after the pointer has rested on it this long without scrolling
- * (or right after it was pressed), so scrolling a panel past controls never changes them.
- */
-const ARM_DELAY_MS = 1000
 
 /**
  * Mouse-wheel input for a value control (slider, dropdown). Calls `onNotches` with whole wheel
  * notches (positive = wheel up) and whether Shift was held, but only once the control is armed;
  * until then the wheel scrolls the panel. Returns whether it's armed, for the UI hint.
+ *
+ * When a control arms is the user's choice (Settings › Input, `UserSettings.wheel`): by default
+ * after the pointer has rested on it without scrolling (or right after it was pressed), so
+ * scrolling a panel past controls never changes them; or only once pressed, right away, or never.
  */
 export function useWheelArming(
   ref: RefObject<HTMLElement | null>,
@@ -28,14 +28,18 @@ export function useWheelArming(
     let accumulated = 0
     let isArmed = false
     let timer = 0
+    // Read on every event, so a change in Settings applies to controls already on screen.
+    const wheel = () => savedSettings().wheel
     const arm = (on: boolean): void => {
       window.clearTimeout(timer)
-      isArmed = on
-      setArmed(on)
+      isArmed = on && wheel().mode !== 'off'
+      setArmed(isArmed)
     }
     const armLater = (): void => {
       window.clearTimeout(timer)
-      timer = window.setTimeout(() => arm(true), ARM_DELAY_MS)
+      const { mode, delay } = wheel()
+      if (mode === 'always') arm(true)
+      else if (mode === 'hover') timer = window.setTimeout(() => arm(true), delay)
     }
     const onEnter = (): void => armLater()
     const onLeave = (): void => {
@@ -49,7 +53,7 @@ export function useWheelArming(
       if (!isArmed) {
         // Scrolling past: let the panel scroll, and only arm once the pointer rests here.
         armLater()
-        return
+        if (!isArmed) return
       }
       if (!latest.current.enabled) return
       e.preventDefault()

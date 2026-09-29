@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BAKE_MAPS, DEFAULT_BAKE, DEFAULT_VIEW3D, normalizeBake, normalizeView3d } from './bake'
+import { BAKE_MAPS, BUILTIN_BAKE_PRESETS, DEFAULT_BAKE, MAX_BAKE_PRESETS, normalizeBake, normalizeBakePresets, sameBake } from './bake'
 import { MAP_SLOTS } from './maps'
 
 describe('bake settings', () => {
@@ -28,14 +28,35 @@ describe('bake settings', () => {
   })
 })
 
-describe('3D view settings', () => {
-  it('defaults to the full PSX look', () => {
-    expect(normalizeView3d(null)).toEqual(DEFAULT_VIEW3D)
-    expect(DEFAULT_VIEW3D).toMatchObject({ snap: false, affine: false, filter: false, lighting: true, dither: false, resolution: 'full' })
+describe('bake presets', () => {
+  it('has distinct, valid built-in presets', () => {
+    for (const p of BUILTIN_BAKE_PRESETS) expect(normalizeBake(p.settings)).toEqual(p.settings)
+    for (const [i, a] of BUILTIN_BAKE_PRESETS.entries()) {
+      for (const b of BUILTIN_BAKE_PRESETS.slice(i + 1)) expect(sameBake(a.settings, b.settings)).toBe(false)
+    }
+    expect(BUILTIN_BAKE_PRESETS.some((p) => sameBake(p.settings, DEFAULT_BAKE))).toBe(true)
   })
 
-  it('keeps valid values', () => {
-    expect(normalizeView3d({ snap: false, resolution: 'full', dither: 'no' })).toEqual({ ...DEFAULT_VIEW3D, snap: false, resolution: 'full' })
-    expect(normalizeView3d({ resolution: '720' }).resolution).toBe(DEFAULT_VIEW3D.resolution)
+  it('compares settings field by field', () => {
+    expect(sameBake(DEFAULT_BAKE, normalizeBake({}))).toBe(true)
+    expect(sameBake(DEFAULT_BAKE, { ...DEFAULT_BAKE, aoSamples: 3 })).toBe(false)
+    expect(sameBake(DEFAULT_BAKE, { ...DEFAULT_BAKE, maps: { ...DEFAULT_BAKE.maps, up: true } })).toBe(false)
+  })
+
+  it('keeps saved presets valid, one per name', () => {
+    const presets = normalizeBakePresets([
+      { name: ' Mine ', settings: { size: 512 } },
+      { name: '', settings: {} },
+      { name: 'x' },
+      'junk',
+      { name: 'Mine', settings: { size: 256, aoSamples: 1e9 } }
+    ])
+    expect(presets).toHaveLength(1)
+    expect(presets[0]!.name).toBe('Mine')
+    expect(presets[0]!.settings.size).toBe(256)
+    expect(presets[0]!.settings.aoSamples).toBe(1024)
+    expect(normalizeBakePresets('nope')).toEqual([])
+    const many = Array.from({ length: MAX_BAKE_PRESETS + 5 }, (_, i) => ({ name: `p${i}`, settings: {} }))
+    expect(normalizeBakePresets(many)[0]!.name).toBe('p5')
   })
 })

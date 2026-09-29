@@ -5,7 +5,8 @@ import { DEFAULT_DOWNSCALE, downscaleSize } from '@/gpu/passes/downscale'
 import { DEFAULT_QUANTIZE } from '@/gpu/passes/quantize'
 import type { StageSpec } from '@/gpu/plan'
 import type { Palette } from '@/palette/palette'
-import { analyzeStack, type OutputLock } from './analyze'
+import { EMPTY_MASK } from '@/gpu/mask'
+import { analyzeStack, blendMaskOf, snapsColors, type OutputLock } from './analyze'
 
 const palette: Palette = { id: 'p', name: 'P', colors: [{ hex: '#000000' }, { hex: '#ffffff' }] }
 const noLock: OutputLock = { enabled: false, paletteId: null }
@@ -92,6 +93,23 @@ describe('analyzeStack', () => {
     expect(w(new Set(['ao'])).filter((m) => /map is loaded/.test(m))).toEqual([
       'No Cavity map is loaded, so the mask ignores it. Load one in the Maps panel.'
     ])
+  })
+
+  it('treats a blend mask as producing new colors, except on Dither (it has its own mask)', () => {
+    const mask = { ...EMPTY_MASK, a: 'map-ao' as const }
+    const quantize = stage('quantize', {}, { blend: { opacity: 1, mode: 'normal', mask } })
+    expect(snapsColors(quantize)).toBe(false)
+    expect(blendMaskOf(quantize)).toEqual(mask)
+    const dither = stage('dither', {}, { blend: { opacity: 1, mode: 'normal', mask } })
+    expect(blendMaskOf(dither)).toBeNull()
+    expect(snapsColors(dither)).toBe(true)
+  })
+
+  it('warns about a blend mask reading a missing map or stopping at the edges', () => {
+    const stages = [stage('adjust', {}, { blend: { opacity: 1, mode: 'normal', mask: { ...EMPTY_MASK, a: 'map-ao', blur: 2 } } })]
+    const w = analyzeStack({ width: 64, height: 64 }, stages, [palette], noLock, new Set()).get(stages[0]!.uid)!.warnings
+    expect(w).toContain('No Ambient occlusion map is loaded, so the mask ignores it. Load one in the Maps panel.')
+    expect(w.some((m) => /blend mask stops at the image edges/.test(m))).toBe(true)
   })
 
   it('ignores disabled stages', () => {

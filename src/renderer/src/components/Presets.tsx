@@ -10,11 +10,12 @@ import {
   saveUserPreset
 } from '@/actions'
 import { cn } from '@/lib/utils'
+import { PRESET_CATEGORIES } from '@/stack/builtinPresets'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
 import { INPUT_CLASS } from './ui/controls'
 import { Dialog, DialogContent } from './ui/dialog'
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/menu'
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 
 /** The user's saved presets; reloads whenever one is saved or deleted. */
 function useUserPresets(): PresetEntry[] | null {
@@ -64,10 +65,17 @@ export function PresetsMenu() {
         )}
         <MenuSeparator />
         <MenuLabel>Built-in</MenuLabel>
-        {BUILTIN_PRESETS.map((p) => (
-          <MenuItem key={p.name} title={p.hint} onSelect={() => loadBuiltinPreset(p)}>
-            {p.name}
-          </MenuItem>
+        {PRESET_CATEGORIES.map((c) => (
+          <MenuSub key={c.id}>
+            <MenuSubTrigger>{c.label}</MenuSubTrigger>
+            <MenuSubContent className="w-48">
+              {BUILTIN_PRESETS.filter((p) => p.category === c.id).map((p) => (
+                <MenuItem key={p.name} title={p.hint} onSelect={() => loadBuiltinPreset(p)}>
+                  {p.name}
+                </MenuItem>
+              ))}
+            </MenuSubContent>
+          </MenuSub>
         ))}
         <MenuSeparator />
         <MenuItem onSelect={importPresetFile}>Import preset file…</MenuItem>

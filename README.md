@@ -33,9 +33,13 @@ Everything runs on your GPU, so changes show up instantly.
 - **Every dither you know**: Bayer, blue noise, halftone, the N64 magic square, your own pattern, error diffusion
   from Floyd–Steinberg to Sierra, limited by masks from the image or from AO and cavity maps.
   [More](guide/masks-and-maps.md)
-- **3D view and map baking**: glTF, GLB, FBX and OBJ models with switchable PSX quirks (vertex wobble, affine
-  warping, 240-line framebuffer), and AO, cavity, curvature and more baked on the GPU. [More](guide/3d.md)
-- **Presets and export**: PSX 8bpp/4bpp, N64, Game Boy and more built in; PNG, TGA or BMP, full color or indexed.
+- **3D view and map baking**: glTF, GLB, FBX and OBJ models in Lit, Unlit, Wireframe, Clay, Normals, PSX
+  (vertex wobble, affine warping, 240 lines) or N64 looks, or your own style, and AO, cavity, curvature and more
+  baked on the GPU. [More](guide/3d.md)
+- **Several textures at once**: tabs for every texture, one shared stack or a stack per texture, and models with
+  several materials, each with its own texture. [More](guide/textures.md)
+- **Projects, presets and export**: save your whole session as a project; console, computer and stylized
+  presets built in; PNG, TGA or BMP, full color or indexed.
   [More](guide/presets-and-export.md)
 
 ## Gallery
@@ -62,9 +66,9 @@ yet, so Windows and macOS may warn on first launch; see [Troubleshooting](guide/
 
 ## Quick start
 
-1. **Open a texture**: drag it onto the window, or **File › Open Image…** (Ctrl+O).
+1. **Open a texture**: drag it onto the window, or **File › Open Textures…** (Ctrl+O). Several open as tabs.
 2. **Pick a preset**: toolbar › **Presets**, for example *PSX 8bpp*.
-3. **Tweak**: drag sliders, reorder stages, click a stage to preview the image at that point.
+3. **Tweak**: drag sliders, reorder stages, click a stage's preview button (the square target in its header) to preview the image at that point.
 4. **See it in 3D** (optional): drop the model on the window, or **File › Open Model…** (Ctrl+Shift+O).
 5. **Export**: **File › Export…** (Ctrl+E).
 

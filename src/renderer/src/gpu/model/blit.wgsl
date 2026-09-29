@@ -1,8 +1,10 @@
-// Scales the 3D view's framebuffer up to the canvas, nearest texel (keeps low-res pixels square-edged).
+// Scales the 3D view's framebuffer up to the canvas: nearest texel (square-edged low-res pixels)
+// or bilinear (soft, like a console on a TV).
 
 @group(0) @binding(0) var frameTex: texture_2d<f32>;
-/** xy: framebuffer size divided by canvas size. */
+/** xy: framebuffer size divided by canvas size; z: 1 = smooth. */
 @group(0) @binding(1) var<uniform> scale: vec4f;
+@group(0) @binding(2) var smoothSampler: sampler;
 
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -13,6 +15,8 @@ fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
 @fragment
 fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let size = textureDimensions(frameTex);
-  let texel = min(vec2u(pos.xy * scale.xy), size - 1u);
-  return textureLoad(frameTex, texel, 0);
+  let at = pos.xy * scale.xy;
+  let soft = textureSampleLevel(frameTex, smoothSampler, at / vec2f(size), 0.0);
+  let sharp = textureLoad(frameTex, min(vec2u(at), size - 1u), 0);
+  return select(sharp, soft, scale.z > 0.5);
 }

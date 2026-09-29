@@ -1,7 +1,9 @@
 // Contract between the preload bridge (window.fx) and the renderer.
 
-import { normalizeBake, normalizeView3d, DEFAULT_BAKE, DEFAULT_VIEW3D, type BakeSettings, type View3dSettings } from './bake'
+import { normalizeBake, normalizeBakePresets, DEFAULT_BAKE, type BakePreset, type BakeSettings } from './bake'
+import { normalizeView3d, DEFAULT_VIEW3D, VIEW3D_LOOKS, type View3dLookChoice, type View3dSettings } from './view3d'
 import type { MenuRole } from './menu'
+import type { ProjectFileRef } from './project'
 
 export interface FileFilter {
   name: string
@@ -19,7 +21,7 @@ export interface OpenedFile {
 export interface PresetEntry {
   /** Display name (from the file's "name" field). */
   name: string
-  /** File name inside the presets folder, e.g. "PSX look.4fxpreset". */
+  /** File name inside the presets folder, e.g. "PSX look.pxlook". */
   file: string
 }
 
@@ -33,6 +35,8 @@ export interface UserSettings {
   tile: boolean
   /** Interface theme. */
   theme: Theme
+  /** Reload the texture, its maps and the model when their files change on disk. */
+  liveReload: boolean
   /** Last format chosen in the Export dialog. */
   exportFormat: ExportFormat
   /** Export dialog lists how the result fits PSX texture limits. */
@@ -43,11 +47,52 @@ export interface UserSettings {
   workspace: string
   /** Workspaces the user saved (Workspace › Save workspace as…). */
   workspaces: SavedWorkspace[]
+  /** What the main view shows: the 2D viewer, it and the 3D view side by side, or the 3D view. */
+  viewMode: ViewMode
+  /** Share of the main view the 2D viewer gets in the side-by-side mode (0.15–0.85). */
+  viewSplit: number
   /** How the 3D view draws models (the PSX look). */
   view3d: View3dSettings
   /** Map baking: resolution, which maps, and their settings. */
   bake: BakeSettings
+  /** Bake settings the user saved under a name. */
+  bakePresets: BakePreset[]
+  /** How the mouse wheel reaches sliders and dropdowns. */
+  wheel: WheelSettings
+  /** Keyboard shortcuts changed from the defaults: an accelerator per command, '' = none. */
+  keybinds: Keybinds
+  /** Which GPU WebGPU asks for (applied at the next start). */
+  gpu: GpuPreference
+  /** Interface zoom (1 = 100%). */
+  uiScale: number
+  /** Wheel up zooms out in the viewer and the 3D view. */
+  invertZoom: boolean
 }
+
+/**
+ * Mouse wheel over sliders and dropdowns. `hover`: it changes the value once the pointer has
+ * rested on the control for `delay` ms (or it was pressed), and scrolls the panel until then;
+ * `click`: only after the control was pressed; `always`: right away; `off`: never.
+ */
+export const WHEEL_MODES = ['hover', 'click', 'always', 'off'] as const
+export type WheelMode = (typeof WHEEL_MODES)[number]
+export interface WheelSettings {
+  mode: WheelMode
+  /** Rest time before the wheel arms in `hover` mode (ms). */
+  delay: number
+}
+export const WHEEL_DELAY = { min: 100, max: 3000 } as const
+
+export type Keybinds = Partial<Record<MenuCommand, string>>
+
+/**
+ * `auto` asks WebGPU for its high-performance adapter; the other two also tell Chromium which GPU
+ * to run on where a machine has two (laptops with integrated + discrete graphics).
+ */
+export const GPU_PREFERENCES = ['auto', 'high-performance', 'low-power'] as const
+export type GpuPreference = (typeof GPU_PREFERENCES)[number]
+
+export const UI_SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const
 
 export interface SavedWorkspace {
   name: string
@@ -67,6 +112,15 @@ export type Theme = (typeof THEMES)[number]
 /** Names shown in the theme pickers (menu and toolbar), in THEMES order. */
 export const THEME_NAMES: Record<Theme, string> = { dark: 'Dark', night: 'Night', light: 'Light', matrix: 'Matrix', retro: 'Retro' }
 
+/** One-line descriptions shown with the theme names (toolbar dropdown, Settings). */
+export const THEME_HINTS: Record<Theme, string> = {
+  dark: 'Plum with purple and magenta accents',
+  night: 'Neutral greyscale, for dim rooms and judging colors',
+  light: 'Daylight: pale lilac surfaces, dark text',
+  matrix: 'Green phosphor on black',
+  retro: 'Classic silver-grey desktop, navy title bars, square corners'
+}
+
 /**
  * Title-bar ground (also the window background before the renderer has loaded its tokens) and the
  * window-button symbol color per theme. Keep in sync with --fx-titlebar-bg / --fx-titlebar-symbol
@@ -79,6 +133,16 @@ export const THEME_WINDOW_COLORS: Record<Theme, { background: string; symbol: st
   matrix: { background: '#010603', symbol: '#9dffb0' },
   retro: { background: '#000080', symbol: '#ffffff' }
 }
+
+/** Main view modes: the 2D viewer, 2D and 3D side by side, or the 3D view alone. */
+export const VIEW_MODES = ['2d', 'split', '3d'] as const
+export type ViewMode = (typeof VIEW_MODES)[number]
+
+/** Names shown in the view mode switch and the View menu, in VIEW_MODES order. */
+export const VIEW_MODE_NAMES: Record<ViewMode, string> = { '2d': '2D', split: '2D / 3D', '3d': '3D' }
+
+/** Narrowest share of the main view either side gets in the side-by-side mode. */
+export const MIN_VIEW_SPLIT = 0.15
 
 /** Most saved workspaces kept (oldest dropped first). */
 export const MAX_WORKSPACES = 32
@@ -95,13 +159,22 @@ export const DEFAULT_SETTINGS: UserSettings = {
   split: true,
   tile: false,
   theme: 'dark',
+  liveReload: true,
   exportFormat: 'png-indexed',
   psxCheck: false,
   layout: null,
   workspace: 'essentials',
   workspaces: [],
+  viewMode: '2d',
+  viewSplit: 0.5,
   view3d: DEFAULT_VIEW3D,
-  bake: DEFAULT_BAKE
+  bake: DEFAULT_BAKE,
+  bakePresets: [],
+  wheel: { mode: 'hover', delay: 1000 },
+  keybinds: {},
+  gpu: 'auto',
+  uiScale: 1,
+  invertZoom: false
 }
 
 const isObject = (v: unknown): v is object => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -119,22 +192,63 @@ function normalizeWorkspaces(raw: unknown): SavedWorkspace[] {
   return [...byName.values()].slice(-MAX_WORKSPACES)
 }
 
+function normalizeWheel(raw: unknown): WheelSettings {
+  const r = (isObject(raw) ? raw : {}) as Record<string, unknown>
+  const delay = typeof r.delay === 'number' && Number.isFinite(r.delay) ? Math.round(r.delay) : DEFAULT_SETTINGS.wheel.delay
+  return {
+    mode: WHEEL_MODES.includes(r.mode as WheelMode) ? (r.mode as WheelMode) : DEFAULT_SETTINGS.wheel.mode,
+    delay: Math.min(Math.max(delay, WHEEL_DELAY.min), WHEEL_DELAY.max)
+  }
+}
+
+/** Accelerator strings as Electron writes them ("CmdOrCtrl+Shift+P", "F5", "Alt+num1"). */
+const ACCELERATOR = /^[A-Za-z0-9+=\-[\];',./\\`]{1,64}$/
+
+function normalizeKeybinds(raw: unknown): Keybinds {
+  if (!isObject(raw)) return {}
+  const out: Keybinds = {}
+  for (const [command, accelerator] of Object.entries(raw)) {
+    if (!MENU_COMMANDS.includes(command as MenuCommand) || typeof accelerator !== 'string') continue
+    if (accelerator === '' || ACCELERATOR.test(accelerator)) out[command as MenuCommand] = accelerator
+  }
+  return out
+}
+
+function normalizeScale(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_SETTINGS.uiScale
+  // The nearest offered step.
+  return UI_SCALES.reduce((best, s) => (Math.abs(s - raw) < Math.abs(best - raw) ? s : best), DEFAULT_SETTINGS.uiScale)
+}
+
 /** Settings from disk with missing or invalid fields replaced by defaults (old files keep working). */
 export function normalizeSettings(raw: unknown): UserSettings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const bool = (key: 'grid' | 'split' | 'tile' | 'psxCheck'): boolean => (typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key])
+  const bool = (key: 'grid' | 'split' | 'tile' | 'liveReload' | 'psxCheck' | 'invertZoom'): boolean =>
+    typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key]
   return {
     grid: bool('grid'),
     split: bool('split'),
     tile: bool('tile'),
     theme: THEMES.includes(r.theme as Theme) ? (r.theme as Theme) : DEFAULT_SETTINGS.theme,
+    liveReload: bool('liveReload'),
     exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
     psxCheck: bool('psxCheck'),
     layout: isObject(r.layout) ? r.layout : null,
     workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace.trim() : DEFAULT_SETTINGS.workspace,
     workspaces: normalizeWorkspaces(r.workspaces),
+    viewMode: VIEW_MODES.includes(r.viewMode as ViewMode) ? (r.viewMode as ViewMode) : DEFAULT_SETTINGS.viewMode,
+    viewSplit:
+      typeof r.viewSplit === 'number' && Number.isFinite(r.viewSplit)
+        ? Math.min(Math.max(r.viewSplit, MIN_VIEW_SPLIT), 1 - MIN_VIEW_SPLIT)
+        : DEFAULT_SETTINGS.viewSplit,
     view3d: normalizeView3d(r.view3d),
-    bake: normalizeBake(r.bake)
+    bake: normalizeBake(r.bake),
+    bakePresets: normalizeBakePresets(r.bakePresets),
+    wheel: normalizeWheel(r.wheel),
+    keybinds: normalizeKeybinds(r.keybinds),
+    gpu: GPU_PREFERENCES.includes(r.gpu as GpuPreference) ? (r.gpu as GpuPreference) : DEFAULT_SETTINGS.gpu,
+    uiScale: normalizeScale(r.uiScale),
+    invertZoom: bool('invertZoom')
   }
 }
 
@@ -143,6 +257,8 @@ export interface MainGpuInfo {
   arch: string
   versions: { electron: string; chrome: string; node: string }
   commandLineFlags: string[]
+  /** The GPU preference this run started with (a changed one applies after a restart). */
+  gpuPreference: GpuPreference
   featureStatus: Record<string, string>
   gpuInfo: unknown
 }
@@ -158,24 +274,46 @@ export interface RendererGpuReport {
   smokeTest?: { ok: boolean; detail: string }
 }
 
-export type MenuCommand =
-  | 'open'
-  | 'open-model'
-  | 'export'
-  | 'import-palette'
-  | 'presets'
-  | 'import-preset'
-  | 'undo'
-  | 'redo'
-  | 'zoom-fit'
-  | 'zoom-actual'
-  | 'zoom-in'
-  | 'zoom-out'
-  | 'toggle-grid'
-  | 'toggle-split'
-  | 'toggle-tile'
-  | `theme-${Theme}`
-  | 'gpu-diagnostics'
+const PLAIN_COMMANDS = [
+  'new-project',
+  'open-project',
+  'save-project',
+  'save-project-as',
+  'open',
+  'close-texture',
+  'next-texture',
+  'previous-texture',
+  'open-model',
+  'export',
+  'import-palette',
+  'presets',
+  'import-preset',
+  'toggle-live-reload',
+  'undo',
+  'redo',
+  'settings',
+  'zoom-fit',
+  'zoom-actual',
+  'zoom-in',
+  'zoom-out',
+  'toggle-grid',
+  'toggle-split',
+  'toggle-tile',
+  'gpu-diagnostics'
+] as const
+
+export type MenuCommand = (typeof PLAIN_COMMANDS)[number] | `theme-${Theme}` | `view-${ViewMode}` | `look-${View3dLookChoice}`
+
+/** The 3D view's looks and the Custom style, as View › 3D Look lists them. */
+export const LOOK_CHOICES: readonly View3dLookChoice[] = [...VIEW3D_LOOKS, 'custom']
+
+/** Every menu command (keybinds are checked against it). */
+export const MENU_COMMANDS: readonly MenuCommand[] = [
+  ...PLAIN_COMMANDS,
+  ...THEMES.map((t) => `theme-${t}` as const),
+  ...VIEW_MODES.map((m) => `view-${m}` as const),
+  ...LOOK_CHOICES.map((l) => `look-${l}` as const)
+]
 
 export interface FxApi {
   platform: string
@@ -183,7 +321,8 @@ export interface FxApi {
   settings: UserSettings
   /** Stores changed settings (written to disk shortly after). */
   saveSettings(patch: Partial<UserSettings>): void
-  openImage(): Promise<OpenedFile | null>
+  /** Asks for textures (several can be picked); empty = cancelled. */
+  openImages(): Promise<OpenedFile[]>
   /** Asks for a 3D model file (glTF, GLB, FBX, OBJ). */
   openModel(): Promise<OpenedFile | null>
   /**
@@ -193,10 +332,37 @@ export interface FxApi {
   readModelFile(modelPath: string, reference: string): Promise<OpenedFile | null>
   openFile(filters: FileFilter[]): Promise<OpenedFile | null>
   saveFile(defaultName: string, bytes: Uint8Array, filters: FileFilter[]): Promise<string | null>
+  /** Asks for a folder to export into; null = cancelled. */
+  chooseExportFolder(): Promise<string | null>
+  /** Writes an exported image into a folder picked with chooseExportFolder (plain image file names only). Returns its path. */
+  writeExportFile(folder: string, name: string, bytes: Uint8Array): Promise<string>
   /** Map files (AO, cavity, …) next to a texture, recognized by name (see @shared/maps). */
   findMaps(texturePath: string): Promise<OpenedFile[]>
   /** Path on disk of a dropped file ('' when it has none). */
   pathForFile(file: File): string
+  /** Files to watch for changes on disk (absolute paths; replaces the previous list, [] stops). */
+  watchFiles(paths: string[]): void
+  /** Called with the path of a watched file once it has changed on disk. */
+  onFileChanged(listener: (path: string) => void): () => void
+  /** Reads a watched file again (null when it's not watched or can't be read). */
+  readWatchedFile(path: string): Promise<OpenedFile | null>
+  /** Asks for a project file (.pxproj) to open. */
+  openProject(): Promise<OpenedFile | null>
+  /** Asks where to save a project; nothing is written yet (null = cancelled). */
+  chooseProjectPath(defaultName: string): Promise<string | null>
+  /** Writes a project file (an absolute path ending in .pxproj). */
+  writeProject(path: string, json: string): Promise<void>
+  /**
+   * A texture, map or model a project refers to: at its saved path, else relative to the project,
+   * else by name next to it (null = not found).
+   */
+  readProjectFile(projectPath: string, ref: ProjectFileRef): Promise<OpenedFile | null>
+  /** Whether the open project has unsaved changes (closing the window then asks first). */
+  setDocumentEdited(edited: boolean): void
+  /** Called when the user closes the window while the project has unsaved changes. */
+  onCloseRequested(listener: () => void): () => void
+  /** Closes the window without asking again. */
+  closeWindow(): void
   /** Presets folder in the app's user-data directory (created on demand). */
   listPresets(): Promise<PresetEntry[]>
   readPreset(file: string): Promise<string>
@@ -210,15 +376,35 @@ export interface FxApi {
   runMenuRole(role: MenuRole): void
   /** Restyles the native window buttons drawn over the custom title bar (Windows/Linux). */
   setTitleBarOverlay(overlay: TitleBarOverlay): void
+  /** Zooms the whole interface (1 = 100%). */
+  setUiScale(scale: number): void
+  /** Restarts the app (settings that apply at startup, such as the GPU). */
+  relaunch(): void
+  /** Opens the folder holding settings.json and the presets. */
+  showUserDataFolder(): Promise<void>
+  /** Turns the menu's keyboard shortcuts off (true) while Settings records a new one, and back on. */
+  suspendShortcuts(suspend: boolean): void
 }
 
 export const IPC = {
-  openImage: 'image:open',
+  openImages: 'image:open',
   openModel: 'model:open',
   readModelFile: 'model:read-file',
   openFile: 'file:open',
   saveFile: 'file:save',
+  chooseExportFolder: 'export:choose-folder',
+  writeExportFile: 'export:write',
   findMaps: 'maps:find',
+  watchFiles: 'files:watch',
+  fileChanged: 'files:changed',
+  readWatchedFile: 'files:read-watched',
+  projectOpen: 'project:open',
+  projectChoosePath: 'project:choose-path',
+  projectWrite: 'project:write',
+  projectReadFile: 'project:read-file',
+  documentEdited: 'window:document-edited',
+  closeRequested: 'window:close-requested',
+  closeWindow: 'window:close',
   presetsList: 'presets:list',
   presetsRead: 'presets:read',
   presetsWrite: 'presets:write',
@@ -230,7 +416,10 @@ export const IPC = {
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
   menuRole: 'menu:role',
-  titleBarOverlay: 'window:title-bar-overlay'
+  titleBarOverlay: 'window:title-bar-overlay',
+  relaunch: 'app:relaunch',
+  userDataShow: 'app:show-user-data',
+  suspendShortcuts: 'menu:suspend-shortcuts'
 } as const
 
 /** Colors (CSS color strings) and height (CSS px) of the native window buttons over the custom title bar. */

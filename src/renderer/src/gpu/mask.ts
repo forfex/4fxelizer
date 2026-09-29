@@ -54,6 +54,18 @@ export interface MaskSpec {
   wrap: boolean
 }
 
+/** A mask with no sources, the starting point for editing one. */
+export const EMPTY_MASK: MaskSpec = { a: 'none', aInvert: false, b: 'none', bInvert: false, combine: 'multiply', blur: 0, wrap: false }
+
+/**
+ * A mask as stored: null when it has no source, and a lone second source moves to the first slot.
+ */
+export function normalizeMask(spec: MaskSpec): MaskSpec | null {
+  if (spec.a === 'none' && spec.b === 'none') return null
+  if (spec.a !== 'none') return spec
+  return { ...spec, a: spec.b, aInvert: spec.bInvert, aAmount: spec.bAmount, b: 'none', bInvert: false, bAmount: undefined }
+}
+
 /** The map slot a source reads, if any. */
 export function maskMapSlot(source: MaskSource): MapSlot | null {
   return source.startsWith('map-') ? (source.slice(4) as MapSlot) : null

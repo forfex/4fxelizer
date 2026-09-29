@@ -10,6 +10,8 @@ export interface GenerateOptions {
   quality: number
   lumaWeight: number
   chromaWeight: number
+  /** Lightness gamma of the metric: above 1 gives more dark steps, below 1 more light ones (default 1). */
+  gamma?: number
   /** Colors that must stay in the palette; generation fills the remaining slots around them. */
   locked: string[]
   /** Snap the generated colors to PSX 15-bit color (colors that snap together merge). */
@@ -48,12 +50,23 @@ export function histogram(rgba: Uint8Array, alphaCutoff = 128): { rgb: Vec3; w: 
   return bins
 }
 
-function weigh([L, a, b]: Vec3, lw: number, cw: number): Vec3 {
-  return [L * lw, a * cw, b * cw]
+/** Lightness weight, chroma weight and gamma: the space the generators measure distances in. */
+interface Metric {
+  lw: number
+  cw: number
+  gamma: number
 }
 
-function unweigh([L, a, b]: Vec3, lw: number, cw: number): Vec3 {
-  return [L / lw, a / cw, b / cw]
+/**
+ * Lightness goes through L^(1/gamma) before weighting: above 1 stretches the darks (more dark
+ * steps), below 1 the lights. Monotonic, so it's undone exactly after generation.
+ */
+function weigh([L, a, b]: Vec3, { lw, cw, gamma }: Metric): Vec3 {
+  return [Math.max(L, 0) ** (1 / gamma) * lw, a * cw, b * cw]
+}
+
+function unweigh([L, a, b]: Vec3, { lw, cw, gamma }: Metric): Vec3 {
+  return [Math.max(L / lw, 0) ** gamma, a / cw, b / cw]
 }
 
 function dist2(a: Vec3, b: Vec3): number {
@@ -423,13 +436,16 @@ export function kmeans(points: Point[], initial: Vec3[], fixed: number, iteratio
 
 /** Generates up to `count - locked.length` new colors (hex, sorted dark → light). */
 export function generatePalette(rgba: Uint8Array, opts: GenerateOptions): string[] {
-  const lw = Math.max(opts.lumaWeight, 0.05)
-  const cw = Math.max(opts.chromaWeight, 0.05)
-  const points: Point[] = histogram(rgba).map((b) => ({ p: weigh(rgbToOklab(b.rgb), lw, cw), w: b.w }))
+  const metric: Metric = {
+    lw: Math.max(opts.lumaWeight, 0.05),
+    cw: Math.max(opts.chromaWeight, 0.05),
+    gamma: Math.min(Math.max(opts.gamma ?? 1, 0.2), 5)
+  }
+  const points: Point[] = histogram(rgba).map((b) => ({ p: weigh(rgbToOklab(b.rgb), metric), w: b.w }))
   const want = Math.min(Math.max(opts.count - opts.locked.length, 0), points.length)
   if (want === 0) return []
 
-  const lockedCenters = opts.locked.map((hex) => weigh(hexToOklab(hex), lw, cw))
+  const lockedCenters = opts.locked.map((hex) => weigh(hexToOklab(hex), metric))
   let centers = opts.method === 'wu' ? wu(points, want) : opts.method === 'octree' ? octree(points, want) : medianCut(points, want)
   centers = fillTo(points, centers, want)
   if (opts.method === 'kmeans' && opts.quality > 0) {
@@ -441,7 +457,7 @@ export function generatePalette(rgba: Uint8Array, opts: GenerateOptions): string
   const seen = new Set(opts.locked)
   const out: { hex: string; L: number }[] = []
   for (const c of centers) {
-    const lab = unweigh(c, lw, cw)
+    const lab = unweigh(c, metric)
     const [r, g, b] = oklabToRgb(lab)
     const exact = rgb8ToHex(r * 255, g * 255, b * 255)
     const hex = opts.color15 ? snapHexTo15bit(exact) : exact

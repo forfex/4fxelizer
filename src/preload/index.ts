@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 import { IPC, type FxApi, type MenuCommand } from '@shared/api'
 
 const api: FxApi = {
@@ -6,13 +6,33 @@ const api: FxApi = {
   // Synchronous so the first render already uses the saved settings (the file is tiny).
   settings: ipcRenderer.sendSync(IPC.settingsLoad),
   saveSettings: (patch) => ipcRenderer.send(IPC.settingsSave, patch),
-  openImage: () => ipcRenderer.invoke(IPC.openImage),
+  openImages: () => ipcRenderer.invoke(IPC.openImages),
   openModel: () => ipcRenderer.invoke(IPC.openModel),
   readModelFile: (modelPath, reference) => ipcRenderer.invoke(IPC.readModelFile, modelPath, reference),
   openFile: (filters) => ipcRenderer.invoke(IPC.openFile, filters),
   saveFile: (defaultName, bytes, filters) => ipcRenderer.invoke(IPC.saveFile, defaultName, bytes, filters),
+  chooseExportFolder: () => ipcRenderer.invoke(IPC.chooseExportFolder),
+  writeExportFile: (folder, name, bytes) => ipcRenderer.invoke(IPC.writeExportFile, folder, name, bytes),
   findMaps: (texturePath) => ipcRenderer.invoke(IPC.findMaps, texturePath),
   pathForFile: (file) => webUtils.getPathForFile(file),
+  watchFiles: (paths) => ipcRenderer.send(IPC.watchFiles, paths),
+  onFileChanged: (listener) => {
+    const handler = (_: unknown, path: string): void => listener(path)
+    ipcRenderer.on(IPC.fileChanged, handler)
+    return () => ipcRenderer.removeListener(IPC.fileChanged, handler)
+  },
+  readWatchedFile: (path) => ipcRenderer.invoke(IPC.readWatchedFile, path),
+  openProject: () => ipcRenderer.invoke(IPC.projectOpen),
+  chooseProjectPath: (defaultName) => ipcRenderer.invoke(IPC.projectChoosePath, defaultName),
+  writeProject: (path, json) => ipcRenderer.invoke(IPC.projectWrite, path, json),
+  readProjectFile: (projectPath, ref) => ipcRenderer.invoke(IPC.projectReadFile, projectPath, ref),
+  setDocumentEdited: (edited) => ipcRenderer.send(IPC.documentEdited, edited),
+  onCloseRequested: (listener) => {
+    const handler = (): void => listener()
+    ipcRenderer.on(IPC.closeRequested, handler)
+    return () => ipcRenderer.removeListener(IPC.closeRequested, handler)
+  },
+  closeWindow: () => ipcRenderer.send(IPC.closeWindow),
   listPresets: () => ipcRenderer.invoke(IPC.presetsList),
   readPreset: (file) => ipcRenderer.invoke(IPC.presetsRead, file),
   writePreset: (file, json) => ipcRenderer.invoke(IPC.presetsWrite, file, json),
@@ -26,7 +46,14 @@ const api: FxApi = {
     return () => ipcRenderer.removeListener(IPC.menuCommand, handler)
   },
   runMenuRole: (role) => ipcRenderer.send(IPC.menuRole, role),
-  setTitleBarOverlay: (overlay) => ipcRenderer.send(IPC.titleBarOverlay, overlay)
+  setTitleBarOverlay: (overlay) => ipcRenderer.send(IPC.titleBarOverlay, overlay),
+  setUiScale: (scale) => webFrame.setZoomFactor(scale),
+  relaunch: () => ipcRenderer.send(IPC.relaunch),
+  showUserDataFolder: () => ipcRenderer.invoke(IPC.userDataShow),
+  suspendShortcuts: (suspend) => ipcRenderer.send(IPC.suspendShortcuts, suspend)
 }
+
+// Before the first render, so the page lays out at the saved scale.
+if (typeof api.settings?.uiScale === 'number') webFrame.setZoomFactor(api.settings.uiScale)
 
 contextBridge.exposeInMainWorld('fx', api)
