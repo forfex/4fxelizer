@@ -194,10 +194,13 @@ function StageCard({
       <div
         className="flex h-8 min-w-0 items-center gap-1 pr-1 pl-1 select-none"
         title={open ? 'Double-click to collapse' : 'Double-click to expand'}
-        // Double-clicking the header (not one of its controls) collapses or expands the card.
-        onDoubleClick={(e) => {
+        // Double-clicking the header (not one of its controls) collapses or expands the card. Every
+        // second click of a series toggles (not only dblclick's second one), so quick double-clicks
+        // in a row keep working without waiting for the click count to reset.
+        onClick={(e) => {
+          if (e.detail < 2 || e.detail % 2 !== 0) return
           if ((e.target as HTMLElement).closest('button, [role="switch"], [role="checkbox"], input')) return
-          setOpen(!open)
+          setOpen((o) => !o)
         }}
       >
         <span
