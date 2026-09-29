@@ -3,16 +3,20 @@ import { EXPORT_FILE_TYPES } from '@shared/api'
 import { describeOutput, ENCODERS, exportImage, parseExportFormat, type ExportFormat, type OutputSummary } from '@/actions'
 import type { DitherParams } from '@/gpu/passes/dither'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
+import { psxChecks, type PsxCheckState } from '@/image/psx'
 import { MAX_INDEXED } from '@/palette/palette'
 import { savedSettings, saveSettings } from '@/settings'
 import { snapsColors } from '@/stack/analyze'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
-import { Field, Segmented } from './ui/controls'
+import { Checkbox, Field, Segmented } from './ui/controls'
 import { Dialog, DialogClose, DialogContent } from './ui/dialog'
+import { Led, type LedState } from './ui/retro'
 import { Select } from './ui/select'
 
 const IMAGE_COLORS = '__image'
+
+const PSX_LED: Record<PsxCheckState, LedState> = { ok: 'on', warn: 'warn', fail: 'error' }
 
 const FILE_HINTS = {
   png: 'Compressed and lossless. Indexed PNGs use 1/2/4/8 bits per pixel.',
@@ -41,6 +45,7 @@ export function ExportDialog() {
   const [paletteChoice, setPaletteChoice] = useState<string>(IMAGE_COLORS)
   const [output, setOutput] = useState<OutputSummary | null>(null)
   const [busy, setBusy] = useState(false)
+  const [psxCheck, setPsxCheck] = useState(() => savedSettings().psxCheck)
 
   useEffect(() => {
     if (!open) return
@@ -77,6 +82,15 @@ export function ExportDialog() {
       summary += '. Use 15 colors to fit 4-bit (16 entries) with transparency'
     }
     summary += '.'
+  }
+
+  const psx =
+    psxCheck && output
+      ? psxChecks({ ...output, ...output.psx, colors: indexed && entries !== null ? entries : output.colors })
+      : null
+  const togglePsxCheck = (on: boolean): void => {
+    setPsxCheck(on)
+    saveSettings({ psxCheck: on })
   }
 
   const run = async (): Promise<void> => {
@@ -129,6 +143,22 @@ export function ExportDialog() {
             <dd className="font-mono">{output ? (output.colors > 256 ? 'more than 256' : output.colors) : '…'}</dd>
           </dl>
           <p className="text-small text-dim">{summary}</p>
+          <Checkbox
+            checked={psxCheck}
+            onCheckedChange={togglePsxCheck}
+            label="Check PSX limits"
+            hint="List how the result fits PSX textures: size, CLUT depth, 15-bit color and transparency."
+          />
+          {psx && (
+            <ul className="flex flex-col gap-1 text-small">
+              {psx.map((check) => (
+                <li key={check.text} className="flex items-baseline gap-2">
+                  <Led state={PSX_LED[check.state]} className="translate-y-px" />
+                  <span className={check.state === 'ok' ? 'text-dim' : undefined}>{check.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           {tooManyColors && (
             <p className="text-small text-led-warn">
               {palette

@@ -7,6 +7,7 @@ import { decodeImage } from '@/image/decode'
 import { bmpBitDepth, encodeBmp, encodeIndexedBmp } from '@/image/bmp'
 import { countColors, hasTranslucency, hasTransparency, toIndexed } from '@/image/indexed'
 import { encodeIndexedPng, encodePng, indexedBitDepth, type IndexedImage, type RgbaImage } from '@/image/png'
+import { psxStats, type PsxStats } from '@/image/psx'
 import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
 import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
@@ -234,6 +235,7 @@ export interface OutputSummary {
   transparent: boolean
   /** Some pixels are semi-transparent. */
   translucent: boolean
+  psx: PsxStats
 }
 
 export async function describeOutput(): Promise<OutputSummary | null> {
@@ -246,7 +248,8 @@ export async function describeOutput(): Promise<OutputSummary | null> {
     colors: countColors(image),
     opaqueColors: countColors(image, 257, false),
     transparent: hasTransparency(image),
-    translucent: hasTranslucency(image)
+    translucent: hasTranslucency(image),
+    psx: psxStats(image)
   }
 }
 

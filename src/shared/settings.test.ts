@@ -14,6 +14,7 @@ describe('settings', () => {
       tile: false,
       theme: 'dark',
       exportFormat: 'png-rgba',
+      psxCheck: false,
       layout: null,
       workspace: 'essentials',
       workspaces: []

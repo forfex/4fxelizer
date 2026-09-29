@@ -34,6 +34,8 @@ export interface UserSettings {
   theme: Theme
   /** Last format chosen in the Export dialog. */
   exportFormat: ExportFormat
+  /** Export dialog lists how the result fits PSX texture limits. */
+  psxCheck: boolean
   /** Panel layout as last arranged (dockview JSON); null = build the active workspace fresh. */
   layout: object | null
   /** Active workspace: a built-in workspace id, or the name of a saved one. */
@@ -89,6 +91,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   tile: false,
   theme: 'dark',
   exportFormat: 'png-indexed',
+  psxCheck: false,
   layout: null,
   workspace: 'essentials',
   workspaces: []
@@ -112,13 +115,14 @@ function normalizeWorkspaces(raw: unknown): SavedWorkspace[] {
 /** Settings from disk with missing or invalid fields replaced by defaults (old files keep working). */
 export function normalizeSettings(raw: unknown): UserSettings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const bool = (key: 'grid' | 'split' | 'tile'): boolean => (typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key])
+  const bool = (key: 'grid' | 'split' | 'tile' | 'psxCheck'): boolean => (typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key])
   return {
     grid: bool('grid'),
     split: bool('split'),
     tile: bool('tile'),
     theme: THEMES.includes(r.theme as Theme) ? (r.theme as Theme) : DEFAULT_SETTINGS.theme,
     exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
+    psxCheck: bool('psxCheck'),
     layout: isObject(r.layout) ? r.layout : null,
     workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace.trim() : DEFAULT_SETTINGS.workspace,
     workspaces: normalizeWorkspaces(r.workspaces)
