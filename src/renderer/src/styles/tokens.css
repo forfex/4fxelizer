@@ -12,8 +12,8 @@
  *   busy LED) and the status LEDs.
  * - Light: the daylight counterpart of Dark: pale lilac surfaces, dark ink, a deeper purple.
  * - Matrix: green phosphor on black.
- * - Retro: the classic silver-grey desktop: navy title bars, white wells, black outlines, square
- *   corners, no glow.
+ * - Retro: the classic silver-grey desktop: navy title bars, white wells and readouts, black
+ *   outlines, square corners, no glow.
  */
 :root {
   /* Surfaces, back to front: bg (the desktop behind the dock) → panel → panel-hi (raised controls) */
@@ -254,8 +254,9 @@
   --fx-led-red: #a00000;
   --fx-led-off: #808080;
 
-  --fx-lcd-bg: #000000;
-  --fx-lcd-text: #00ff00;
+  /* Readouts are plain white fields, like every other input in this theme. */
+  --fx-lcd-bg: #ffffff;
+  --fx-lcd-text: #000000;
   --fx-lcd-glow: none;
 
   --fx-scrollbar-thumb-hover: #d4d4d4;
