@@ -33,8 +33,9 @@ Everything runs on your GPU, so changes show up instantly.
 - **Every dither you know**: Bayer, blue noise, halftone, the N64 magic square, your own pattern, error diffusion
   from Floyd–Steinberg to Sierra, limited by masks from the image or from AO and cavity maps.
   [More](guide/masks-and-maps.md)
-- **3D view and map baking**: glTF, GLB, FBX and OBJ models with switchable PSX quirks (vertex wobble, affine
-  warping, 240-line framebuffer), and AO, cavity, curvature and more baked on the GPU. [More](guide/3d.md)
+- **3D view and map baking**: glTF, GLB, FBX and OBJ models in Lit, Unlit, Wireframe, Clay, Normals, PSX
+  (vertex wobble, affine warping, 240 lines) or N64 looks, or your own style, and AO, cavity, curvature and more
+  baked on the GPU. [More](guide/3d.md)
 - **Projects, presets and export**: save your whole session as a project; console, computer and stylized
   presets built in; PNG, TGA or BMP, full color or indexed.
   [More](guide/presets-and-export.md)
