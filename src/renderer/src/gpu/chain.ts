@@ -81,8 +81,8 @@ export class PassChain {
   }
 
   /**
-   * Encodes one run of a stage (its mask first, if it has one) into a new texture. `label` names
-   * the output texture.
+   * Encodes one run of a stage (its mask first, if it has one) into a new texture. `source` is the
+   * loaded image; `label` names the output texture.
    */
   encodeStage(
     encoder: GPUCommandEncoder,
@@ -90,7 +90,7 @@ export class PassChain {
     params: unknown,
     blend: StageBlend,
     input: GPUTexture,
-    source: Size,
+    source: GPUTexture,
     label?: string
   ): EncodedStage {
     const def = this.def(passId)
@@ -120,7 +120,8 @@ export class PassChain {
       scratch,
       mask: mask?.texture,
       customPattern: this.resources.customPattern(res?.pattern),
-      blendMask: blendMask?.texture
+      blendMask: blendMask?.texture,
+      source
     })
     return {
       texture,
