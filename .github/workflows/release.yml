@@ -32,7 +32,7 @@ jobs:
           - os: ubuntu-latest
             target: --linux --x64
     env:
-      # Builds are unsigned for now (see docs/PLAN.md risks).
+      # Builds are unsigned for now (no code-signing certificates yet).
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v7
