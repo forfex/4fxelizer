@@ -55,8 +55,22 @@ export type View3dLook = (typeof VIEW3D_LOOKS)[number]
 /** A look, or the user's own style. */
 export type View3dLookChoice = View3dLook | 'custom'
 
+/** Shapes the 3D view shows the texture on when no model is open. */
+export const VIEW3D_SHAPES = ['cube', 'plane', 'sphere', 'sphere-tiled', 'torus'] as const
+export type View3dShape = (typeof VIEW3D_SHAPES)[number]
+
+export const VIEW3D_SHAPE_NAMES: Record<View3dShape, string> = {
+  cube: 'Cube',
+  plane: 'Plane',
+  sphere: 'Sphere',
+  'sphere-tiled': 'Sphere (2× tiling)',
+  torus: 'Torus'
+}
+
 export interface View3dSettings {
   look: View3dLookChoice
+  /** Shape shown when no model is open. */
+  shape: View3dShape
   /** The Custom style: kept while another look is shown, and replaced when a look is edited. */
   custom: View3dStyle
 }
@@ -103,7 +117,7 @@ export const VIEW3D_LOOK_INFO: Record<View3dLook, { label: string; hint: string;
   }
 }
 
-export const DEFAULT_VIEW3D: View3dSettings = { look: 'lit', custom: VIEW3D_LOOK_INFO.psx.style }
+export const DEFAULT_VIEW3D: View3dSettings = { look: 'lit', shape: 'cube', custom: VIEW3D_LOOK_INFO.psx.style }
 
 /** The style a look (or Custom) draws with. */
 export function view3dStyle(settings: View3dSettings): View3dStyle {
@@ -112,7 +126,7 @@ export function view3dStyle(settings: View3dSettings): View3dStyle {
 
 /** Settings after editing the shown style: the edit makes (or changes) the Custom style. */
 export function customizeView3d(settings: View3dSettings, patch: Partial<View3dStyle>): View3dSettings {
-  return { look: 'custom', custom: { ...view3dStyle(settings), ...patch } }
+  return { ...settings, look: 'custom', custom: { ...view3dStyle(settings), ...patch } }
 }
 
 export function sameView3dStyle(a: View3dStyle, b: View3dStyle): boolean {
@@ -156,6 +170,7 @@ function fromPsxSwitches(r: Record<string, unknown>): View3dSettings {
   if (!on('snap') && !on('affine') && !on('filter') && !on('dither') && resolution === 'full') return DEFAULT_VIEW3D
   return {
     look: 'custom',
+    shape: DEFAULT_VIEW3D.shape,
     custom: {
       ...CONSOLE,
       shading: r.lighting === false ? 'unlit' : 'vertex',
@@ -174,6 +189,7 @@ export function normalizeView3d(raw: unknown): View3dSettings {
   if (!('look' in r) && ('snap' in r || 'affine' in r || 'dither' in r || 'lighting' in r)) return fromPsxSwitches(r)
   return {
     look: r.look === 'custom' ? 'custom' : pick(VIEW3D_LOOKS, r.look, DEFAULT_VIEW3D.look),
+    shape: pick(VIEW3D_SHAPES, r.shape, DEFAULT_VIEW3D.shape),
     custom: normalizeView3dStyle(r.custom, DEFAULT_VIEW3D.custom)
   }
 }

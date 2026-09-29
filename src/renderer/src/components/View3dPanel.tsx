@@ -1,13 +1,17 @@
 // The 3D view (in the main view's 3D and 2D / 3D modes): the loaded model with the processed
 // texture (or the source, or a map) on it, drawn in a look (Lit, Wireframe, PSX, …) or the user's
-// Custom style. Drag to orbit, right/middle/Shift-drag to pan, wheel to zoom, double-click to
-// frame the model.
+// Custom style. With a texture but no model it shows a built-in shape (cube, plane, sphere, torus).
+// Drag to orbit, right/middle/Shift-drag to pan, wheel to zoom, Alt-drag to turn the sun,
+// double-click to frame the model.
 
 import { useEffect, useRef, useState } from 'react'
 import { MAP_CHANNELS, MAP_SLOTS, type MapSlot } from '@shared/maps'
-import { view3dStyle } from '@shared/view3d'
+import { VIEW3D_SHAPE_NAMES, VIEW3D_SHAPES, view3dStyle, type View3dShape } from '@shared/view3d'
 import { getEngine } from '@/engine'
+import { ModelGpu } from '@/gpu/model/modelGpu'
 import { ModelRenderer, type FrameMap } from '@/gpu/model/modelRenderer'
+import type { ModelData } from '@/model/model'
+import { shapeModel } from '@/model/shapes'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
 import { openModel } from '@/modelActions'
@@ -20,14 +24,28 @@ import { LookSelect, View3dStylePanel } from './View3dStyle'
 
 /** Accumulated wheel delta per zoom step (see Viewer). */
 const WHEEL_STEP = 60
+/** Sun rotation per CSS pixel of Alt-drag, radians. */
+const SUN_SPEED = 0.01
+
+const NAVIGATION: [keys: string, action: string][] = [
+  ['Drag', 'orbit'],
+  ['Right / Shift-drag', 'pan'],
+  ['Wheel', 'zoom'],
+  ['Alt-drag', 'turn the sun'],
+  ['Double-click', 'frame']
+]
 
 /** The 3D view's well (canvas, toolbar, model readout); the main view places it (see MainView). */
 export function View3d() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const camera = useRef<OrbitCamera | null>(null)
   const redraw = useRef<() => void>(() => {})
+  /** The model or shape drawn last (wheel zoom and framing measure it). */
+  const shown = useRef<ModelData | null>(null)
+  const lightYaw = useRef(0)
   const gpuReady = useApp((s) => s.gpu.status === 'ready')
   const model = useApp((s) => s.model)
+  const hasImage = useApp((s) => !!s.image)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -37,9 +55,16 @@ export function View3d() {
     let background = cssColor('--fx-viewer-bg')
     let wireColor = cssColor('--fx-accent')
     let theme = useApp.getState().theme
-    let modelVersion = -1
-    // The model the camera was framed for: a reload of the same file keeps the camera.
+    // The model (or shape) the camera was framed for: a reload of the same file keeps the camera.
     let framed: string | null = null
+    let shape: { name: View3dShape; gpu: ModelGpu } | null = null
+    const shapeGpu = (name: View3dShape): ModelGpu => {
+      if (shape?.name !== name) {
+        shape?.gpu.dispose()
+        shape = { name, gpu: new ModelGpu(engine.gpu.device, shapeModel(name), null) }
+      }
+      return shape.gpu
+    }
 
     const frame = (): void => {
       const s = useApp.getState()
@@ -48,15 +73,14 @@ export function View3d() {
         background = cssColor('--fx-viewer-bg')
         wireColor = cssColor('--fx-accent')
       }
-      const gpuModel = engine.model
+      const isShape = !s.model && !!s.image
+      const gpuModel = s.model ? engine.model : isShape ? shapeGpu(s.view3d.shape) : null
+      shown.current = gpuModel?.data ?? null
       const aspect = canvas.width / Math.max(canvas.height, 1)
-      if (s.model?.version !== modelVersion) {
-        modelVersion = s.model?.version ?? -1
-        const identity = s.model ? (s.model.path ?? s.model.name) : null
-        if (identity !== framed || !camera.current) {
-          framed = identity
-          camera.current = gpuModel ? frameBounds(gpuModel.data.bounds, aspect) : null
-        }
+      const identity = s.model ? `model:${s.model.path ?? s.model.name}` : isShape ? `shape:${s.view3d.shape}` : null
+      if (identity !== framed || !camera.current) {
+        framed = identity
+        camera.current = gpuModel ? frameBounds(gpuModel.data.bounds, aspect) : null
       }
       const show = s.view3dShow
       const map = show !== 'result' && show !== 'source' ? s.maps[show] : undefined
@@ -69,8 +93,8 @@ export function View3d() {
       }
       renderer.draw({
         model: gpuModel,
-        uvSet: s.modelUvSet,
-        material: s.modelMaterial,
+        uvSet: isShape ? 0 : s.modelUvSet,
+        material: isShape ? 0 : s.modelMaterial,
         texture,
         textureView,
         maps: { ao: frameMap('ao'), roughness: frameMap('roughness'), metallic: frameMap('metallic') },
@@ -78,7 +102,8 @@ export function View3d() {
         style: view3dStyle(s.view3d),
         background,
         wireColor,
-        pixelRatio: window.devicePixelRatio || 1
+        pixelRatio: window.devicePixelRatio || 1,
+        lightYaw: lightYaw.current
       })
     }
 
@@ -122,6 +147,7 @@ export function View3d() {
       resize.disconnect()
       cancelAnimationFrame(raf)
       redraw.current = () => {}
+      shape?.gpu.dispose()
       renderer.dispose()
     }
   }, [gpuReady])
@@ -134,7 +160,7 @@ export function View3d() {
     const onWheel = (e: WheelEvent): void => {
       e.preventDefault()
       const c = camera.current
-      const data = getEngine()?.model?.data
+      const data = shown.current
       if (!c || !data) return
       accumulated += e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 33 : e.deltaY
       if (Math.abs(accumulated) < WHEEL_STEP) return
@@ -148,12 +174,18 @@ export function View3d() {
     return () => canvas.removeEventListener('wheel', onWheel)
   }, [])
 
-  const drag = useRef<{ x: number; y: number; pan: boolean } | null>(null)
+  const drag = useRef<{ x: number; y: number; mode: 'orbit' | 'pan' | 'sun' } | null>(null)
+  const [turningSun, setTurningSun] = useState(false)
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>): void => {
     if (e.button > 2) return
     e.currentTarget.setPointerCapture(e.pointerId)
-    drag.current = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey }
+    const mode = e.button === 0 && e.altKey ? 'sun' : e.button !== 0 || e.shiftKey ? 'pan' : 'orbit'
+    if (mode === 'sun') {
+      e.preventDefault()
+      setTurningSun(true)
+    }
+    drag.current = { x: e.clientX, y: e.clientY, mode }
   }
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>): void => {
     const d = drag.current
@@ -162,14 +194,17 @@ export function View3d() {
     const dx = e.clientX - d.x
     const dy = e.clientY - d.y
     drag.current = { ...d, x: e.clientX, y: e.clientY }
-    camera.current = d.pan ? panCamera(c, dx, dy, e.currentTarget.clientHeight) : orbit(c, dx, dy)
+    // The sun turns only around the vertical axis: horizontal movement.
+    if (d.mode === 'sun') lightYaw.current += dx * SUN_SPEED
+    else camera.current = d.mode === 'pan' ? panCamera(c, dx, dy, e.currentTarget.clientHeight) : orbit(c, dx, dy)
     redraw.current()
   }
   const endDrag = (): void => {
     drag.current = null
+    setTurningSun(false)
   }
   const frameModel = (): void => {
-    const data = getEngine()?.model?.data
+    const data = shown.current
     const canvas = canvasRef.current
     if (!data || !canvas) return
     camera.current = frameBounds(data.bounds, canvas.width / Math.max(canvas.height, 1))
@@ -180,7 +215,7 @@ export function View3d() {
     <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
       <canvas
         ref={canvasRef}
-        className={cn('block size-full', model && 'cursor-grab active:cursor-grabbing')}
+        className={cn('block size-full', (model || hasImage) && (turningSun ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'))}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -189,12 +224,15 @@ export function View3d() {
         onContextMenu={(e) => e.preventDefault()}
         onAuxClick={(e) => e.preventDefault()}
       />
-      {model ? (
+      {model || hasImage ? (
         <>
           <View3dToolbar onFrame={frameModel} />
-          <span className="bevel-raised pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-fx bg-panel/90 px-1.5 py-px text-small text-dim">
-            {model.name} · {model.triangles.toLocaleString('en-US')} tris
-          </span>
+          <div className="pointer-events-none absolute right-2 bottom-2 left-2 flex flex-wrap items-end justify-between gap-1">
+            <span className={cn(BADGE_CLASS, 'max-w-full truncate')}>
+              {model ? `${model.name} · ${model.triangles.toLocaleString('en-US')} tris` : 'No model open: a preview shape'}
+            </span>
+            <NavigationHints />
+          </div>
         </>
       ) : (
         <EmptyState />
@@ -203,7 +241,26 @@ export function View3d() {
   )
 }
 
+const BADGE_CLASS = 'bevel-raised rounded-fx bg-panel/90 px-1.5 py-px text-small text-dim'
+
+/** The view's mouse controls, at the bottom right. */
+function NavigationHints() {
+  return (
+    <span className={cn(BADGE_CLASS, 'ml-auto flex flex-wrap justify-end gap-x-2.5')}>
+      {NAVIGATION.map(([keys, action]) => (
+        <span key={keys} className="whitespace-nowrap">
+          <span className="text-text">{keys}</span> {action}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+const SHAPE_OPTIONS = VIEW3D_SHAPES.map((shape) => ({ value: shape, label: VIEW3D_SHAPE_NAMES[shape] }))
+
 function View3dToolbar({ onFrame }: { onFrame(): void }) {
+  const hasModel = useApp((s) => !!s.model)
+  const shape = useApp((s) => s.view3d.shape)
   const show = useApp((s) => s.view3dShow)
   const maps = useApp((s) => s.maps)
   const setView3dShow = useApp((s) => s.setView3dShow)
@@ -220,12 +277,26 @@ function View3dToolbar({ onFrame }: { onFrame(): void }) {
       <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
         <Select className="w-36" title="What to put on the model" value={value} onValueChange={setView3dShow} options={options} />
         <LookSelect />
+        {!hasModel && (
+          <Select<View3dShape>
+            className="w-40"
+            title="Shape to show the texture on (open a model to see yours)"
+            value={shape}
+            onValueChange={(v) => useApp.getState().setView3d({ shape: v })}
+            options={SHAPE_OPTIONS}
+          />
+        )}
         <Button aria-pressed={styleOpen} className={cn(styleOpen && 'bg-well bevel-sunken')} onClick={() => setStyleOpen(!styleOpen)} title="Every setting of the look">
           Style…
         </Button>
         <Button onClick={onFrame} title="Frame the model (double-click the view)">
           Frame
         </Button>
+        {!hasModel && (
+          <Button onClick={openModel} title="Open a glTF, GLB, FBX or OBJ model">
+            Open Model…
+          </Button>
+        )}
       </div>
       {styleOpen && <View3dStylePanel className="absolute top-11 right-2 z-20 max-h-[calc(100%-3.5rem)]" onClose={() => setStyleOpen(false)} />}
     </>

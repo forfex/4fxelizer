@@ -34,6 +34,8 @@ export interface ModelFrame {
   wireColor: Rgba
   /** Device pixels per CSS pixel: wire width at full resolution. */
   pixelRatio: number
+  /** Key light (sun) turned around the vertical axis, radians (Alt-drag in the view). */
+  lightYaw: number
 }
 
 /** Uniform slots per part are 256 bytes apart (minUniformBufferOffsetAlignment). */
@@ -290,7 +292,10 @@ export class ModelRenderer {
       const radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2 || 1
       const { right, up, forward } = basis(frame.camera)
       // The key light comes from the upper left, behind the viewer, so the model is lit from the camera side.
-      const key = normalize([0, 1, 2].map((a) => right[a]! * 0.75 - up[a]! * 0.9 + forward[a]! * 0.35) as Vec3)
+      const [kx, ky, kz] = [0, 1, 2].map((a) => right[a]! * 0.75 - up[a]! * 0.9 + forward[a]! * 0.35)
+      const cos = Math.cos(frame.lightYaw)
+      const sin = Math.sin(frame.lightYaw)
+      const key = normalize([kx! * cos + kz! * sin, ky!, kz! * cos - kx! * sin])
       const shadows = s.shadows && s.shading === 'pixel' && s.surface !== 'normals' && s.wireframe !== 'only'
       const lightViewProj = lightProjection(key, center, radius)
       this.writeFrame(frame, model, { key, lightViewProj, shadowTexel: (radius * 2) / SHADOW_SIZE, shadows })

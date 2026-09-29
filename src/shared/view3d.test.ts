@@ -30,11 +30,14 @@ describe('3D view settings', () => {
     expect(s.look).toBe('custom')
     expect(s.custom).toMatchObject({ shading: 'vertex', fog: 1, dither: DEFAULT_VIEW3D.custom.dither, snap: DEFAULT_VIEW3D.custom.snap })
     expect(normalizeView3d({ look: 'crt' }).look).toBe(DEFAULT_VIEW3D.look)
+    expect(normalizeView3d({ shape: 'torus' }).shape).toBe('torus')
+    expect(normalizeView3d({ shape: 'teapot' }).shape).toBe(DEFAULT_VIEW3D.shape)
   })
 
   it('makes an edited look the Custom style', () => {
     const s = customizeView3d({ ...DEFAULT_VIEW3D, look: 'psx' }, { resolution: '480' })
     expect(s.look).toBe('custom')
+    expect(s.shape).toBe(DEFAULT_VIEW3D.shape)
     expect(s.custom).toEqual({ ...VIEW3D_LOOK_INFO.psx.style, resolution: '480' })
     expect(customizeView3d(s, { fog: 0.5 }).custom).toEqual({ ...s.custom, fog: 0.5 })
   })

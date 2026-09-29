@@ -23,7 +23,8 @@ export class ModelGpu {
   constructor(
     private readonly device: GPUDevice,
     readonly data: ModelData,
-    readonly bvh: Bvh
+    /** Null for the built-in shapes, which are never baked. */
+    readonly bvh: Bvh | null
   ) {
     this.index = buffer(device, 'model indices', data.indices as Uint32Array<ArrayBuffer>, GPUBufferUsage.STORAGE)
   }
@@ -56,6 +57,7 @@ export class ModelGpu {
 
   /** BVH nodes and triangles as storage buffers (uploaded on first use). */
   bvhStorage(): { nodes: GPUBuffer; triangles: GPUBuffer } {
+    if (!this.bvh) throw new Error('This model has no BVH to bake with.')
     this.bvhBuffers ??= {
       nodes: buffer(this.device, 'bvh nodes', this.bvh.nodes, GPUBufferUsage.STORAGE),
       triangles: buffer(this.device, 'bvh triangles', this.bvh.triangles, GPUBufferUsage.STORAGE)
