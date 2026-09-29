@@ -191,7 +191,15 @@ function StageCard({
         dragging && 'opacity-50'
       )}
     >
-      <div className="flex h-8 min-w-0 items-center gap-1 pr-1 pl-1">
+      <div
+        className="flex h-8 min-w-0 items-center gap-1 pr-1 pl-1 select-none"
+        title={open ? 'Double-click to collapse' : 'Double-click to expand'}
+        // Double-clicking the header (not one of its controls) collapses or expands the card.
+        onDoubleClick={(e) => {
+          if ((e.target as HTMLElement).closest('button, [role="switch"], [role="checkbox"], input')) return
+          setOpen(!open)
+        }}
+      >
         <span
           className="flex h-full w-3 shrink-0 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
           title="Drag to reorder"
