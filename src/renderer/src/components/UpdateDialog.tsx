@@ -55,7 +55,11 @@ function ReleaseNotes({ markdown }: { markdown: string }) {
             {spans(b.spans)}
           </p>
         ) : b.kind === 'item' ? (
-          <p key={i} className="relative pl-3.5 before:absolute before:top-[0.55em] before:left-1 before:size-1 before:bg-dim">
+          <p
+            key={i}
+            className="relative pl-3.5 before:absolute before:top-[0.55em] before:left-1 before:size-1 before:bg-dim"
+            style={b.level ? { marginLeft: `calc(${b.level} * 0.875rem)` } : undefined}
+          >
             {spans(b.spans)}
           </p>
         ) : (

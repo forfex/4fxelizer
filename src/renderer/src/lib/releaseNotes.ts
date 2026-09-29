@@ -1,5 +1,5 @@
-// Release notes (GitHub markdown) as a few simple blocks for the update window: headings, list
-// items and paragraphs, with bold and code spans. Anything fancier shows as plain text.
+// What's new (markdown) as a few simple blocks for the update windows: headings, list items
+// (nested by indent) and paragraphs, with bold and code spans. Anything fancier shows as plain text.
 
 export interface Span {
   text: string
@@ -10,6 +10,8 @@ export interface Span {
 export interface NotesBlock {
   kind: 'heading' | 'item' | 'paragraph'
   spans: Span[]
+  /** List items: 0 at the top, 1 for an item indented under it, and so on. */
+  level?: number
 }
 
 /** `**bold**` and `` `code` `` spans; links keep their text. */
@@ -44,7 +46,9 @@ export function parseNotes(markdown: string): NotesBlock[] {
       blocks.push({ kind: 'heading', spans: parseSpans(heading[1]!) })
     } else if (item) {
       flush()
-      blocks.push({ kind: 'item', spans: parseSpans(item[1]!) })
+      // Two spaces (or a tab) of indent per level.
+      const indent = raw.replace(/\t/g, '  ').search(/\S/)
+      blocks.push({ kind: 'item', spans: parseSpans(item[1]!), level: Math.min(Math.floor(indent / 2), 3) })
     } else paragraph.push(line)
   }
   flush()
