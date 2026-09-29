@@ -40,9 +40,13 @@ export const MAX_MASK_BLUR = 32
 export interface MaskSpec {
   a: MaskSource
   aInvert: boolean
+  /** How much the first source counts: 0 = none (white), 1 = fully (default). */
+  aAmount?: number
   /** Second source combined with the first ('none' = only the first). */
   b: MaskSource
   bInvert: boolean
+  /** How much the second source counts (see aAmount). */
+  bAmount?: number
   combine: MaskCombine
   /** Blur radius in pixels of the stage's image. */
   blur: number
@@ -72,6 +76,7 @@ const BUILD_WGSL = /* wgsl */ `
 struct Params {
   a: u32, b: u32, aInvert: u32, bInvert: u32,
   aChannel: u32, bChannel: u32, combine: u32, wrap: u32,
+  aAmount: f32, bAmount: f32, _p0: u32, _p1: u32,
 }
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -152,10 +157,12 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   if (params.a != 0u) {
     m = clamp(sourceValue(params.a, q, uv, mapA, params.aChannel), 0.0, 1.0);
     if (params.aInvert == 1u) { m = 1.0 - m; }
+    m = mix(1.0, m, params.aAmount);
   }
   if (params.b != 0u) {
     var v = clamp(sourceValue(params.b, q, uv, mapB, params.bChannel), 0.0, 1.0);
     if (params.bInvert == 1u) { v = 1.0 - v; }
+    v = mix(1.0, v, params.bAmount);
     switch params.combine {
       case 1u: { m = min(m + v, 1.0); }
       case 2u: { m = min(m, v); }
@@ -264,7 +271,11 @@ export class MaskBuilder {
         ['u', channel(a.map)],
         ['u', channel(b.map)],
         ['u', index(MASK_COMBINE, spec.combine)],
-        ['u', spec.wrap ? 1 : 0]
+        ['u', spec.wrap ? 1 : 0],
+        ['f', Math.min(Math.max(spec.aAmount ?? 1, 0), 1)],
+        ['f', Math.min(Math.max(spec.bAmount ?? 1, 0), 1)],
+        ['u', 0],
+        ['u', 0]
       )
     )
     let texture = this.texture(size)

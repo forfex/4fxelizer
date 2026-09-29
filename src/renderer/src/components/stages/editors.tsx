@@ -157,6 +157,11 @@ function PaletteSource({ stage, paletteId, set }: { stage: StageSpec; paletteId:
 }
 
 function AdjustEditor({ params: p, set }: EditorProps<AdjustParams>) {
+  const maps = useApp((s) => s.maps)
+  const missing = [
+    { label: 'AO', used: p.ao > 0, loaded: !!maps.ao },
+    { label: 'cavity', used: p.cavity > 0, loaded: !!maps.cavity }
+  ].filter((m) => m.used && !m.loaded)
   return (
     <>
       <ParamSlider label="Brightness" value={p.brightness} min={-1} max={1} step={0.01} onChange={(brightness) => set({ brightness })} />
@@ -173,6 +178,29 @@ function AdjustEditor({ params: p, set }: EditorProps<AdjustParams>) {
         <NumberField className="flex-1" value={p.outBlack} min={0} max={1} step={0.01} onChange={(outBlack) => set({ outBlack })} />
         <NumberField className="flex-1" value={p.outWhite} min={0} max={1} step={0.01} onChange={(outWhite) => set({ outWhite })} />
       </Field>
+      <ParamSlider
+        label="AO shading"
+        hint="Multiplies the imported ambient occlusion map into the color: baked lighting, darker in crevices and contact shadows."
+        value={p.ao ?? 0}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(ao) => set({ ao })}
+      />
+      <ParamSlider
+        label="Cavity shading"
+        hint="Multiplies the imported cavity map into the color: darker small crevices and scratches."
+        value={p.cavity ?? 0}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(cavity) => set({ cavity })}
+      />
+      {missing.length > 0 && (
+        <p className="text-small text-led-warn">
+          No {missing.map((m) => m.label).join(' or ')} map loaded. Load one in the Maps panel.
+        </p>
+      )}
       <div className="flex justify-end">
         <Button size="sm" onClick={() => set(DEFAULT_ADJUST)}>Reset</Button>
       </div>

@@ -1,3 +1,4 @@
+import { maskMaps, type MaskSpec } from '../mask'
 import { definePass, packStruct } from '../pass'
 
 export interface AdjustParams {
@@ -17,6 +18,10 @@ export interface AdjustParams {
   /** Output levels. */
   outBlack: number
   outWhite: number
+  /** How strongly the imported AO map darkens the color (baked-lighting look; 0 = off). */
+  ao: number
+  /** How strongly the imported cavity map darkens the color (0 = off). */
+  cavity: number
 }
 
 export const DEFAULT_ADJUST: AdjustParams = {
@@ -29,10 +34,26 @@ export const DEFAULT_ADJUST: AdjustParams = {
   saturation: 0,
   hue: 0,
   outBlack: 0,
-  outWhite: 1
+  outWhite: 1,
+  ao: 0,
+  cavity: 0
 }
 
-/** Color adjustments before reduction: sharpen → input levels → gamma → brightness/contrast → hue/saturation → output levels. */
+/**
+ * The shading the AO and cavity maps multiply into the color, built like a mask (maps sampled in
+ * UV, so it lines up at any size), or null when neither is used.
+ */
+export function adjustShading(p: AdjustParams): MaskSpec | null {
+  const sources = [
+    { source: 'map-ao' as const, amount: p.ao },
+    { source: 'map-cavity' as const, amount: p.cavity }
+  ].filter((s) => s.amount > 0)
+  if (!sources.length) return null
+  const [a, b] = sources
+  return { a: a!.source, aInvert: false, aAmount: a!.amount, b: b?.source ?? 'none', bInvert: false, bAmount: b?.amount, combine: 'multiply', blur: 0, wrap: false }
+}
+
+/** Color adjustments before reduction: sharpen → AO/cavity shading → input levels → gamma → brightness/contrast → hue/saturation → output levels. */
 export const adjust = definePass<AdjustParams>({
   id: 'adjust',
   label: 'Adjust',
@@ -40,7 +61,7 @@ export const adjust = definePass<AdjustParams>({
 struct Params {
   sharpen: f32, inBlack: f32, inWhite: f32, gamma: f32,
   brightness: f32, contrast: f32, saturation: f32, hue: f32,
-  outBlack: f32, outWhite: f32, _p0: f32, _p1: f32,
+  outBlack: f32, outWhite: f32, shade: u32, _p1: f32,
 }
 
 fn load(p: vec2i) -> vec4f {
@@ -64,6 +85,9 @@ fn run(p: vec2u, size: vec2u) -> vec4f {
     c = c + (c - blur / 16.0) * params.sharpen;
   }
 
+  // Baked lighting: the AO/cavity shading is built as this stage's mask (see adjustShading).
+  if (params.shade == 1u) { c = c * maskAt(p, size); }
+
   c = clamp((c - params.inBlack) / max(params.inWhite - params.inBlack, 1e-4), vec3f(0.0), vec3f(1.0));
   c = pow(c, vec3f(1.0 / max(params.gamma, 0.01)));
   c = c + params.brightness;
@@ -85,6 +109,11 @@ fn run(p: vec2u, size: vec2u) -> vec4f {
     packStruct(
       ['f', p.sharpen], ['f', p.inBlack], ['f', p.inWhite], ['f', p.gamma],
       ['f', p.brightness], ['f', p.contrast], ['f', p.saturation], ['f', p.hue],
-      ['f', p.outBlack], ['f', p.outWhite], ['f', 0], ['f', 0]
-    )
+      ['f', p.outBlack], ['f', p.outWhite], ['u', adjustShading(p) ? 1 : 0], ['f', 0]
+    ),
+  mask: adjustShading,
+  resources: (p) => {
+    const shading = adjustShading(p)
+    return shading ? { maps: maskMaps(shading) } : {}
+  }
 })
