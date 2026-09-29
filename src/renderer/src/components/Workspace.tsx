@@ -25,6 +25,7 @@ import {
   VIEWER,
   workspaceName
 } from '@/workspace/workspace'
+import { BakePanel } from './BakePanel'
 import { MapsPanel } from './MapsPanel'
 import { GeneratePanel, PalettePanel } from './PalettePanel'
 import { StackPanel } from './StackPanel'
@@ -34,6 +35,7 @@ import { Dialog, DialogClose, DialogContent } from './ui/dialog'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Menu, MENU_MARK_CLASS, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { CaretIcon } from './ui/icons'
+import { View3dPanel } from './View3dPanel'
 import { Viewer } from './Viewer'
 
 /** dockview theme whose CSS variables map onto our --fx-* tokens (styles/dock.css). */
@@ -56,7 +58,9 @@ const COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   stack: StackPanel,
   palettes: PalettePanel,
   generate: GeneratePanel,
-  maps: MapsPanel
+  maps: MapsPanel,
+  view3d: View3dPanel,
+  bake: BakePanel
 }
 
 const TAB_COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelHeaderProps>> = {

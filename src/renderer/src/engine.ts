@@ -3,6 +3,7 @@
 
 import { initGpu, type Gpu } from '@/gpu/device'
 import { PassChain } from '@/gpu/chain'
+import { ModelGpu } from '@/gpu/model/modelGpu'
 import { DEFAULT_BLEND, PassRunner, WORK_FORMAT, type PassDef } from '@/gpu/pass'
 import { PASSES } from '@/gpu/passes'
 import { DEFAULT_DOWNSCALE, downscale, type DownscaleParams } from '@/gpu/passes/downscale'
@@ -12,6 +13,8 @@ import { GpuResources } from '@/gpu/resources'
 import { readTexelRgba8, readTextureRgba8, uploadBitmap } from '@/gpu/textureIO'
 import { ViewerRenderer, type ViewerFrame } from '@/gpu/viewer'
 import type { RgbaImage } from '@/image/png'
+import type { Bvh } from '@/model/bvh'
+import type { ModelData } from '@/model/model'
 import type { Palette } from '@/palette/palette'
 import type { MapChannel, MapSlot } from '@shared/maps'
 import type { OutputLock } from '@/stack/analyze'
@@ -52,6 +55,7 @@ export class Engine {
   private sourceVersion = 0
   private lastPlan: ChainPlan | null = null
   private readonly planListeners = new Set<PlanListener>()
+  private modelGpu: ModelGpu | null = null
 
   private constructor(readonly gpu: Gpu) {
     this.runner = new PassRunner(gpu.device)
@@ -79,6 +83,35 @@ export class Engine {
     return this.source?.key ?? null
   }
 
+  /** The loaded texture as decoded (null = none). Read it when drawing; it changes on load. */
+  get sourceTexture(): GPUTexture | null {
+    return this.source?.texture ?? null
+  }
+
+  /**
+   * What the viewer shows on the "after" side: the result, a previewed stage or a mask. Read it when
+   * drawing: process() may replace (and free) it.
+   */
+  get shownTexture(): GPUTexture | null {
+    return this.shown
+  }
+
+  /** The texture of a loaded map (null = none). Read it when drawing; loading a map replaces it. */
+  mapTexture(slot: MapSlot): GPUTexture | null {
+    return this.resources.map(slot)?.texture ?? null
+  }
+
+  /** The loaded model on the GPU (null = none). */
+  get model(): ModelGpu | null {
+    return this.modelGpu
+  }
+
+  /** Uploads a model (null unloads it). */
+  setModel(data: ModelData | null, bvh: Bvh | null): void {
+    this.modelGpu?.dispose()
+    this.modelGpu = data && bvh ? new ModelGpu(this.gpu.device, data, bvh) : null
+  }
+
   loadBitmap(bitmap: ImageBitmap): void {
     const texture = uploadBitmap(this.gpu.device, bitmap)
     const previous = this.source
@@ -93,6 +126,11 @@ export class Engine {
   /** Uploads an imported map into a slot (null clears it); `version` must be new for every image. */
   loadMap(slot: MapSlot, bitmap: ImageBitmap | null, version: number): void {
     this.resources.setMap(slot, bitmap, version)
+  }
+
+  /** Puts a texture (a baked map, in the working format) into a slot; the slot owns it from now on. */
+  setMapTexture(slot: MapSlot, texture: GPUTexture, version: number): void {
+    this.resources.setMapTexture(slot, texture, version)
   }
 
   /** Runs the stack (only stages whose inputs changed) and points the viewer at the result. */

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Theme } from '@shared/api'
+import { DEFAULT_BAKE, DEFAULT_VIEW3D, type BakeSettings, type View3dSettings } from '@shared/bake'
 import type { MapChannel, MapSlot } from '@shared/maps'
 import type { StageSpec } from '@/gpu/plan'
 import type { Palette } from '@/palette/palette'
@@ -36,7 +37,28 @@ export interface MapInfo {
   version: number
   /** Small preview (data URL). */
   thumbnail: string | null
+  /** Baked from the model (kept when another texture opens; the model's UVs place it). */
+  baked?: boolean
 }
+
+/** Summary of the loaded 3D model (its data lives in the engine). */
+export interface ModelInfo {
+  name: string
+  /** Full path on disk, when known (textures it refers to are looked up next to it). */
+  path?: string
+  triangles: number
+  vertices: number
+  uvSets: number
+  materials: { name: string; triangles: number; texture: string | null }[]
+  warnings: string[]
+  /** Bumped on every load. */
+  version: number
+}
+
+/** What the 3D view puts on the model: the result (as the viewer shows it), the source, or a map. */
+export type View3dShow = 'result' | 'source' | MapSlot
+
+export type BakeJob = { status: 'running'; progress: number; label: string } | { status: 'done'; label: string }
 
 export type GpuState =
   | { status: 'loading' }
@@ -93,6 +115,15 @@ interface AppState extends Doc {
   paletteJobs: Record<string, PaletteJob>
   /** Imported maps by slot. They belong to the loaded texture, not to the (undoable) document. */
   maps: Partial<Record<MapSlot, MapInfo>>
+  model: ModelInfo | null
+  /** Material (texture set) the open texture belongs to: drawn with it in 3D and baked into. */
+  modelMaterial: number
+  /** UV set textures and bakes use. */
+  modelUvSet: number
+  view3d: View3dSettings
+  view3dShow: View3dShow
+  bake: BakeSettings
+  bakeJob: BakeJob | null
 
   past: Doc[]
   future: Doc[]
@@ -128,6 +159,13 @@ interface AppState extends Doc {
   setMap(slot: MapSlot, map: MapInfo | null): void
   setMapChannel(slot: MapSlot, channel: MapChannel): void
   clearMaps(): void
+  setModel(model: Omit<ModelInfo, 'version'> | null, material?: number): void
+  setModelMaterial(material: number): void
+  setModelUvSet(uvSet: number): void
+  setView3d(patch: Partial<View3dSettings>): void
+  setView3dShow(show: View3dShow): void
+  setBake(patch: Partial<BakeSettings>): void
+  setBakeJob(job: BakeJob | null): void
 
   /**
    * Applies an undoable change. `coalesce` merges rapid edits with the same key into one step;
@@ -185,6 +223,13 @@ export const useApp = create<AppState>()((set, get) => ({
   picking: false,
   paletteJobs: {},
   maps: {},
+  model: null,
+  modelMaterial: 0,
+  modelUvSet: 0,
+  view3d: DEFAULT_VIEW3D,
+  view3dShow: 'result',
+  bake: DEFAULT_BAKE,
+  bakeJob: null,
   past: [],
   future: [],
   lastEdit: null,
@@ -274,6 +319,16 @@ export const useApp = create<AppState>()((set, get) => ({
     if (map) set({ maps: { ...get().maps, [slot]: { ...map, channel } } })
   },
   clearMaps: () => set({ maps: {} }),
+  setModel: (model, material = 0) => {
+    const version = (get().model?.version ?? 0) + 1
+    set({ model: model && { ...model, version }, modelMaterial: material, modelUvSet: 0, bakeJob: null })
+  },
+  setModelMaterial: (modelMaterial) => set({ modelMaterial }),
+  setModelUvSet: (modelUvSet) => set({ modelUvSet }),
+  setView3d: (patch) => set({ view3d: { ...get().view3d, ...patch } }),
+  setView3dShow: (view3dShow) => set({ view3dShow }),
+  setBake: (patch) => set({ bake: { ...get().bake, ...patch } }),
+  setBakeJob: (bakeJob) => set({ bakeJob }),
 
   edit: (change, opts = {}) => {
     const s = get()

@@ -26,7 +26,7 @@ export function MapsPanel() {
         </div>
         {loaded > 0 && (
           <div className="mt-2 flex justify-end">
-            <Button size="sm" onClick={clearMaps}>
+            <Button size="sm" onClick={() => clearMaps()}>
               Clear all
             </Button>
           </div>

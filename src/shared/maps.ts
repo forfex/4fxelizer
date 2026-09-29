@@ -9,7 +9,8 @@ export const MAP_SLOTS = [
   { id: 'thickness', label: 'Thickness', short: 'Thickness', hint: 'Bright where the model is thick.' },
   { id: 'height', label: 'Height', short: 'Height', hint: 'Bright where the surface is high.' },
   { id: 'roughness', label: 'Roughness', short: 'Roughness', hint: 'Bright where the surface is rough.' },
-  { id: 'metallic', label: 'Metallic', short: 'Metallic', hint: 'Bright where the surface is metal.' }
+  { id: 'metallic', label: 'Metallic', short: 'Metallic', hint: 'Bright where the surface is metal.' },
+  { id: 'up', label: 'Up-facing', short: 'Up', hint: 'Bright where the surface faces up: where dust, snow or moss settles.' }
 ] as const
 
 export type MapSlot = (typeof MAP_SLOTS)[number]['id']
@@ -44,7 +45,8 @@ const SUFFIXES: [string[], MapAssignment[]][] = [
   [['thickness', 'thick'], [{ slot: 'thickness', channel: 'luma' }]],
   [['height', 'heightmap', 'disp', 'displacement', 'bump'], [{ slot: 'height', channel: 'luma' }]],
   [['roughness', 'rough', 'rgh'], [{ slot: 'roughness', channel: 'luma' }]],
-  [['metallic', 'metalness', 'metal', 'mtl'], [{ slot: 'metallic', channel: 'luma' }]]
+  [['metallic', 'metalness', 'metal', 'mtl'], [{ slot: 'metallic', channel: 'luma' }]],
+  [['upfacing'], [{ slot: 'up', channel: 'luma' }]]
 ]
 
 /** Suffixes of color textures, dropped when matching a texture with its maps. */

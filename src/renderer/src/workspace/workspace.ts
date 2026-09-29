@@ -23,7 +23,9 @@ export const PANELS: PanelDef[] = [
   { id: 'stack', title: 'Stack', minWidth: 240 },
   { id: 'palettes', title: 'Palettes', minWidth: 220 },
   { id: 'generate', title: 'Generate', minWidth: 220 },
-  { id: 'maps', title: 'Maps', minWidth: 240 }
+  { id: 'maps', title: 'Maps', minWidth: 240 },
+  { id: 'view3d', title: '3D view', minWidth: 240 },
+  { id: 'bake', title: 'Bake', minWidth: 240 }
 ]
 
 interface BuiltinWorkspace {
@@ -82,6 +84,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'palettes', VIEWER, 'right', 300)
       addTool(api, 'generate', 'palettes', 'below', 330)
       addTool(api, 'maps', 'generate', 'within')
+      addTool(api, 'bake', 'generate', 'within')
     }
   },
   {
@@ -94,6 +97,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'palettes', 'stack', 'below')
       addTool(api, 'generate', 'palettes', 'within')
       addTool(api, 'maps', 'palettes', 'within')
+      addTool(api, 'bake', 'palettes', 'within')
     }
   },
   {
@@ -105,7 +109,22 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'stack', VIEWER, 'left', 300)
       addTool(api, 'generate', 'stack', 'within')
       addTool(api, 'maps', 'stack', 'within')
+      addTool(api, 'bake', 'stack', 'within')
       addTool(api, 'palettes', VIEWER, 'right', 400)
+    }
+  },
+  {
+    id: '3d',
+    name: '3D',
+    hint: 'The 3D view beside the texture, with the bake and maps panels.',
+    build(api) {
+      addViewer(api)
+      addTool(api, 'stack', VIEWER, 'left', 300)
+      addTool(api, 'palettes', 'stack', 'within')
+      addTool(api, 'view3d', VIEWER, 'right', Math.max(api.width * 0.35, 320))
+      addTool(api, 'bake', 'view3d', 'right', 300)
+      addTool(api, 'maps', 'bake', 'below')
+      addTool(api, 'generate', 'maps', 'within')
     }
   },
   {
@@ -122,6 +141,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       float('palettes', Math.max(width - 312, 344), 12, 300, 330)
       float('generate', Math.max(width - 312, 344), 356, 300, 330)
       addTool(api, 'maps', 'generate', 'within')
+      addTool(api, 'bake', 'generate', 'within')
     }
   }
 ]
@@ -284,6 +304,23 @@ export function deleteWorkspace(name: string): void {
 
 export function isPanelOpen(id: string): boolean {
   return !!api?.getPanel(id)
+}
+
+/**
+ * Brings a tool panel to the front, opening it if it's closed. The 3D view opens beside the viewer;
+ * other panels open like togglePanel places them.
+ */
+export function showPanel(id: string): void {
+  if (!api) return
+  const panel = api.getPanel(id)
+  if (panel) {
+    panel.api.setActive()
+    return
+  }
+  if (id === 'view3d' && api.getPanel(VIEWER)?.api.location.type === 'grid') {
+    addTool(api, id, VIEWER, 'right', Math.max(api.width * 0.35, 320))
+    api.getPanel(id)?.api.setActive()
+  } else togglePanel(id)
 }
 
 /** Shows a closed tool panel (docked to the right of the viewer) or closes an open one. */

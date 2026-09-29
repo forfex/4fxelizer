@@ -17,7 +17,9 @@ describe('settings', () => {
       psxCheck: false,
       layout: null,
       workspace: 'essentials',
-      workspaces: []
+      workspaces: [],
+      view3d: DEFAULT_SETTINGS.view3d,
+      bake: DEFAULT_SETTINGS.bake
     })
     expect(normalizeSettings({ exportFormat: 'tiff' }).exportFormat).toBe('png-indexed')
     for (const f of ['tga-indexed', 'tga-rgba', 'bmp-indexed', 'bmp-rgba']) expect(normalizeSettings({ exportFormat: f }).exportFormat).toBe(f)

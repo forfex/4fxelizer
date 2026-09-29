@@ -1,5 +1,6 @@
 // Contract between the preload bridge (window.fx) and the renderer.
 
+import { normalizeBake, normalizeView3d, DEFAULT_BAKE, DEFAULT_VIEW3D, type BakeSettings, type View3dSettings } from './bake'
 import type { MenuRole } from './menu'
 
 export interface FileFilter {
@@ -42,6 +43,10 @@ export interface UserSettings {
   workspace: string
   /** Workspaces the user saved (Workspace › Save workspace as…). */
   workspaces: SavedWorkspace[]
+  /** How the 3D view draws models (the PSX look). */
+  view3d: View3dSettings
+  /** Map baking: resolution, which maps, and their settings. */
+  bake: BakeSettings
 }
 
 export interface SavedWorkspace {
@@ -94,7 +99,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
   psxCheck: false,
   layout: null,
   workspace: 'essentials',
-  workspaces: []
+  workspaces: [],
+  view3d: DEFAULT_VIEW3D,
+  bake: DEFAULT_BAKE
 }
 
 const isObject = (v: unknown): v is object => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -125,7 +132,9 @@ export function normalizeSettings(raw: unknown): UserSettings {
     psxCheck: bool('psxCheck'),
     layout: isObject(r.layout) ? r.layout : null,
     workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace.trim() : DEFAULT_SETTINGS.workspace,
-    workspaces: normalizeWorkspaces(r.workspaces)
+    workspaces: normalizeWorkspaces(r.workspaces),
+    view3d: normalizeView3d(r.view3d),
+    bake: normalizeBake(r.bake)
   }
 }
 

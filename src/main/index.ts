@@ -11,6 +11,9 @@ import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
 import { flushSettings, getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
+
+// FXELIZER_USER_DATA=<dir>: keep settings and presets there (automated runs leave the real ones alone).
+if (process.env.FXELIZER_USER_DATA) app.setPath('userData', resolve(process.env.FXELIZER_USER_DATA))
 const gpuFlags = applyGpuFlags()
 
 // `--gpu-report[=path]` (or FXELIZER_GPU_REPORT=1|path): open a hidden window, collect WebGPU

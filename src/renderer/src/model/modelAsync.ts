@@ -24,6 +24,15 @@ function request(message: Request, transfer: Transferable[] = []): Promise<Model
       if ('error' in e.data) job.reject(new Error(e.data.error))
       else job.resolve(e.data)
     }
+    // A worker that fails to start (or crashes) fails every waiting job; the next request starts a new one.
+    worker.onerror = (e: ErrorEvent) => {
+      e.preventDefault()
+      const error = new Error(`The model worker failed: ${e.message || 'unknown error'}`)
+      for (const job of pending.values()) job.reject(error)
+      pending.clear()
+      worker?.terminate()
+      worker = null
+    }
   }
   return new Promise((resolve, reject) => {
     const id = ++nextId

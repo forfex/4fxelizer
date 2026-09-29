@@ -102,6 +102,13 @@ export class GpuResources {
     if (bitmap) this.maps.set(slot, { texture: uploadBitmap(this.device, bitmap, `map ${slot}`), version })
   }
 
+  /** Puts an existing texture into a slot (baked maps); the slot owns it and frees it when replaced. */
+  setMapTexture(slot: MapSlot, texture: GPUTexture, version: number): void {
+    const old = this.maps.get(slot)
+    if (old && old.texture !== texture) old.texture.destroy()
+    this.maps.set(slot, { texture, version })
+  }
+
   /** Which channel of each map is read (packed maps such as ORM). */
   setMapChannels(channels: Partial<Record<MapSlot, MapChannel>>): void {
     this.mapChannels = channels

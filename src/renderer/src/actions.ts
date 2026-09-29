@@ -1,5 +1,6 @@
 import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme } from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
+import { isModelFile } from '@shared/model'
 import { encodePattern, patternFromRgba } from '@/dither/customPattern'
 import { getEngine } from '@/engine'
 import type { DitherParams } from '@/gpu/passes/dither'
@@ -11,9 +12,10 @@ import { psxStats, type PsxStats } from '@/image/psx'
 import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
 import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
+import { loadModelFile, openModel } from '@/modelActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
 import { parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
-import { useApp } from '@/store'
+import { useApp, type MapInfo } from '@/store'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -22,7 +24,8 @@ const PALETTE_FILTERS: FileFilter[] = [{ name: 'Palettes', extensions: PALETTE_E
 
 /**
  * Opens a texture. Its maps (AO, cavity, … named like it, e.g. rock_ao.png next to rock.png) are
- * loaded too when the file's path is known; the previous texture's maps are dropped.
+ * loaded too when the file's path is known; the previous texture's maps are dropped (maps baked
+ * from the model stay: they belong to the model's UVs).
  */
 export async function loadImageFile(name: string, bytes: Uint8Array, path?: string): Promise<void> {
   const engine = getEngine()
@@ -33,7 +36,7 @@ export async function loadImageFile(name: string, bytes: Uint8Array, path?: stri
     engine.loadBitmap(bitmap)
     setImage({ name, width: bitmap.width, height: bitmap.height })
     bitmap.close()
-    clearMaps()
+    clearMaps({ keepBaked: true })
     const maps = path ? await window.fx.findMaps(path).catch(() => []) : []
     const loaded = maps.length ? await importMapFiles(maps, { quiet: true }) : []
     setMessage({ kind: 'info', text: loaded.length ? `Loaded ${name} with its ${mapList(loaded)} maps` : `Loaded ${name}` })
@@ -50,13 +53,17 @@ export async function openImage(): Promise<void> {
 const extensionOf = (name: string): string => /\.([^.]+)$/.exec(name)?.[1]?.toLowerCase() ?? ''
 
 /**
- * Dropped files: presets load, palette files become palettes, images open as the texture. Images
- * named like maps (rock_ao.png) fill map slots instead when a texture is open or comes with them.
+ * Dropped files: models open in the 3D view, presets load, palette files become palettes, images
+ * open as the texture. Images named like maps (rock_ao.png) fill map slots instead when a texture
+ * is open or comes with them.
  */
 export async function openDroppedFiles(files: OpenedFile[]): Promise<void> {
   const images: OpenedFile[] = []
+  const model = files.find((f) => isModelFile(f.name))
+  if (model) await loadModelFile(model.name, model.bytes, model.path)
   for (const file of files) {
     const ext = extensionOf(file.name)
+    if (file === model || isModelFile(file.name)) continue
     if (ext === PRESET_EXTENSION) loadPresetJson(new TextDecoder().decode(file.bytes), file.name)
     else if (PALETTE_EXTENSIONS.includes(ext) && ext !== 'txt') importPaletteBytes(file.name, file.bytes)
     else images.push(file)
@@ -187,10 +194,18 @@ export function clearMap(slot: MapSlot): void {
   useApp.getState().setMap(slot, null)
 }
 
-export function clearMaps(): void {
-  for (const slot of Object.keys(useApp.getState().maps) as MapSlot[]) getEngine()?.loadMap(slot, null, ++mapVersion)
-  useApp.getState().clearMaps()
+/** Removes the loaded maps (all, or all but the ones baked from the model). */
+export function clearMaps(opts: { keepBaked?: boolean; onlyBaked?: boolean } = {}): void {
+  const { maps, setMap } = useApp.getState()
+  for (const [slot, map] of Object.entries(maps) as [MapSlot, MapInfo][]) {
+    if ((opts.keepBaked && map.baked) || (opts.onlyBaked && !map.baked)) continue
+    getEngine()?.loadMap(slot, null, ++mapVersion)
+    setMap(slot, null)
+  }
 }
+
+/** A new, unique map version (cached stages reading a map re-run when it changes). */
+export const nextMapVersion = (): number => ++mapVersion
 
 export type { ExportFormat }
 
@@ -486,6 +501,7 @@ export function runMenuCommand(command: MenuCommand): void {
   const app = useApp.getState()
   switch (command) {
     case 'open': return void openImage()
+    case 'open-model': return void openModel()
     case 'export': return app.image ? app.setExportOpen(true) : undefined
     case 'import-palette': return void importPalette()
     case 'presets': return app.setPresetsOpen(true)
