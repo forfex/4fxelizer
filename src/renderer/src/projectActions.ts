@@ -250,7 +250,8 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
   if (project.model) {
     const f = await read(project.model.file)
     if (f) await loadModelFile(f.name, f.bytes, f.path, { restore: { material: project.model.material, uvSet: project.model.uvSet } })
-    if (f && project.model.liveReload === false) useApp.getState().setModelLiveReload(false)
+    // Set both ways: the same model already open keeps its switch through setModel.
+    if (f) useApp.getState().setModelLiveReload(project.model.liveReload !== false)
     if (!f || useApp.getState().model?.path !== f.path) {
       missing.push(project.model.name)
       closeModel()
