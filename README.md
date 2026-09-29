@@ -40,15 +40,21 @@ Everything runs on your GPU, so changes show up instantly.
 
 ## Gallery
 
-One source texture through the built-in presets:
+One texture through the seven built-in presets and a PICO-8 stack:
 
-| Source | PSX 8bpp | PSX 4bpp | N64 |
-|:--:|:--:|:--:|:--:|
-| <img src="site/images/gallery-source.png" width="200"> | <img src="site/images/gallery-psx-8bpp.png" width="200"> | <img src="site/images/gallery-psx-4bpp.png" width="200"> | <img src="site/images/gallery-n64.png" width="200"> |
-
-| NES-ish | Game Boy | Crunchy |
+| Source\* | PSX 8bpp | PSX 4bpp |
 |:--:|:--:|:--:|
-| <img src="site/images/gallery-nes.png" width="200"> | <img src="site/images/gallery-gameboy.png" width="200"> | <img src="site/images/gallery-crunchy.png" width="200"> |
+| <img src="site/images/gallery-source.png" width="200"> | <img src="site/images/gallery-psx-8bpp.png" width="200"> | <img src="site/images/gallery-psx-4bpp.png" width="200"> |
+
+| PSX 15-bit | N64 | NES-ish |
+|:--:|:--:|:--:|
+| <img src="site/images/gallery-psx-15-bit.png" width="200"> | <img src="site/images/gallery-n64.png" width="200"> | <img src="site/images/gallery-nes.png" width="200"> |
+
+| Game Boy | Crunchy | PICO-8 |
+|:--:|:--:|:--:|
+| <img src="site/images/gallery-game-boy.png" width="200"> | <img src="site/images/gallery-crunchy.png" width="200"> | <img src="site/images/gallery-pico-8.png" width="200"> |
+
+\* Texture: [PavingStones116](https://ambientcg.com/a/PavingStones116) by ambientCG (CC0).
 
 ## Install
 

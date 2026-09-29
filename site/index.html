@@ -127,12 +127,13 @@ h2{margin:8px 0 10px;font:700 clamp(28px,4vw,38px)/1.1 var(--font-display);lette
 
 /* Gallery: each result in a sunken well, the preset name on an LCD strip. */
 /* Rows are centered, so a short last row sits in the middle. */
-.gallery{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;--cols:4}
+.gallery{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;--cols:3}
 .gallery figure{flex:0 0 calc((100% - (var(--cols) - 1) * 16px) / var(--cols));min-width:0;margin:0;padding:6px;background:var(--fx-well);border:1px solid var(--fx-edge);border-radius:var(--fx-radius-md);box-shadow:var(--bevel-sunken)}
 .gallery img{display:block;width:100%;aspect-ratio:1;object-fit:cover;image-rendering:pixelated;border-radius:2px}
 .gallery figcaption{display:flex;justify-content:space-between;gap:8px;margin-top:6px;padding:4px 8px;background:var(--fx-lcd-bg);border-radius:2px;
   font:400 12px/18px var(--font-mono);color:var(--fx-lcd-text);text-shadow:var(--lcd-glow)}
 .gallery figcaption span{color:var(--fx-text-dim);text-shadow:none}
+.credit{margin:16px 0 0;font-size:13px;color:var(--fx-text-dim);text-align:center}
 
 /* Steps */
 .steps{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:14px}
@@ -219,17 +220,20 @@ footer .logo{margin-right:auto;font-size:14px}
 
 <section id="gallery"><div class="wrap">
   <div class="label">Gallery</div>
-  <h2>One texture, six presets</h2>
-  <p class="sub">The same source run through the built-in presets.</p>
+  <h2>One texture, eight looks</h2>
+  <p class="sub">The same source through the seven built-in presets and a PICO-8 stack.</p>
   <div class="gallery">
-    <figure><img src="images/gallery-source.png" alt="Source texture: mossy bricks" loading="lazy"><figcaption>Source<span>683²</span></figcaption></figure>
+    <figure><img src="images/gallery-source.png" alt="Source texture: weathered paving stones" loading="lazy"><figcaption>Source*<span>1024²</span></figcaption></figure>
     <figure><img src="images/gallery-psx-8bpp.png" alt="PSX 8bpp preset" loading="lazy"><figcaption>PSX 8bpp<span>256 col</span></figcaption></figure>
     <figure><img src="images/gallery-psx-4bpp.png" alt="PSX 4bpp preset" loading="lazy"><figcaption>PSX 4bpp<span>16 col</span></figcaption></figure>
+    <figure><img src="images/gallery-psx-15-bit.png" alt="PSX 15-bit direct preset" loading="lazy"><figcaption>PSX 15-bit<span>direct</span></figcaption></figure>
     <figure><img src="images/gallery-n64.png" alt="N64 preset" loading="lazy"><figcaption>N64<span>filtered</span></figcaption></figure>
     <figure><img src="images/gallery-nes.png" alt="NES-ish preset" loading="lazy"><figcaption>NES-ish<span>NES</span></figcaption></figure>
-    <figure><img src="images/gallery-gameboy.png" alt="Game Boy preset" loading="lazy"><figcaption>Game Boy<span>4 col</span></figcaption></figure>
-    <figure><img src="images/gallery-crunchy.png" alt="Crunchy preset" loading="lazy"><figcaption>Crunchy<span>dither</span></figcaption></figure>
+    <figure><img src="images/gallery-game-boy.png" alt="Game Boy preset" loading="lazy"><figcaption>Game Boy<span>4 col</span></figcaption></figure>
+    <figure><img src="images/gallery-crunchy.png" alt="Crunchy preset" loading="lazy"><figcaption>Crunchy<span>8 col</span></figcaption></figure>
+    <figure><img src="images/gallery-pico-8.png" alt="PICO-8 palette with blue-noise dither" loading="lazy"><figcaption>PICO-8<span>16 col</span></figcaption></figure>
   </div>
+  <p class="credit">* Texture: <a href="https://ambientcg.com/a/PavingStones116">PavingStones116</a> by ambientCG (CC0).</p>
 </div></section>
 
 <section id="start"><div class="wrap">
