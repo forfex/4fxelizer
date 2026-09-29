@@ -25,6 +25,7 @@ import { MENU_MARK_CLASS } from '../ui/menu'
 import { Lcd, Led } from '../ui/retro'
 import { Select } from '../ui/select'
 import { Slider } from '../ui/slider'
+import { UpdateAction, UpdateStatus } from '../UpdateDialog'
 
 export function InterfaceSection() {
   const { uiScale } = useSavedSettings()
@@ -49,8 +50,8 @@ export function ResetSection() {
   }, [confirming])
 
   const restore = (): void => {
-    const { wheel, keybinds, gpu, uiScale, invertZoom, theme, liveReload } = DEFAULT_SETTINGS
-    saveSettings({ wheel, keybinds, gpu, uiScale, invertZoom })
+    const { wheel, keybinds, gpu, uiScale, invertZoom, theme, liveReload, updates } = DEFAULT_SETTINGS
+    saveSettings({ wheel, keybinds, gpu, uiScale, invertZoom, updates })
     useApp.getState().setTheme(theme)
     useApp.getState().setLiveReload(liveReload)
     setConfirming(false)
@@ -62,7 +63,7 @@ export function ResetSection() {
         <Button onClick={() => window.fx.showUserDataFolder().then(() => setError(''), (e: Error) => setError(e.message))}>Show settings folder</Button>
         {error && <span className="text-led-error">{error}</span>}
       </Field>
-      <Field label="Defaults" hint="Theme, scale, mouse, viewer, live reload, shortcut and GPU settings. Panel layouts, workspaces and presets stay as they are.">
+      <Field label="Defaults" hint="Theme, scale, mouse, viewer, live reload, update, shortcut and GPU settings. Panel layouts, workspaces and presets stay as they are.">
         <Button onClick={() => (confirming ? restore() : setConfirming(true))} aria-pressed={confirming}>
           {confirming ? 'Click again to restore' : 'Restore default settings'}
         </Button>
@@ -184,6 +185,33 @@ export function FilesSection() {
         hint="When the open texture, its maps or the model are saved from another app, load them again, keeping the stack, the zoom and the 3D camera."
       />
     </Field>
+  )
+}
+
+export function UpdatesSection() {
+  const { updates } = useSavedSettings()
+  return (
+    <>
+      <Field label="Version" hint="New versions come from the app's GitHub releases.">
+        <UpdateStatus />
+        <UpdateAction />
+      </Field>
+      <Field label="On launch">
+        <Checkbox
+          checked={updates.checkOnLaunch}
+          onCheckedChange={(checkOnLaunch) => saveSettings({ updates: { ...updates, checkOnLaunch } })}
+          label="Check for updates"
+          hint="When a new version is out, ask whether to install it."
+        />
+        <Checkbox
+          checked={updates.auto}
+          disabled={!updates.checkOnLaunch}
+          onCheckedChange={(auto) => saveSettings({ updates: { ...updates, auto } })}
+          label="Update automatically"
+          hint="Download a new version at launch and restart into it without asking (Windows installer and Linux AppImage; other builds still ask). Unsaved project changes are asked about first."
+        />
+      </Field>
+    </>
   )
 }
 

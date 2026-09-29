@@ -121,6 +121,8 @@ export interface AppState extends Doc {
   cursor: { x: number; y: number } | null
   message: Message | null
   diagnosticsOpen: boolean
+  /** The update window (a new version found at startup, or Help › Check for Updates). */
+  updateOpen: boolean
   settingsOpen: boolean
   exportOpen: boolean
   presetsOpen: boolean
@@ -200,6 +202,7 @@ export interface AppState extends Doc {
   setCursor(cursor: { x: number; y: number } | null): void
   setMessage(message: Message | null): void
   setDiagnosticsOpen(open: boolean): void
+  setUpdateOpen(open: boolean): void
   setSettingsOpen(open: boolean): void
   setExportOpen(open: boolean): void
   setPresetsOpen(open: boolean): void
@@ -332,6 +335,7 @@ export const useApp = create<AppState>()((set, get) => ({
   cursor: null,
   message: null,
   diagnosticsOpen: false,
+  updateOpen: false,
   settingsOpen: false,
   exportOpen: false,
   presetsOpen: false,
@@ -466,6 +470,7 @@ export const useApp = create<AppState>()((set, get) => ({
   setCursor: (cursor) => set({ cursor }),
   setMessage: (message) => set({ message }),
   setDiagnosticsOpen: (diagnosticsOpen) => set({ diagnosticsOpen }),
+  setUpdateOpen: (updateOpen) => set({ updateOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
   setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
