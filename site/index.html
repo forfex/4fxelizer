@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Martian+Mono:wght@400;500&family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
 <script>
   // The saved theme, applied before the page paints.
-  try { const t = localStorage.getItem('fx-theme'); if (['dark', 'night', 'light', 'matrix', 'retro'].includes(t)) document.documentElement.dataset.theme = t } catch {}
+  try { const t = localStorage.getItem('fx-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t } catch {}
 </script>
 <style>
 /* Tokens from the 4FXELIZER design system: the same names and values as the app. */
@@ -34,15 +34,7 @@
   --font-ui:Rubik,"Segoe UI",system-ui,-apple-system,sans-serif;
   --font-mono:"Martian Mono","Cascadia Mono","SF Mono",Menlo,Consolas,monospace;
   --lcd-glow:0 0 6px color-mix(in srgb,var(--fx-lcd-text) 55%,transparent);
-  --nav-bg:var(--fx-bg);--nav-text:var(--fx-text);--nav-dim:var(--fx-text-dim);
   color-scheme:dark;
-}
-/* Night: neutral greyscale. Magenta and the status LEDs are its only colors. */
-:root[data-theme="night"]{
-  --fx-bg:#090909;--fx-panel:#111111;--fx-panel-hi:#1a1a1a;--fx-well:#050505;--fx-edge:#000000;--fx-line:#272727;
-  --fx-bevel-light:#363636;--fx-bevel-dark:#000000;--fx-text:#e3e3e3;--fx-text-dim:#969696;--fx-text-faint:#606060;
-  --fx-accent:#bdbdbd;--fx-accent-hi:#dedede;--fx-accent-text:#090909;--fx-accent-soft:#2e2e2e;--fx-magenta:#ff66da;--fx-drop:#2c2c2c;
-  --fx-lcd-bg:#080808;--fx-lcd-text:#d8d8d8;--fx-hover:#2e2e2e;
 }
 /* Light: pale lilac surfaces, dark ink, a deeper purple. */
 :root[data-theme="light"]{
@@ -50,24 +42,6 @@
   --fx-bevel-light:#ffffff;--fx-bevel-dark:#b3a7c7;--fx-text:#1e1829;--fx-text-dim:#594f6d;--fx-text-faint:#978dab;
   --fx-accent:#7a3ff2;--fx-accent-hi:#8f5cff;--fx-accent-text:#ffffff;--fx-accent-soft:#e3d6ff;--fx-magenta:#d4199e;--fx-drop:#b49de0;
   --fx-led-green:#1f9d55;--fx-led-amber:#a35f00;--fx-lcd-bg:#efe7f8;--fx-lcd-text:#8a1570;--fx-hover:#eee8f6;--lcd-glow:none;
-  color-scheme:light;
-}
-/* Matrix: green phosphor on black. */
-:root[data-theme="matrix"]{
-  --fx-bg:#010603;--fx-panel:#04110a;--fx-panel-hi:#0a2213;--fx-well:#000402;--fx-edge:#000000;--fx-line:#0e3a1c;
-  --fx-bevel-light:#1a5c30;--fx-bevel-dark:#000000;--fx-text:#9dffb0;--fx-text-dim:#45b865;--fx-text-faint:#2a6e3c;
-  --fx-accent:#22ff77;--fx-accent-hi:#8dffb5;--fx-accent-text:#001a08;--fx-accent-soft:#0e3d1d;--fx-magenta:#e8ffe0;--fx-drop:#0b4a1f;
-  --fx-lcd-bg:#000803;--fx-lcd-text:#3dff7f;--fx-hover:#0f2e19;
-}
-/* Retro: the classic silver-grey desktop, navy title bar, square corners, no glow. */
-:root[data-theme="retro"]{
-  --fx-bg:#a8a8a8;--fx-panel:#c0c0c0;--fx-panel-hi:#c0c0c0;--fx-well:#ffffff;--fx-edge:#000000;--fx-line:#808080;
-  --fx-bevel-light:#ffffff;--fx-bevel-dark:#808080;--fx-text:#000000;--fx-text-dim:#404040;--fx-text-faint:#808080;
-  --fx-accent:#000080;--fx-accent-hi:#1084d0;--fx-accent-text:#ffffff;--fx-accent-soft:#a6caf0;--fx-magenta:#800080;--fx-drop:#202020;
-  --fx-led-green:#00a000;--fx-led-amber:#6b5000;--fx-lcd-bg:#ffffff;--fx-lcd-text:#000000;--fx-hover:#d4d4d4;--lcd-glow:none;
-  --fx-radius:0px;--fx-radius-md:0px;--fx-radius-lg:0px;
-  --font-display:Tahoma,Verdana,"Segoe UI",system-ui,sans-serif;--font-ui:Tahoma,Verdana,"Segoe UI",system-ui,sans-serif;
-  --nav-bg:#000080;--nav-text:#ffffff;--nav-dim:#dcdcff;
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -92,7 +66,7 @@ code{font:0.9em var(--font-mono)}
 .btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);
   background:var(--fx-panel-hi);color:var(--fx-text);box-shadow:var(--bevel-raised);font:500 15px/1 var(--font-ui);text-decoration:none;cursor:pointer;white-space:nowrap}
 .btn:hover{background:var(--fx-hover)}
-.btn:active{background:var(--fx-well);box-shadow:var(--bevel-sunken)}
+.btn:active{--a:var(--fx-well);--b:var(--fx-well);box-shadow:var(--bevel-sunken)}
 .btn.primary{background:var(--fx-accent);color:var(--fx-accent-text);font-weight:600;box-shadow:inset 1px 1px 0 var(--fx-accent-hi),var(--fx-shadow-hard)}
 .btn.primary:hover{background:var(--fx-accent-hi)}
 .btn.primary:active{transform:translate(2px,2px);box-shadow:none}
@@ -100,18 +74,20 @@ code{font:0.9em var(--font-mono)}
 .btn svg{width:14px;height:14px;flex-shrink:0}
 
 /* Navigation */
-nav{position:sticky;top:0;z-index:5;background:var(--nav-bg);border-bottom:1px solid var(--fx-edge);box-shadow:0 1px 0 var(--fx-line)}
+nav{position:sticky;top:0;z-index:5;background:var(--fx-bg);border-bottom:1px solid var(--fx-edge);box-shadow:0 1px 0 var(--fx-line)}
 nav .wrap{display:flex;align-items:center;gap:20px;height:56px}
-.logo{display:flex;align-items:center;gap:10px;margin-right:auto;color:var(--nav-text);text-decoration:none;font:700 17px/1 var(--font-display);letter-spacing:.06em}
+.logo{display:flex;align-items:center;gap:10px;margin-right:auto;color:var(--fx-text);text-decoration:none;font:700 17px/1 var(--font-display);letter-spacing:.06em}
 .logo img{width:24px;height:24px}
-.navlink{color:var(--nav-dim);text-decoration:none;font-size:14px}
-.navlink:hover{color:var(--nav-text)}
-/* Theme picker: a beveled select with a caret cell, like the app's. */
-.pick{position:relative;display:inline-flex}
-.pick select{appearance:none;height:30px;padding:0 34px 0 10px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);background:var(--fx-panel-hi);color:var(--fx-text);box-shadow:var(--bevel-raised);font:500 14px/1 var(--font-ui);cursor:pointer}
-.pick select:hover{background:var(--fx-hover)}
-.pick::after{content:'';position:absolute;top:1px;right:1px;bottom:1px;width:22px;border-left:1px solid var(--fx-edge);background:var(--fx-panel);pointer-events:none}
-.pick::before{content:'';position:absolute;z-index:1;top:50%;right:8px;margin-top:-2px;border:4px solid transparent;border-top:5px solid var(--fx-text);border-bottom:0;pointer-events:none}
+.navlink{color:var(--fx-text-dim);text-decoration:none;font-size:14px}
+.navlink:hover{color:var(--fx-text)}
+/* Theme switch: Dark | a sunken track with a beveled knob | Light. */
+.switch{display:inline-flex;align-items:center;gap:8px;padding:0;border:0;background:none;color:var(--fx-text-dim);font:500 13px/1 var(--font-ui);cursor:pointer}
+.switch .on{color:var(--fx-text)}
+.switch-track{position:relative;width:38px;height:20px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);--a:var(--fx-well);--b:var(--fx-well);box-shadow:var(--bevel-sunken)}
+.switch[aria-checked="true"] .switch-track{--a:var(--fx-accent);--b:var(--fx-accent-soft)}
+.switch-knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border:1px solid var(--fx-edge);border-radius:2px;background:var(--fx-panel-hi);box-shadow:var(--bevel-raised)}
+.switch[aria-checked="true"] .switch-knob{left:20px}
+.switch:hover .switch-knob{background:var(--fx-hover)}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* Hero */
@@ -199,15 +175,9 @@ footer .logo{margin-right:auto;font-size:14px}
   <a class="navlink" href="#gallery">Gallery</a>
   <a class="navlink" href="#start">Get started</a>
   <a class="navlink" href="https://github.com/forfex/4fxelizer">GitHub</a>
-  <label class="pick"><span class="sr-only">Theme</span>
-    <select id="theme">
-      <option value="dark">Dark</option>
-      <option value="night">Night</option>
-      <option value="light">Light</option>
-      <option value="matrix">Matrix</option>
-      <option value="retro">Retro</option>
-    </select>
-  </label>
+  <button class="switch" id="theme" type="button" role="switch" aria-checked="false" aria-label="Light theme">
+    <span data-t="dark">Dark</span><span class="switch-track d50"><span class="switch-knob"></span></span><span data-t="light">Light</span>
+  </button>
 </div></nav>
 
 <header class="hero"><div class="wrap">
@@ -321,15 +291,18 @@ footer .logo{margin-right:auto;font-size:14px}
     }
   }
 
-  // Theme picker, remembered in this browser.
-  const picker = document.getElementById('theme')
+  // Dark / Light switch, remembered in this browser.
+  const toggle = document.getElementById('theme')
   const sync = () => {
-    picker.value = document.documentElement.dataset.theme
-    document.querySelector('meta[name="theme-color"]').content = getComputedStyle(document.querySelector('nav')).backgroundColor
+    const light = document.documentElement.dataset.theme === 'light'
+    toggle.setAttribute('aria-checked', String(light))
+    toggle.querySelectorAll('[data-t]').forEach((el) => el.classList.toggle('on', el.dataset.t === (light ? 'light' : 'dark')))
+    document.querySelector('meta[name="theme-color"]').content = light ? '#e6e0ee' : '#16121e'
   }
-  picker.addEventListener('change', () => {
-    document.documentElement.dataset.theme = picker.value
-    try { localStorage.setItem('fx-theme', picker.value) } catch {}
+  toggle.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'
+    document.documentElement.dataset.theme = next
+    try { localStorage.setItem('fx-theme', next) } catch {}
     sync()
   })
   sync()
