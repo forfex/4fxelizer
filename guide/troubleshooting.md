@@ -21,8 +21,13 @@ The builds aren't code-signed yet.
 
 ## Linux
 
-The app turns on WebGPU and Vulkan by default. If it won't start, launch it with `FXELIZER_NO_GPU_FLAGS=1` to use
-Electron's defaults instead.
+The app turns on WebGPU (`--enable-unsafe-webgpu`) by default. If it won't start, launch it with
+`FXELIZER_NO_GPU_FLAGS=1` to use Electron's defaults instead.
+
+**Without a real GPU** (virtual machines), the app says WebGPU isn't available. For testing only, Mesa's software
+Vulkan driver works, slowly (it renders on the CPU): `sudo apt install mesa-vulkan-drivers`, then
+`FXELIZER_NO_GPU_FLAGS=1 4fxelizer --enable-unsafe-webgpu --ignore-gpu-blocklist`. Some virtual GPUs (VMware's)
+also need `--disable-gpu-sandbox`; that switch turns off a security boundary, so use it only inside a test VM.
 
 ## Tested hardware
 

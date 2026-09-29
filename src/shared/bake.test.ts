@@ -31,7 +31,7 @@ describe('bake settings', () => {
 describe('3D view settings', () => {
   it('defaults to the full PSX look', () => {
     expect(normalizeView3d(null)).toEqual(DEFAULT_VIEW3D)
-    expect(DEFAULT_VIEW3D).toMatchObject({ snap: true, affine: true, filter: false })
+    expect(DEFAULT_VIEW3D).toMatchObject({ snap: false, affine: false, filter: false, lighting: true, dither: false, resolution: 'full' })
   })
 
   it('keeps valid values', () => {

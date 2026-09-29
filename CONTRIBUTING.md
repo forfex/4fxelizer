@@ -32,8 +32,9 @@ This runs headless: it collects adapter info and limits, runs a real upload → 
 `4fxelizer-gpu-report.json` and exits 0 on success. A packaged app accepts the same flag
 (`4fxelizer --gpu-report=path.json`).
 
-On Linux the app adds `--enable-unsafe-webgpu --enable-features=Vulkan`. Launch with `FXELIZER_NO_GPU_FLAGS=1` to
-compare against the defaults.
+On Linux the app adds `--enable-unsafe-webgpu`. Launch with `FXELIZER_NO_GPU_FLAGS=1` to compare against the
+defaults. (It used to add `--enable-features=Vulkan` too, which crashed the GPU process under Wayland.) For testing
+on a machine without a real GPU, see [Troubleshooting › Linux](guide/troubleshooting.md#linux).
 
 ## Project layout
 

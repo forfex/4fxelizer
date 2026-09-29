@@ -18,7 +18,7 @@ npm run dist         # installer for the current OS (dist:win / dist:mac / dist:
 
 Automated runs: `FXELIZER_USER_DATA=<dir>` keeps settings and presets there instead of the real profile; `npx electron-vite dev --remoteDebuggingPort 9223` opens a CDP port, and dev builds expose `window.__fx` (see "Renderer data flow").
 
-WebGPU check on a machine: `npm run build`, then `npx electron . --gpu-report`. It runs headless (upload → compute → readback smoke test), writes `4fxelizer-gpu-report.json` and exits 0 on success. `FXELIZER_NO_GPU_FLAGS=1` disables the Linux WebGPU/Vulkan switches in `src/main/gpuFlags.ts`.
+WebGPU check on a machine: `npm run build`, then `npx electron . --gpu-report`. It runs headless (upload → compute → readback smoke test), writes `4fxelizer-gpu-report.json` and exits 0 on success. `FXELIZER_NO_GPU_FLAGS=1` disables the Linux WebGPU switch (`--enable-unsafe-webgpu`) in `src/main/gpuFlags.ts`.
 
 ## Architecture
 

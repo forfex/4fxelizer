@@ -96,7 +96,7 @@ export interface View3dSettings {
   dither: boolean
 }
 
-export const DEFAULT_VIEW3D: View3dSettings = { snap: true, affine: true, resolution: '240', filter: false, lighting: true, dither: true }
+export const DEFAULT_VIEW3D: View3dSettings = { snap: false, affine: false, resolution: 'full', filter: false, lighting: true, dither: false }
 
 export function normalizeView3d(raw: unknown): View3dSettings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
