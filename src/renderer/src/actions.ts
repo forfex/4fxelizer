@@ -743,6 +743,9 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'look-custom':
       return app.setView3d({ look: command.slice('look-'.length) as View3dLookChoice })
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
+    case 'check-updates':
+      app.setUpdateOpen(true)
+      return window.fx.checkForUpdates()
     case 'settings': return app.setSettingsOpen(true)
   }
 }

@@ -99,7 +99,7 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
     },
     {
       label: 'Help',
-      items: [command('GPU Diagnostics…', 'gpu-diagnostics')]
+      items: [command('GPU Diagnostics…', 'gpu-diagnostics'), separator, command('Check for Updates…', 'check-updates')]
     }
   ]
 }

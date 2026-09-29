@@ -11,7 +11,7 @@ import { Dialog, DialogContent } from '../ui/dialog'
 import { MENU_MARK_CLASS } from '../ui/menu'
 import { SCROLL_GUTTER_CLASS } from '../ui/retro'
 import { KeybindsEditor } from './Keybinds'
-import { AppearanceSection, FilesSection, GpuSection, InterfaceSection, ResetSection, ViewerSection, WheelSection } from './sections'
+import { AppearanceSection, FilesSection, GpuSection, InterfaceSection, ResetSection, UpdatesSection, ViewerSection, WheelSection } from './sections'
 
 type CategoryId = 'all' | 'general' | 'appearance' | 'mouse' | 'viewer' | 'keybinds' | 'gpu'
 
@@ -52,6 +52,13 @@ const SECTIONS: Section[] = [
     title: 'Open files',
     keywords: 'live reload watch changed disk save photoshop blender export refresh',
     render: () => <FilesSection />
+  },
+  {
+    id: 'updates',
+    category: 'general',
+    title: 'Updates',
+    keywords: 'update upgrade version new release download install automatic auto check github',
+    render: () => <UpdatesSection />
   },
   { id: 'reset', category: 'general', title: 'Settings file', keywords: 'reset defaults restore folder json', render: () => <ResetSection /> },
   { id: 'theme', category: 'appearance', title: 'Theme', keywords: 'color colour dark light night matrix retro look', render: () => <AppearanceSection /> },

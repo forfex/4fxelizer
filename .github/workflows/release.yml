@@ -72,10 +72,18 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+
+      # The short list the app's update window shows (not the release text below).
+      - name: What's new
+        run: cp WHATSNEW.md dist/WHATSNEW.md
 
       - name: Checksums
         working-directory: dist

@@ -4,6 +4,7 @@ import { normalizeBake, normalizeBakePresets, DEFAULT_BAKE, type BakePreset, typ
 import { normalizeView3d, DEFAULT_VIEW3D, VIEW3D_LOOKS, type View3dLookChoice, type View3dSettings } from './view3d'
 import type { MenuRole } from './menu'
 import type { ProjectFileRef } from './project'
+import { normalizeUpdateSettings, DEFAULT_UPDATE_SETTINGS, type UpdateSettings, type UpdateState } from './update'
 
 export interface FileFilter {
   name: string
@@ -67,6 +68,8 @@ export interface UserSettings {
   uiScale: number
   /** Wheel up zooms out in the viewer and the 3D view. */
   invertZoom: boolean
+  /** Checking for and installing new versions. */
+  updates: UpdateSettings
 }
 
 /**
@@ -174,7 +177,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   keybinds: {},
   gpu: 'auto',
   uiScale: 1,
-  invertZoom: false
+  invertZoom: false,
+  updates: DEFAULT_UPDATE_SETTINGS
 }
 
 const isObject = (v: unknown): v is object => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -248,7 +252,8 @@ export function normalizeSettings(raw: unknown): UserSettings {
     keybinds: normalizeKeybinds(r.keybinds),
     gpu: GPU_PREFERENCES.includes(r.gpu as GpuPreference) ? (r.gpu as GpuPreference) : DEFAULT_SETTINGS.gpu,
     uiScale: normalizeScale(r.uiScale),
-    invertZoom: bool('invertZoom')
+    invertZoom: bool('invertZoom'),
+    updates: normalizeUpdateSettings(r.updates)
   }
 }
 
@@ -299,7 +304,8 @@ const PLAIN_COMMANDS = [
   'toggle-grid',
   'toggle-split',
   'toggle-tile',
-  'gpu-diagnostics'
+  'gpu-diagnostics',
+  'check-updates'
 ] as const
 
 export type MenuCommand = (typeof PLAIN_COMMANDS)[number] | `theme-${Theme}` | `view-${ViewMode}` | `look-${View3dLookChoice}`
@@ -317,6 +323,8 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
 
 export interface FxApi {
   platform: string
+  /** The app's version ("1.1.1"). */
+  version: string
   /** Saved settings, read once when the window loads. */
   settings: UserSettings
   /** Stores changed settings (written to disk shortly after). */
@@ -384,6 +392,16 @@ export interface FxApi {
   showUserDataFolder(): Promise<void>
   /** Turns the menu's keyboard shortcuts off (true) while Settings records a new one, and back on. */
   suspendShortcuts(suspend: boolean): void
+  /** Where updating stands now (see UpdateState in @shared/update). */
+  getUpdateState(): Promise<UpdateState>
+  /** Called whenever the update state changes. */
+  onUpdateState(listener: (state: UpdateState) => void): () => void
+  /** Looks for a newer release on GitHub. */
+  checkForUpdates(): void
+  /** Downloads the new version (or opens its release page where the app can't update itself); the state then becomes 'ready'. */
+  installUpdate(): void
+  /** Quits and installs the downloaded update, which starts the app again. Ask about unsaved work first: main doesn't. */
+  restartToUpdate(): void
 }
 
 export const IPC = {
@@ -419,7 +437,13 @@ export const IPC = {
   titleBarOverlay: 'window:title-bar-overlay',
   relaunch: 'app:relaunch',
   userDataShow: 'app:show-user-data',
-  suspendShortcuts: 'menu:suspend-shortcuts'
+  suspendShortcuts: 'menu:suspend-shortcuts',
+  appVersion: 'app:version',
+  updateGetState: 'update:get-state',
+  updateState: 'update:state',
+  updateCheck: 'update:check',
+  updateInstall: 'update:install',
+  updateRestart: 'update:restart'
 } as const
 
 /** Colors (CSS color strings) and height (CSS px) of the native window buttons over the custom title bar. */

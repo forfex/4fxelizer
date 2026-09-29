@@ -11,6 +11,7 @@ import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
 import { flushSettings, getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
+import { checkForUpdates, currentVersion, installUpdate, prepareInstall, runInstaller, updateState } from './updater'
 import { FileWatcher } from './watch'
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
@@ -174,11 +175,13 @@ const closing = new WeakSet<BrowserWindow>()
 const hung = new WeakSet<BrowserWindow>()
 
 /**
- * Why the app is quitting ('relaunch': Settings' Restart now). A close held back for unsaved
- * changes cancels the quit, so the window remembers it and closeWindow quits once answered.
+ * Why the app is quitting ('relaunch': Settings' Restart now; 'update': installing a downloaded
+ * update). A close held back for unsaved changes cancels the quit, so the window remembers it and
+ * closeWindow quits once answered.
  */
-let quitIntent: 'quit' | 'relaunch' | null = null
-const pendingQuit = new WeakMap<BrowserWindow, 'quit' | 'relaunch' | null>()
+type QuitIntent = 'quit' | 'relaunch' | 'update'
+let quitIntent: QuitIntent | null = null
+const pendingQuit = new WeakMap<BrowserWindow, QuitIntent | null>()
 
 /**
  * Closing a window with unsaved project changes (also by quitting) is held back; the renderer
@@ -357,6 +360,23 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.gpuInfo, getGpuInfo)
 
+  ipcMain.on(IPC.appVersion, (event) => {
+    event.returnValue = currentVersion()
+  })
+  ipcMain.handle(IPC.updateGetState, () => updateState())
+  ipcMain.on(IPC.updateCheck, () => void checkForUpdates())
+  ipcMain.on(IPC.updateInstall, () => void installUpdate())
+  // The renderer already asked about unsaved work (also work that isn't in a project), so the
+  // windows close without asking again.
+  ipcMain.on(IPC.updateRestart, () =>
+    void prepareInstall().then((ok) => {
+      if (!ok) return
+      for (const win of BrowserWindow.getAllWindows()) closing.add(win)
+      quitIntent = 'update'
+      app.quit()
+    })
+  )
+
   ipcMain.on(IPC.menuRole, (event, role: MenuRole) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win && MENU_ROLES.includes(role)) runMenuRole(win, role)
@@ -450,9 +470,26 @@ function createWindow(): void {
   loadRenderer(win)
 }
 
+/** Delay after the window shows before the startup update check, so it doesn't compete with loading. */
+const UPDATE_CHECK_DELAY_MS = 3000
+
+/**
+ * The startup update check: packaged builds with it on in Settings (dev builds with
+ * FXELIZER_UPDATE_AS set); FXELIZER_NO_UPDATE_CHECK=1 turns it off for automated runs.
+ */
+function scheduleUpdateCheck(): void {
+  const enabled = (app.isPackaged || !!process.env.FXELIZER_UPDATE_AS) && !process.env.FXELIZER_NO_UPDATE_CHECK && !gpuReportPath
+  if (!enabled || !getSettings().updates.checkOnLaunch) return
+  const win = BrowserWindow.getAllWindows()[0]
+  const later = (): void => void setTimeout(() => void checkForUpdates(true), UPDATE_CHECK_DELAY_MS)
+  if (win && !win.isVisible()) win.once('show', later)
+  else later()
+}
+
 app.whenReady().then(() => {
   registerIpc()
   createWindow()
+  scheduleUpdateCheck()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -465,6 +502,7 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   flushSettings()
   if (quitIntent === 'relaunch') app.relaunch()
+  if (quitIntent === 'update') runInstaller()
 })
 
 app.on('window-all-closed', () => {
