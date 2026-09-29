@@ -1,6 +1,7 @@
 // Generates the app icon: a pixel "4" of beveled tiles on a 3x3 grid, set in a dark squircle
 // (the 4FXELIZER design system's app-icon.svg, Dark theme colors baked in).
-// Usage: node scripts/make-icon.mjs   (writes build/icon.png, build/icon.ico, site/icon.svg, site/favicon.png,
+// Usage: node scripts/make-icon.mjs   (writes build/icon.png, build/icon.ico, build/icons/<size>x<size>.png for Linux,
+// site/icon.svg, site/favicon.png,
 // src/renderer/src/assets/icon.svg for the title bar)
 import { deflateSync } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -142,6 +143,8 @@ function svg() {
 mkdirSync('build', { recursive: true })
 writeFileSync('build/icon.png', png(1024))
 writeFileSync('build/icon.ico', ico([16, 32, 48, 64, 128, 256]))
+mkdirSync('build/icons', { recursive: true })
+for (const s of [16, 24, 32, 48, 64, 128, 256, 512]) writeFileSync(`build/icons/${s}x${s}.png`, png(s))
 writeFileSync('site/favicon.png', png(64))
 writeFileSync('site/icon.svg', svg())
 mkdirSync('src/renderer/src/assets', { recursive: true })

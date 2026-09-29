@@ -33,4 +33,10 @@ linux:
     - deb
   category: Graphics
   maintainer: 4FX
+  # Icons come from build/icons/ (16–512 px, scripts/make-icon.mjs), found there automatically,
+  # so small launcher and dock icons stay sharp.
+  # The launcher is 4fxelizer.desktop with StartupWMClass=4fxelizer, from desktopName in
+  # package.json: it matches the window's WM_CLASS (X11) and app ID (Wayland), so docks match
+  # the window to the launcher and show its icon instead of a generic one.
+  syncDesktopName: true
   artifactName: ${name}-${version}-${arch}.${ext}

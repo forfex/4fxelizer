@@ -12,6 +12,7 @@
     "url": "https://github.com/forfex/4fxelizer.git"
   },
   "main": "./out/main/index.js",
+  "desktopName": "4fxelizer.desktop",
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",

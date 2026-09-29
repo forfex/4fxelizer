@@ -21,7 +21,7 @@ Target users: artists, not programmers.
 | Export | PNG (RGBA + 8-bit indexed with palette), TGA, BMP; palettes .gpl/.act/.hex; later PSX .TIM |
 
 ### Risks to verify early (Phase 0)
-- WebGPU on Linux in Electron may need `--enable-unsafe-webgpu` / Vulkan flags depending on GPU driver. Test on a real Linux box.
+- WebGPU on Linux in Electron may need `--enable-unsafe-webgpu` depending on GPU driver. `--enable-features=Vulkan` crashed the GPU process under Wayland (Ubuntu 24.04 VM) and was dropped. Still to test on a real Linux GPU.
   Fallback: run image passes as fragment shaders on WebGL2 (same algorithms, GLSL instead of WGSL).
 - macOS distribution requires code signing + notarization (Apple Developer account).
 - FBX: three.js FBXLoader supports FBX 7.x (binary/ASCII); older files go through assimpjs.

@@ -111,8 +111,14 @@ upload → compute → readback test, writes `4fxelizer-gpu-report.json`, and ex
 A packaged app accepts the same flag (`4fxelizer --gpu-report=path.json`). In the app,
 **Help › GPU Diagnostics…** shows the same report.
 
-On Linux the app adds `--enable-unsafe-webgpu --enable-features=Vulkan`. Launch with
-`FXELIZER_NO_GPU_FLAGS=1` to compare against the defaults.
+On Linux the app adds `--enable-unsafe-webgpu`. Launch with `FXELIZER_NO_GPU_FLAGS=1` to compare against the
+defaults. (It used to add `--enable-features=Vulkan` too, which crashed the GPU process under Wayland.)
+
+**Linux without a real GPU** (virtual machines): the app asks for a hardware adapter and otherwise says WebGPU
+isn't available. For testing only, Mesa's software Vulkan driver works, slowly (rendering on the CPU):
+`sudo apt install mesa-vulkan-drivers`, then
+`FXELIZER_NO_GPU_FLAGS=1 4fxelizer --enable-unsafe-webgpu --ignore-gpu-blocklist`. Some virtual GPUs (VMware's)
+also need `--disable-gpu-sandbox`; that switch turns off a security boundary, so use it only inside a test VM.
 
 | OS | Status |
 |---|---|
