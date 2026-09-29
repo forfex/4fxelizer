@@ -1,7 +1,7 @@
 // The app menu, defined once. Main builds the native menu from it (keyboard shortcuts everywhere,
 // the menu bar on macOS); the renderer draws it in the custom title bar on Windows and Linux.
 
-import { THEME_NAMES, THEMES, type MenuCommand } from './api'
+import { THEME_NAMES, THEMES, type Keybinds, type MenuCommand } from './api'
 
 /** Actions main performs itself (clipboard, window, dev tools). */
 export type MenuRole = 'cut' | 'copy' | 'paste' | 'selectAll' | 'togglefullscreen' | 'quit' | 'close' | 'reload' | 'toggleDevTools'
@@ -21,7 +21,17 @@ const command = (label: string, cmd: MenuCommand, accelerator?: string): MenuEnt
 const role = (label: string, r: MenuRole, accelerator?: string): MenuEntry => ({ kind: 'role', label, role: r, accelerator })
 const separator: MenuEntry = { kind: 'separator' }
 
-export function appMenu(platform: string, isDev: boolean): MenuSection[] {
+/** The menu with `keybinds` (the user's changed shortcuts) in place of the default accelerators. */
+export function appMenu(platform: string, isDev: boolean, keybinds: Keybinds = {}): MenuSection[] {
+  const rebind = (entry: MenuEntry): MenuEntry => {
+    if (entry.kind === 'submenu') return { ...entry, items: entry.items.map(rebind) }
+    if (entry.kind !== 'command' || keybinds[entry.command] === undefined) return entry
+    return { ...entry, accelerator: keybinds[entry.command] || undefined }
+  }
+  return defaultMenu(platform, isDev).map((section) => ({ ...section, items: section.items.map(rebind) }))
+}
+
+function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
   const isMac = platform === 'darwin'
   return [
     {
@@ -49,7 +59,9 @@ export function appMenu(platform: string, isDev: boolean): MenuSection[] {
         role('Cut', 'cut', 'CmdOrCtrl+X'),
         role('Copy', 'copy', 'CmdOrCtrl+C'),
         role('Paste', 'paste', 'CmdOrCtrl+V'),
-        role('Select All', 'selectAll', 'CmdOrCtrl+A')
+        role('Select All', 'selectAll', 'CmdOrCtrl+A'),
+        separator,
+        command('Settings…', 'settings', 'CmdOrCtrl+,')
       ]
     },
     {
