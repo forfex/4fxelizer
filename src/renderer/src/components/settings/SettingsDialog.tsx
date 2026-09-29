@@ -152,7 +152,7 @@ export function SettingsDialog() {
             })}
           </div>
         </nav>
-        <div role="tabpanel" className={cn('@container/panel flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto bg-panel p-4', SCROLL_GUTTER_CLASS['4'])}>
+        <div role="tabpanel" className={cn('@container/panel flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto bg-panel p-4', SCROLL_GUTTER_CLASS)}>
           {shown.length === 0 && <p className="text-dim">No settings match “{query.trim()}”.</p>}
           {shown.map((s, i) => {
             const heading = CATEGORIES.find((c) => c.id === s.category)!.label
