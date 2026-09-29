@@ -93,7 +93,10 @@ async function generate(paletteId: string, target: Target): Promise<void> {
     return
   }
   const settings = palette.generator
-  if (showsJob(target)) app.setPaletteJob(paletteId, { status: 'running' })
+  // Cleared when done even if another texture is shown by then (the status is per palette id).
+  const job = showsJob(target) ? { status: 'running' as const } : null
+  if (job) app.setPaletteJob(paletteId, job)
+  const ownsJob = (): boolean => !!job && useApp.getState().paletteJobs[paletteId] === job
   try {
     const samples = await Promise.all(found.inputs.map((i) => engine.samplePixels(i.key, 512, i.textureId)))
     const pixels = new Uint8Array(samples.reduce((n, s) => n + s.data.length, 0))
@@ -105,12 +108,15 @@ async function generate(paletteId: string, target: Target): Promise<void> {
     const locked = palette.colors.filter((c) => c.locked).map((c) => c.hex)
     const colors = await generatePaletteAsync(pixels, { ...settings, locked })
     const current = paletteFor(paletteId, target)
-    if (!current) return
+    if (!current) {
+      if (ownsJob()) useApp.getState().setPaletteJob(paletteId, null)
+      return
+    }
     const merged = mergeGenerated(current.colors, colors, settings.count)
     useApp.getState().setGeneratedColors(target === 'all' ? null : target.textureId, paletteId, merged, found.key)
-    if (showsJob(target)) useApp.getState().setPaletteJob(paletteId, null)
+    if (ownsJob() || showsJob(target)) useApp.getState().setPaletteJob(paletteId, null)
   } catch (e) {
-    if (showsJob(target)) useApp.getState().setPaletteJob(paletteId, { status: 'error', message: errorText(e) })
+    if (ownsJob() || showsJob(target)) useApp.getState().setPaletteJob(paletteId, showsJob(target) ? { status: 'error', message: errorText(e) } : null)
   }
 }
 

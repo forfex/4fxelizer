@@ -90,6 +90,10 @@ export async function reloadImageFile(file: OpenedFile, textureId?: string): Pro
   if (!engine || !id) return
   try {
     const bitmap = await decodeImage(file.name, file.bytes)
+    if (!useApp.getState().textures.some((t) => t.id === id)) {
+      bitmap.close() // closed while it was read
+      return
+    }
     engine.loadBitmap(bitmap, id)
     useApp.getState().setImage({ name: file.name, width: bitmap.width, height: bitmap.height, path: file.path }, { keepView: true, textureId: id })
     useApp.getState().updateTexture(id, { thumbnail: thumbnail(bitmap, TEXTURE_THUMBNAIL) })

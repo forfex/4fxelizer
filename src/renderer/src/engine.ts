@@ -200,13 +200,14 @@ export class Engine {
    * `version` must be new for every image.
    */
   loadMap(slot: MapSlot, bitmap: ImageBitmap | null, version: number, textureId?: string): void {
-    const owner = textureId ? this.slotFor(textureId) : this.active
+    // A texture closed meanwhile gets no slot back.
+    const owner = textureId ? this.slots.get(textureId) : this.active
     owner?.resources.setMap(slot, bitmap, version)
   }
 
   /** Puts a texture (a baked map, in the working format) into a map slot; the slot owns it from now on. */
   setMapTexture(slot: MapSlot, texture: GPUTexture, version: number, textureId?: string): void {
-    const owner = textureId ? this.slotFor(textureId) : this.active
+    const owner = textureId ? this.slots.get(textureId) : this.active
     if (owner) owner.resources.setMapTexture(slot, texture, version)
     else texture.destroy()
   }

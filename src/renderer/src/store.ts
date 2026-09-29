@@ -289,6 +289,8 @@ function showTexture(s: AppState, id: string | null, docs: Docs, textures: Textu
     ...doc,
     previewUid: null,
     maskUid: null,
+    // Stacks share stage ids: a drag on the next texture is a step of its own.
+    lastEdit: null,
     selectedColor: null,
     picking: false,
     selectedPaletteId: paletteSelection(doc, s.selectedPaletteId),
@@ -490,6 +492,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const s = get()
     const id = textureId ?? s.activeTextureId
     const entry = s.textures.find((t) => t.id === id)
+    if (textureId && !entry) return // closed while its map loaded
     const maps = { ...(id === s.activeTextureId ? s.maps : (entry?.maps ?? {})) }
     if (map) maps[slot] = map
     else delete maps[slot]
@@ -531,7 +534,9 @@ export const useApp = create<AppState>()((set, get) => ({
     const s = get()
     const patch = change(snapshot(s))
     // The edit lands in the document the active texture uses.
-    const docs = tex.withDoc(s.docs, tex.docKeyOf(s.docs, s.activeTextureId), snapshot({ ...snapshot(s), ...patch }))
+    const key = tex.docKeyOf(s.docs, s.activeTextureId)
+    const edited = snapshot({ ...snapshot(s), ...patch })
+    const docs = tex.withDoc(s.docs, key, key === tex.SHARED ? tex.keepVariants(edited, s.activeTextureId) : edited)
     if (opts.silent) {
       set({ ...patch, docs })
       return

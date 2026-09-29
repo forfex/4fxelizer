@@ -53,7 +53,9 @@ export function hasSeparateStack(docs: Docs, textureId: string): boolean {
 /** Gives a texture a separate stack, starting as a copy of the shared one. */
 export function makeSeparate(docs: Docs, textureId: string): Docs {
   if (docs.separate[textureId]) return docs
-  return withDoc(docs, textureId, structuredClone(docs.shared))
+  // With the colors generated for this texture, not the ones last shown for another.
+  const { palettes, ...doc } = withVariants(docs.shared, textureId)
+  return withDoc(docs, textureId, structuredClone({ ...doc, palettes: palettes.map(({ variants: _v, ...p }) => p) }))
 }
 
 /** Puts a texture back on the shared stack (its separate stack is dropped). */
@@ -113,13 +115,31 @@ export function perTexture(palette: Palette, key: DocKey): boolean {
 
 /** A document as texture `id` sees it: palettes generated per texture show its colors. */
 export function withVariants(doc: Doc, textureId: string | null): Doc {
-  if (!textureId || !doc.palettes.some((p) => p.variants?.[textureId])) return doc
+  const variantOf = (p: Palette) => (textureId && perTexture(p, SHARED) ? p.variants?.[textureId] : undefined)
+  if (!doc.palettes.some(variantOf)) return doc
   return {
     ...doc,
     palettes: doc.palettes.map((p) => {
-      const v = p.variants?.[textureId]
+      const v = variantOf(p)
       return v ? { ...p, colors: v.colors, generatedFor: v.generatedFor } : p
     })
+  }
+}
+
+/**
+ * The shared document after an edit made while texture `textureId` was shown: palettes generated
+ * per texture keep the edited colors (a picked color, a hand edit) as that texture's own, so
+ * docFor() doesn't bring back the ones from before.
+ */
+export function keepVariants(doc: Doc, textureId: string | null): Doc {
+  const stale = (p: Palette): boolean => {
+    const v = textureId && perTexture(p, SHARED) ? p.variants?.[textureId] : undefined
+    return !!v && (v.colors !== p.colors || v.generatedFor !== p.generatedFor)
+  }
+  if (!doc.palettes.some(stale)) return doc
+  return {
+    ...doc,
+    palettes: doc.palettes.map((p) => (stale(p) ? { ...p, variants: { ...p.variants, [textureId!]: { colors: p.colors, generatedFor: p.generatedFor } } } : p))
   }
 }
 
@@ -182,6 +202,16 @@ export function partTextures(materialCount: number, textures: readonly TextureEn
     if (bound) return bound.id
     return activeEntry && !activeEntry.materials.length && m === fallback ? activeEntry.id : null
   })
+}
+
+/**
+ * The texture set picked (`fallback`) when no texture is drawn on it while the active texture is
+ * bound to other materials: a bake then goes into a new texture for it. Null otherwise.
+ */
+export function unboundPick(materialCount: number, textures: readonly TextureEntry[], active: string | null, fallback: number): number | null {
+  if (materialCount <= 1 || fallback < 0 || fallback >= materialCount) return null
+  if (!textures.find((t) => t.id === active)?.materials.length) return null
+  return textures.some((t) => t.materials.includes(fallback)) ? null : fallback
 }
 
 /** The materials the active texture is drawn on (and baked from). */

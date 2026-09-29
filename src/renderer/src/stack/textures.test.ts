@@ -14,6 +14,7 @@ import {
   makeShared,
   neighborOf,
   partTextures,
+  unboundPick,
   SHARED,
   textureForDoc,
   type Docs,
@@ -86,6 +87,14 @@ describe('model materials', () => {
     expect(partTextures(1, textures, 'b', 0)).toEqual(['b'])
     expect(activeMaterials(1, textures, 'b', 0)).toEqual([0])
   })
+
+  it('reports a picked texture set no texture is drawn on while the active texture is bound elsewhere', () => {
+    const textures = [{ ...entry('a'), materials: [0] }, { ...entry('b'), materials: [1] }, entry('c')]
+    expect(unboundPick(3, textures, 'a', 2)).toBe(2)
+    expect(unboundPick(3, textures, 'a', 1)).toBeNull() // b is drawn on it
+    expect(unboundPick(3, textures, 'c', 2)).toBeNull() // an unbound active texture shows on it
+    expect(unboundPick(1, textures, 'a', 0)).toBeNull()
+  })
 })
 
 describe('generated palettes per texture', () => {
@@ -121,6 +130,21 @@ describe('generated palettes per texture', () => {
     expect(split.separate.a!.palettes.find((p) => p.id === generated.id)!.variants).toBeUndefined()
     expect(docFor(split, 'a').palettes.find((p) => p.id === generated.id)!.colors).toEqual(blue)
     expect(docFor(split, 'b').palettes.find((p) => p.id === generated.id)!.colors).toEqual(generated.colors)
+  })
+
+  it('a separate stack starts with the colors generated for its texture', () => {
+    let d = setGenerated(docs, 'a', generated.id, red, 'ka', 'a')
+    d = setGenerated(d, 'b', generated.id, blue, 'kb', 'b') // b shown last
+    const split = makeSeparate(d, 'a')
+    const own = split.separate.a!.palettes.find((p) => p.id === generated.id)!
+    expect(own.colors).toEqual(red)
+    expect(own.variants).toBeUndefined()
+  })
+
+  it('ignores per-texture colors once the palette is no longer generated per texture', () => {
+    const d = setGenerated(docs, 'a', generated.id, red, 'ka', 'a')
+    const manual: Docs = { ...d, shared: { ...d.shared, palettes: d.shared.palettes.map((p) => (p.id === generated.id ? { ...p, generator: undefined, colors: blue } : p)) } }
+    expect(docFor(manual, 'a').palettes.find((p) => p.id === generated.id)!.colors).toEqual(blue)
   })
 })
 
@@ -179,6 +203,27 @@ describe('store with several textures', () => {
     useApp.getState().redo()
     expect(useApp.getState().activeTextureId).toBe('b')
     expect(useApp.getState().stages.length).toBe(separateCount)
+  })
+
+  it('keeps hand edits to colors generated per texture', () => {
+    add('a')
+    add('b')
+    const pal = useApp.getState().palettes.find((p) => p.generator)!
+    useApp.getState().setGeneratedColors('a', pal.id, [{ hex: '#ff0000' }], 'ka')
+    useApp.getState().selectTexture('a')
+    useApp.getState().updatePalette(pal.id, { colors: [{ hex: '#00ff00', locked: true }] })
+    useApp.getState().selectTexture('b')
+    useApp.getState().selectTexture('a')
+    expect(useApp.getState().palettes.find((p) => p.id === pal.id)!.colors).toEqual([{ hex: '#00ff00', locked: true }])
+  })
+
+  it('ignores a map for a texture closed while it loaded', () => {
+    add('a')
+    add('b')
+    useApp.getState().closeTexture('a')
+    const map = { name: 'a_ao.png', width: 8, height: 8, channel: 'luma' as const, version: 1, thumbnail: null }
+    useApp.getState().setMap('ao', map, 'a')
+    expect(useApp.getState().maps).toEqual({})
   })
 
   it('closing the active texture shows its neighbor, closing the last shows none', () => {
