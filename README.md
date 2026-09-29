@@ -72,8 +72,9 @@ Panels dock, tab together, float over the viewer and resize, like in Photoshop; 
 switches between built-in layouts (Essentials, Wide viewer, Palette editing, Floating), saves your own and resets them.
 On Windows and Linux the app draws its own title bar with the menus in the theme's colors; Alt or F10 moves to
 the menus and Alt+letter opens one, as in a native menu bar. macOS keeps its system menu bar.
-Two themes: **Dark** (plum with purple and magenta accents) and **Night** (neutral greyscale, for dim rooms and for
-judging colors with no tinted chrome around the image); switch in View or with the toolbar's theme button.
+Five themes: **Dark** (plum with purple and magenta accents), **Night** (neutral greyscale, for dim rooms and for
+judging colors with no tinted chrome around the image), **Light**, **Matrix** (green phosphor) and **Retro** (the classic
+silver-grey desktop); pick one in View › Theme or the toolbar's theme menu. GPU details are in Help › GPU Diagnostics.
 The theme, grid, split view, tiling view, the export format, the panel layout and the window size and position are remembered between sessions.
 **File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
 indexed BMP has no alpha, so transparent pixels use index 0 and semi-transparent ones become opaque).
