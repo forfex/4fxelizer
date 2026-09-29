@@ -9,6 +9,7 @@ import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
 import { flushSettings, getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
+import { FileWatcher } from './watch'
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
 
@@ -95,6 +96,25 @@ async function readModelFile(modelPath: string, reference: string) {
   return null
 }
 
+/** File watchers per window (see watch.ts), for live reloading. */
+const watchers = new Map<Electron.WebContents, FileWatcher>()
+
+function watcherFor(contents: Electron.WebContents): FileWatcher {
+  let watcher = watchers.get(contents)
+  if (!watcher) {
+    const created = new FileWatcher((path) => {
+      if (!contents.isDestroyed()) contents.send(IPC.fileChanged, path)
+    })
+    watchers.set(contents, created)
+    contents.once('destroyed', () => {
+      created.dispose()
+      watchers.delete(contents)
+    })
+    watcher = created
+  }
+  return watcher
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.openImage, (event) =>
     openFile(BrowserWindow.fromWebContents(event.sender)!, [{ name: 'Images', extensions: IMAGE_EXTENSIONS }])
@@ -111,6 +131,19 @@ function registerIpc(): void {
   )
 
   ipcMain.handle(IPC.findMaps, (_e, texturePath: string) => findMaps(texturePath))
+
+  ipcMain.on(IPC.watchFiles, (event, paths: unknown) => void watcherFor(event.sender).set(paths))
+  ipcMain.handle(IPC.readWatchedFile, async (event, path: unknown) => {
+    if (!watchers.get(event.sender)?.has(path)) return null
+    const file = resolve(path as string)
+    try {
+      const info = await stat(file)
+      if (!info.isFile() || info.size > MAX_MODEL_FILE) return null
+      return { name: basename(file), bytes: new Uint8Array(await readFile(file)), path: file }
+    } catch {
+      return null
+    }
+  })
 
   ipcMain.handle(IPC.saveFile, async (event, defaultName: string, bytes: Uint8Array, filters: FileFilter[]) => {
     const win = BrowserWindow.fromWebContents(event.sender)!

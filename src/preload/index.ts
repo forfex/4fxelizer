@@ -13,6 +13,13 @@ const api: FxApi = {
   saveFile: (defaultName, bytes, filters) => ipcRenderer.invoke(IPC.saveFile, defaultName, bytes, filters),
   findMaps: (texturePath) => ipcRenderer.invoke(IPC.findMaps, texturePath),
   pathForFile: (file) => webUtils.getPathForFile(file),
+  watchFiles: (paths) => ipcRenderer.send(IPC.watchFiles, paths),
+  onFileChanged: (listener) => {
+    const handler = (_: unknown, path: string): void => listener(path)
+    ipcRenderer.on(IPC.fileChanged, handler)
+    return () => ipcRenderer.removeListener(IPC.fileChanged, handler)
+  },
+  readWatchedFile: (path) => ipcRenderer.invoke(IPC.readWatchedFile, path),
   listPresets: () => ipcRenderer.invoke(IPC.presetsList),
   readPreset: (file) => ipcRenderer.invoke(IPC.presetsRead, file),
   writePreset: (file, json) => ipcRenderer.invoke(IPC.presetsWrite, file, json),

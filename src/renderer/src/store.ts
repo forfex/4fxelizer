@@ -22,6 +22,8 @@ export interface ImageInfo {
   name: string
   width: number
   height: number
+  /** Full path on disk, when known (the file then reloads when it changes). */
+  path?: string
   /** Bumped on every load, so effects re-run even for same-named files. */
   version: number
 }
@@ -39,6 +41,8 @@ export interface MapInfo {
   thumbnail: string | null
   /** Baked from the model (kept when another texture opens; the model's UVs place it). */
   baked?: boolean
+  /** Full path on disk of the file it was loaded from, when known (it reloads when it changes). */
+  path?: string
 }
 
 /** Summary of the loaded 3D model (its data lives in the engine). */
@@ -46,6 +50,8 @@ export interface ModelInfo {
   name: string
   /** Full path on disk, when known (textures it refers to are looked up next to it). */
   path?: string
+  /** Paths of the files it was parsed with (glTF buffers, OBJ material libraries); they reload it too. */
+  resources?: string[]
   triangles: number
   vertices: number
   uvSets: number
@@ -79,7 +85,7 @@ export type PaletteJob = { status: 'running' } | { status: 'error'; message: str
 const COALESCE_MS = 1000
 const HISTORY_LIMIT = 200
 
-interface AppState extends Doc {
+export interface AppState extends Doc {
   gpu: GpuState
   image: ImageInfo | null
   view: View
@@ -120,6 +126,8 @@ interface AppState extends Doc {
   modelMaterial: number
   /** UV set textures and bakes use. */
   modelUvSet: number
+  /** Reload the texture, its maps and the model when their files change on disk. */
+  liveReload: boolean
   /** Main view: the 2D viewer, 2D and 3D side by side, or the 3D view. */
   viewMode: ViewMode
   /** Share of the main view the 2D viewer gets side by side. */
@@ -134,7 +142,8 @@ interface AppState extends Doc {
   lastEdit: { key: string; at: number } | null
 
   setGpu(gpu: GpuState): void
-  setImage(image: Omit<ImageInfo, 'version'>): void
+  /** A new image; `keepView` keeps the zoom and pan when its size didn't change (a reload). */
+  setImage(image: Omit<ImageInfo, 'version'>, opts?: { keepView?: boolean }): void
   setView(view: View): void
   setCanvasSize(size: Size): void
   zoomFit(): void
@@ -166,6 +175,7 @@ interface AppState extends Doc {
   setModel(model: Omit<ModelInfo, 'version'> | null, material?: number): void
   setModelMaterial(material: number): void
   setModelUvSet(uvSet: number): void
+  setLiveReload(on: boolean): void
   setViewMode(mode: ViewMode): void
   setViewSplit(split: number): void
   setView3d(patch: Partial<View3dSettings>): void
@@ -232,6 +242,7 @@ export const useApp = create<AppState>()((set, get) => ({
   model: null,
   modelMaterial: 0,
   modelUvSet: 0,
+  liveReload: true,
   viewMode: '2d',
   viewSplit: 0.5,
   view3d: DEFAULT_VIEW3D,
@@ -243,9 +254,12 @@ export const useApp = create<AppState>()((set, get) => ({
   lastEdit: null,
 
   setGpu: (gpu) => set({ gpu }),
-  setImage: (image) => {
-    const version = (get().image?.version ?? 0) + 1
-    set({ image: { ...image, version }, view: fitView(image, get().canvasSize, undefined, tilesOf(get())) })
+  setImage: (image, opts = {}) => {
+    const prev = get().image
+    const version = (prev?.version ?? 0) + 1
+    const sameSize = prev?.width === image.width && prev.height === image.height
+    const view = opts.keepView && sameSize ? get().view : fitView(image, get().canvasSize, undefined, tilesOf(get()))
+    set({ image: { ...image, version }, view })
   },
   setView: (view) => set({ view }),
   setCanvasSize: (canvasSize) => {
@@ -333,6 +347,7 @@ export const useApp = create<AppState>()((set, get) => ({
   },
   setModelMaterial: (modelMaterial) => set({ modelMaterial }),
   setModelUvSet: (modelUvSet) => set({ modelUvSet }),
+  setLiveReload: (liveReload) => set({ liveReload }),
   setViewMode: (viewMode) => set({ viewMode }),
   setViewSplit: (split) => set({ viewSplit: Math.min(Math.max(split, MIN_VIEW_SPLIT), 1 - MIN_VIEW_SPLIT) }),
   setView3d: (patch) => set({ view3d: { ...get().view3d, ...patch } }),

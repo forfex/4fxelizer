@@ -35,7 +35,7 @@ export async function loadImageFile(name: string, bytes: Uint8Array, path?: stri
   try {
     const bitmap = await decodeImage(name, bytes)
     engine.loadBitmap(bitmap)
-    setImage({ name, width: bitmap.width, height: bitmap.height })
+    setImage({ name, width: bitmap.width, height: bitmap.height, path })
     bitmap.close()
     clearMaps({ keepBaked: true })
     const maps = path ? await window.fx.findMaps(path).catch(() => []) : []
@@ -43,6 +43,25 @@ export async function loadImageFile(name: string, bytes: Uint8Array, path?: stri
     setMessage({ kind: 'info', text: loaded.length ? `Loaded ${name} with its ${mapList(loaded)} maps` : `Loaded ${name}` })
   } catch (e) {
     setMessage({ kind: 'error', text: errorText(e) })
+  }
+}
+
+/**
+ * The open texture changed on disk: loads it again in place. The stack, the maps and (when the
+ * size is unchanged) the zoom stay.
+ */
+export async function reloadImageFile(file: OpenedFile): Promise<void> {
+  const engine = getEngine()
+  const { setMessage, setImage } = useApp.getState()
+  if (!engine) return
+  try {
+    const bitmap = await decodeImage(file.name, file.bytes)
+    engine.loadBitmap(bitmap)
+    setImage({ name: file.name, width: bitmap.width, height: bitmap.height, path: file.path }, { keepView: true })
+    bitmap.close()
+    setMessage({ kind: 'info', text: `Reloaded ${file.name}` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't reload ${file.name}: ${errorText(e)}` })
   }
 }
 
@@ -126,7 +145,7 @@ export function thumbnail(bitmap: ImageBitmap, side = 48): string | null {
 }
 
 /** Decodes a map image once and puts it into each slot it fills. */
-async function loadMapInto(assignments: { slot: MapSlot; channel: MapChannel }[], name: string, bytes: Uint8Array): Promise<void> {
+async function loadMapInto(assignments: { slot: MapSlot; channel: MapChannel }[], name: string, bytes: Uint8Array, path?: string): Promise<void> {
   const engine = getEngine()
   if (!engine) throw new Error('The GPU is not ready.')
   const bitmap = await decodeImage(name, bytes)
@@ -135,7 +154,7 @@ async function loadMapInto(assignments: { slot: MapSlot; channel: MapChannel }[]
     for (const { slot, channel } of assignments) {
       const version = ++mapVersion
       engine.loadMap(slot, bitmap, version)
-      useApp.getState().setMap(slot, { name, width: bitmap.width, height: bitmap.height, channel, version, thumbnail: thumb })
+      useApp.getState().setMap(slot, { name, width: bitmap.width, height: bitmap.height, channel, version, thumbnail: thumb, path })
     }
   } finally {
     bitmap.close()
@@ -159,7 +178,7 @@ export async function importMapFiles(files: OpenedFile[], opts: { quiet?: boolea
       continue
     }
     try {
-      await loadMapInto(detected.maps, file.name, file.bytes)
+      await loadMapInto(detected.maps, file.name, file.bytes, file.path)
       filled.push(...detected.maps.map((m) => m.slot))
     } catch (e) {
       setMessage({ kind: 'error', text: `Couldn't load ${file.name}: ${errorText(e)}` })
@@ -183,10 +202,22 @@ export async function openMapFile(slot: MapSlot): Promise<void> {
   if (!file) return
   const channel = detectMap(file.name)?.maps.find((m) => m.slot === slot)?.channel ?? 'luma'
   try {
-    await loadMapInto([{ slot, channel }], file.name, file.bytes)
+    await loadMapInto([{ slot, channel }], file.name, file.bytes, file.path)
     useApp.getState().setMessage({ kind: 'info', text: `Loaded ${file.name} as the ${mapLabel(slot)} map` })
   } catch (e) {
     useApp.getState().setMessage({ kind: 'error', text: `Couldn't load ${file.name}: ${errorText(e)}` })
+  }
+}
+
+/** A map file changed on disk: loads it again into every slot still filled from it (same channels). */
+export async function reloadMapFile(file: OpenedFile): Promise<void> {
+  const slots = (Object.entries(useApp.getState().maps) as [MapSlot, MapInfo][]).filter(([, m]) => m.path && m.path === file.path && !m.baked)
+  if (!slots.length) return
+  try {
+    await loadMapInto(slots.map(([slot, m]) => ({ slot, channel: m.channel })), file.name, file.bytes, file.path)
+    useApp.getState().setMessage({ kind: 'info', text: `Reloaded ${file.name}` })
+  } catch (e) {
+    useApp.getState().setMessage({ kind: 'error', text: `Couldn't reload ${file.name}: ${errorText(e)}` })
   }
 }
 
@@ -532,6 +563,7 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'toggle-grid': return app.toggleGrid()
     case 'toggle-split': return app.toggleSplit()
     case 'toggle-tile': return app.toggleTile()
+    case 'toggle-live-reload': return app.setLiveReload(!app.liveReload)
     case 'theme-dark':
     case 'theme-night':
     case 'theme-light':

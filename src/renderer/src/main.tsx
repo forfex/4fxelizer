@@ -5,6 +5,7 @@ import { collectGpuReport } from './gpu/report'
 import { installPixelSnap } from './lib/pixelSnap'
 import { startSettingsSync } from './settings'
 import { startThemeSync } from './theme'
+import { startLiveReload } from './liveReload'
 import { openDroppedFiles } from './actions'
 import { getEngine } from './engine'
 import { useApp } from './store'
@@ -25,6 +26,7 @@ if (new URLSearchParams(location.search).get('mode') === 'gpu-report') {
 } else {
   startSettingsSync()
   startThemeSync()
+  startLiveReload()
   root.render(
     <StrictMode>
       <App />

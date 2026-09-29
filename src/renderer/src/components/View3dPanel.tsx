@@ -46,6 +46,8 @@ export function View3d() {
     let background = cssColor('--fx-viewer-bg')
     let theme = useApp.getState().theme
     let modelVersion = -1
+    // The model the camera was framed for: a reload of the same file keeps the camera.
+    let framed: string | null = null
 
     const frame = (): void => {
       const s = useApp.getState()
@@ -57,7 +59,11 @@ export function View3d() {
       const aspect = canvas.width / Math.max(canvas.height, 1)
       if (s.model?.version !== modelVersion) {
         modelVersion = s.model?.version ?? -1
-        camera.current = gpuModel ? frameBounds(gpuModel.data.bounds, aspect) : null
+        const identity = s.model ? (s.model.path ?? s.model.name) : null
+        if (identity !== framed || !camera.current) {
+          framed = identity
+          camera.current = gpuModel ? frameBounds(gpuModel.data.bounds, aspect) : null
+        }
       }
       const show = s.view3dShow
       const map = show !== 'result' && show !== 'source' ? s.maps[show] : undefined

@@ -3,7 +3,7 @@
 
 import { BAKE_MAPS, type BakeMap } from '@shared/bake'
 import { modelFormat } from '@shared/model'
-import { clearMaps, loadImageFile, nextMapVersion, thumbnail } from '@/actions'
+import { clearMaps, loadImageFile, nextMapVersion, reloadImageFile, thumbnail } from '@/actions'
 import { getEngine } from '@/engine'
 import { Baker } from '@/gpu/bake/baker'
 import { readTextureRgba8 } from '@/gpu/textureIO'
@@ -37,15 +37,22 @@ function resourceNames(name: string, bytes: Uint8Array): string[] {
   return []
 }
 
-async function readResources(name: string, bytes: Uint8Array, path: string | undefined): Promise<{ resources: Record<string, Uint8Array>; missing: string[] }> {
+async function readResources(
+  name: string,
+  bytes: Uint8Array,
+  path: string | undefined
+): Promise<{ resources: Record<string, Uint8Array>; paths: string[]; missing: string[] }> {
   const resources: Record<string, Uint8Array> = {}
+  const paths: string[] = []
   const missing: string[] = []
   for (const ref of resourceNames(name, bytes)) {
     const file = path ? await window.fx.readModelFile(path, ref).catch(() => null) : null
-    if (file) resources[ref] = file.bytes
-    else missing.push(ref)
+    if (file) {
+      resources[ref] = file.bytes
+      if (file.path) paths.push(file.path)
+    } else missing.push(ref)
   }
-  return { resources, missing }
+  return { resources, paths, missing }
 }
 
 /** The material a texture file belongs to, matched by file name; -1 = none. */
@@ -68,10 +75,11 @@ async function openMaterialTexture(model: ModelData, material: number, path: str
   return useApp.getState().image?.name === file.name ? file.name : null
 }
 
-function summary(model: ModelData, path: string | undefined): Omit<ModelInfo, 'version'> {
+function summary(model: ModelData, path: string | undefined, resources: string[]): Omit<ModelInfo, 'version'> {
   return {
     name: model.name,
     path,
+    resources,
     triangles: model.indices.length / 3,
     vertices: model.positions.length / 3,
     uvSets: model.uvSets.length,
@@ -85,26 +93,36 @@ let loading = 0
 /**
  * Opens a model in the 3D view. The texture set shown with the open texture is the one using that
  * texture; otherwise the model's first textured material, whose texture is then opened.
+ * `reload`: the open model's file changed on disk; the texture set, UV set and view mode stay, and
+ * a texture embedded in the model is loaded again.
  */
-export async function loadModelFile(name: string, bytes: Uint8Array, path?: string): Promise<void> {
+export async function loadModelFile(name: string, bytes: Uint8Array, path?: string, opts: { reload?: boolean } = {}): Promise<void> {
   const engine = getEngine()
   const app = useApp.getState()
   if (!engine) return
   const job = ++loading
-  app.setMessage({ kind: 'info', text: `Loading ${name}…` })
+  const previous = opts.reload ? { material: app.modelMaterial, uvSet: app.modelUvSet } : null
+  if (!opts.reload) app.setMessage({ kind: 'info', text: `Loading ${name}…` })
   try {
-    const { resources, missing } = await readResources(name, bytes, path)
+    const { resources, paths, missing } = await readResources(name, bytes, path)
     const { model, bvh } = await loadModelAsync({ name, bytes, resources })
     if (job !== loading) return
     if (missing.length) model.warnings.push(`Missing files: ${missing.join(', ')}.`)
+    if (opts.reload) stopBake()
     engine.setModel(model, bvh)
     clearMaps({ onlyBaked: true })
 
     // The open texture may already be this model's; else open the first texture it has.
-    const open = useApp.getState().image?.name
-    let material = open ? materialOfTexture(model, open) : -1
+    const image = useApp.getState().image
+    let material = image ? materialOfTexture(model, image.name) : -1
     let opened: string | null = null
     let failed: string | null = null
+    if (previous && material < 0 && previous.material < model.materials.length) material = previous.material
+    // A texture embedded in the model changes with it.
+    const ref = material >= 0 ? model.materials[material]!.texture : null
+    if (previous && ref?.kind === 'embedded' && image && !image.path && image.name === ref.name) {
+      await reloadImageFile({ name: ref.name, bytes: ref.bytes })
+    }
     if (material < 0) {
       const textured = model.materials.findIndex((m) => m.texture)
       if (textured >= 0) {
@@ -117,11 +135,17 @@ export async function loadModelFile(name: string, bytes: Uint8Array, path?: stri
       }
     }
     if (job !== loading) return
-    useApp.getState().setModel(summary(model, path), material)
+    useApp.getState().setModel(summary(model, path, paths), material)
+    const tris = `${(model.indices.length / 3).toLocaleString('en-US')} triangles`
+    if (previous) {
+      if (previous.uvSet < model.uvSets.length) useApp.getState().setModelUvSet(previous.uvSet)
+      const warn = model.warnings.length ? ` ${model.warnings.join(' ')}` : ''
+      useApp.getState().setMessage({ kind: warn ? 'error' : 'info', text: `Reloaded ${name} (${tris}).${warn}` })
+      return
+    }
     // Show the model: the 2D viewer alone switches to 2D and 3D side by side.
     if (useApp.getState().viewMode === '2d') useApp.getState().setViewMode('split')
 
-    const tris = `${(model.indices.length / 3).toLocaleString('en-US')} triangles`
     const detail = opened ? ` with its texture ${opened}` : failed ? `; its texture ${failed} couldn’t be opened` : ''
     const warn = model.warnings.length ? ` ${model.warnings.join(' ')}` : ''
     useApp.getState().setMessage({ kind: failed || warn ? 'error' : 'info', text: `Loaded ${name} (${tris})${detail}.${warn}` })

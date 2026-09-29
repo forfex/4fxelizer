@@ -85,6 +85,7 @@ function AppMenuBar() {
       'toggle-grid': s.grid,
       'toggle-split': s.split,
       'toggle-tile': s.tile,
+      'toggle-live-reload': s.liveReload,
       [`theme-${s.theme}`]: true,
       [`view-${s.viewMode}`]: true
     }))

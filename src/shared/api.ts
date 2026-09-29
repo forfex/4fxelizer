@@ -33,6 +33,8 @@ export interface UserSettings {
   tile: boolean
   /** Interface theme. */
   theme: Theme
+  /** Reload the texture, its maps and the model when their files change on disk. */
+  liveReload: boolean
   /** Last format chosen in the Export dialog. */
   exportFormat: ExportFormat
   /** Export dialog lists how the result fits PSX texture limits. */
@@ -109,6 +111,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   split: true,
   tile: false,
   theme: 'dark',
+  liveReload: true,
   exportFormat: 'png-indexed',
   psxCheck: false,
   layout: null,
@@ -138,12 +141,13 @@ function normalizeWorkspaces(raw: unknown): SavedWorkspace[] {
 /** Settings from disk with missing or invalid fields replaced by defaults (old files keep working). */
 export function normalizeSettings(raw: unknown): UserSettings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const bool = (key: 'grid' | 'split' | 'tile' | 'psxCheck'): boolean => (typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key])
+  const bool = (key: 'grid' | 'split' | 'tile' | 'liveReload' | 'psxCheck'): boolean => (typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key])
   return {
     grid: bool('grid'),
     split: bool('split'),
     tile: bool('tile'),
     theme: THEMES.includes(r.theme as Theme) ? (r.theme as Theme) : DEFAULT_SETTINGS.theme,
+    liveReload: bool('liveReload'),
     exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
     psxCheck: bool('psxCheck'),
     layout: isObject(r.layout) ? r.layout : null,
@@ -186,6 +190,7 @@ export type MenuCommand =
   | 'import-palette'
   | 'presets'
   | 'import-preset'
+  | 'toggle-live-reload'
   | 'undo'
   | 'redo'
   | 'zoom-fit'
@@ -219,6 +224,12 @@ export interface FxApi {
   findMaps(texturePath: string): Promise<OpenedFile[]>
   /** Path on disk of a dropped file ('' when it has none). */
   pathForFile(file: File): string
+  /** Files to watch for changes on disk (absolute paths; replaces the previous list, [] stops). */
+  watchFiles(paths: string[]): void
+  /** Called with the path of a watched file once it has changed on disk. */
+  onFileChanged(listener: (path: string) => void): () => void
+  /** Reads a watched file again (null when it's not watched or can't be read). */
+  readWatchedFile(path: string): Promise<OpenedFile | null>
   /** Presets folder in the app's user-data directory (created on demand). */
   listPresets(): Promise<PresetEntry[]>
   readPreset(file: string): Promise<string>
@@ -241,6 +252,9 @@ export const IPC = {
   openFile: 'file:open',
   saveFile: 'file:save',
   findMaps: 'maps:find',
+  watchFiles: 'files:watch',
+  fileChanged: 'files:changed',
+  readWatchedFile: 'files:read-watched',
   presetsList: 'presets:list',
   presetsRead: 'presets:read',
   presetsWrite: 'presets:write',

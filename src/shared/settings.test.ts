@@ -13,6 +13,7 @@ describe('settings', () => {
       split: true,
       tile: false,
       theme: 'dark',
+      liveReload: true,
       exportFormat: 'png-rgba',
       psxCheck: false,
       layout: null,

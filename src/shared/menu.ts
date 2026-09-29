@@ -36,6 +36,8 @@ export function appMenu(platform: string, isDev: boolean): MenuSection[] {
         command('Presets…', 'presets', 'CmdOrCtrl+Shift+P'),
         command('Import Preset…', 'import-preset'),
         separator,
+        command('Reload Changed Files', 'toggle-live-reload'),
+        separator,
         isMac ? role('Close Window', 'close', 'Cmd+W') : role('Exit', 'quit', platform === 'win32' ? 'Alt+F4' : 'Ctrl+Q')
       ]
     },
