@@ -47,6 +47,12 @@ describe('generatePalette', () => {
     })
   }
 
+  it('snaps to PSX 15-bit colors when asked', () => {
+    const out = generatePalette(four, { method: 'kmeans', count: 4, quality: 8, lumaWeight: 1, chromaWeight: 1, locked: [], color15: true })
+    // #141414 (20) snaps to the nearest 5-bit value, 2/31 → 16.
+    expect(new Set(out)).toEqual(new Set(['#ff0000', '#00ff00', '#0000ff', '#101010']))
+  })
+
   it('never returns more colors than the image has', () => {
     const out = generatePalette(four, { method: 'kmeans', count: 16, quality: 4, lumaWeight: 1, chromaWeight: 1, locked: [] })
     expect(out).toHaveLength(4)

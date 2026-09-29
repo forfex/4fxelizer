@@ -2,7 +2,7 @@
 // Runs in a worker (palette.worker.ts); pure so it can be unit-tested.
 
 import { oklabToRgb, rgbToOklab, type Vec3 } from '@/color/oklab'
-import { hexToOklab, rgb8ToHex, type GenerateMethod } from './palette'
+import { hexToOklab, rgb8ToHex, snapHexTo15bit, type GenerateMethod } from './palette'
 
 export interface GenerateOptions {
   method: GenerateMethod
@@ -12,6 +12,8 @@ export interface GenerateOptions {
   chromaWeight: number
   /** Colors that must stay in the palette; generation fills the remaining slots around them. */
   locked: string[]
+  /** Snap the generated colors to PSX 15-bit color (colors that snap together merge). */
+  color15?: boolean
 }
 
 interface Point {
@@ -441,7 +443,8 @@ export function generatePalette(rgba: Uint8Array, opts: GenerateOptions): string
   for (const c of centers) {
     const lab = unweigh(c, lw, cw)
     const [r, g, b] = oklabToRgb(lab)
-    const hex = rgb8ToHex(r * 255, g * 255, b * 255)
+    const exact = rgb8ToHex(r * 255, g * 255, b * 255)
+    const hex = opts.color15 ? snapHexTo15bit(exact) : exact
     if (seen.has(hex)) continue
     seen.add(hex)
     out.push({ hex, L: lab[0] })

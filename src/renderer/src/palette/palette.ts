@@ -31,6 +31,8 @@ export interface GeneratorSettings {
   from: { kind: 'source' } | { kind: 'stage'; uid: string }
   /** Regenerate automatically whenever the colors it's generated from change. */
   auto: boolean
+  /** Snap generated colors to PSX 15-bit color (5 bits per channel). Left out when off. */
+  color15?: boolean
 }
 
 export interface Palette {

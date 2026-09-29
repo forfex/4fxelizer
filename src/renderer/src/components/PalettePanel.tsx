@@ -443,6 +443,14 @@ function GeneratorBox({ palette }: { palette: Palette }) {
         )}
         <ParamSlider label="Light weight" hint="Above 1 keeps more light/dark steps." value={gen.lumaWeight} min={0.25} max={3} step={0.05} onChange={(lumaWeight) => set({ lumaWeight })} />
         <ParamSlider label="Hue weight" hint="Above 1 keeps more distinct hues." value={gen.chromaWeight} min={0.25} max={3} step={0.05} onChange={(chromaWeight) => set({ chromaWeight })} />
+        <Field label="">
+          <Checkbox
+            checked={!!gen.color15}
+            onCheckedChange={(on) => set({ color15: on || undefined })}
+            label="15-bit colors (PSX)"
+            hint="Snap generated colors to 5 bits per channel, the PSX color depth. Colors that snap together merge, so you may get fewer."
+          />
+        </Field>
         {lockedCount > 0 && (
           <p className="text-small text-dim">
             {lockedCount} locked color{lockedCount > 1 ? 's' : ''} kept; {Math.max(gen.count - lockedCount, 0)} generated.

@@ -19,9 +19,11 @@ interface Recipe {
   /** Use this built-in palette instead of a generated one. */
   palette?: string
   lock?: boolean
+  /** Generate PSX 15-bit colors. */
+  color15?: boolean
 }
 
-function build({ stages: recipe, colors, palette, lock }: Recipe): Doc {
+function build({ stages: recipe, colors, palette, lock, color15 }: Recipe): Doc {
   let doc: Doc = { stages: [], palettes: [], outputLock: { enabled: false, paletteId: null } }
   for (const [passId, params] of recipe) {
     const { stage, palettes } = makeStage(passId)
@@ -39,7 +41,7 @@ function build({ stages: recipe, colors, palette, lock }: Recipe): Doc {
   } else if (colors) {
     doc = {
       ...doc,
-      palettes: doc.palettes.map((p) => (p.ownerUid === last.uid ? { ...p, generator: { ...p.generator!, count: colors } } : p))
+      palettes: doc.palettes.map((p) => (p.ownerUid === last.uid ? { ...p, generator: { ...p.generator!, count: colors, ...(color15 ? { color15 } : {}) } } : p))
     }
   }
   const lastPalette = (doc.stages.find((s) => s.uid === last.uid)!.params as { paletteId: string | null }).paletteId
@@ -58,7 +60,8 @@ export const BUILTIN_PRESETS: BuiltinPreset[] = [
           ['dither', { pattern: 'bayer4', strength: 0.35 }]
         ],
         colors: 255,
-        lock: true
+        lock: true,
+        color15: true
       })
   },
   {
@@ -71,7 +74,8 @@ export const BUILTIN_PRESETS: BuiltinPreset[] = [
           ['dither', { pattern: 'bayer4', strength: 0.5 }]
         ],
         colors: 15,
-        lock: true
+        lock: true,
+        color15: true
       })
   },
   {

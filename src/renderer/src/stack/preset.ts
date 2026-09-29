@@ -74,7 +74,9 @@ function cleanGenerator(raw: unknown): GeneratorSettings | undefined {
     lumaWeight: num(raw.lumaWeight, 1),
     chromaWeight: num(raw.chromaWeight, 1),
     from,
-    auto: raw.auto !== false
+    auto: raw.auto !== false,
+    // Only when on, so palettes without it keep their generation key.
+    ...(raw.color15 === true ? { color15: true } : {})
   }
 }
 
