@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import {
   DEFAULT_SETTINGS,
+  LIVE_RELOAD_NAMES,
   THEME_HINTS,
   THEME_NAMES,
   THEMES,
@@ -12,6 +13,7 @@ import {
   VIEW_MODES,
   WHEEL_DELAY,
   type GpuPreference,
+  type LiveReloadMode,
   type MainGpuInfo,
   type WheelMode
 } from '@shared/api'
@@ -175,17 +177,30 @@ export function ViewerSection() {
   )
 }
 
+const LIVE_RELOAD_OPTIONS: { value: LiveReloadMode; label: string; hint: string }[] = [
+  {
+    value: 'all',
+    label: LIVE_RELOAD_NAMES.all,
+    hint: 'When an open texture, its maps or the model are saved from another app, load them again, keeping the stack, the zoom and the 3D camera.'
+  },
+  {
+    value: 'per-file',
+    label: LIVE_RELOAD_NAMES['per-file'],
+    hint: 'Like All Files, but only for the textures and the model whose reload switch is on (in the Textures panel). New ones start switched on.'
+  },
+  { value: 'off', label: LIVE_RELOAD_NAMES.off, hint: 'Files are never reloaded; open them again to see changes.' }
+]
+
 export function FilesSection() {
   const liveReload = useApp((s) => s.liveReload)
+  const mode = LIVE_RELOAD_OPTIONS.find((o) => o.value === liveReload)!
   return (
-    <Field label="Live reload" hint="Also in File › Reload Changed Files.">
-      <Checkbox
-        checked={liveReload}
-        onCheckedChange={(on) => useApp.getState().setLiveReload(on)}
-        label="Reload changed files"
-        hint="When the open texture, its maps or the model are saved from another app, load them again, keeping the stack, the zoom and the 3D camera."
-      />
-    </Field>
+    <>
+      <Field label="Live reload" hint="Also in File › Reload Changed Files.">
+        <Segmented value={liveReload} onChange={(m) => useApp.getState().setLiveReload(m)} options={LIVE_RELOAD_OPTIONS} />
+      </Field>
+      <p className="text-dim">{mode.hint}</p>
+    </>
   )
 }
 

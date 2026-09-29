@@ -21,6 +21,8 @@ export interface TextureEntry {
   materials: number[]
   /** Zoom and pan it was last shown with. */
   view: View | null
+  /** false: it and its maps don't reload when live reload is set to per file. */
+  liveReload?: boolean
 }
 
 /** The shared stack and the separate stacks of textures that have one (by texture id). */

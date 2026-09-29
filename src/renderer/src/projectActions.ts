@@ -65,12 +65,15 @@ async function snapshot(state: AppState, path: string): Promise<{ data: ProjectD
       if (gpuTexture) maps.push({ ...base, png: await texturePng(gpuTexture), ...(map.baked ? { baked: true as const } : {}) })
     }
     const doc = state.docs.separate[t.id]
-    textures.push({ ...pixels, maps, ...(doc ? { doc } : {}), materials: t.materials })
+    textures.push({ ...pixels, maps, ...(doc ? { doc } : {}), materials: t.materials, ...(t.liveReload === false ? { liveReload: false as const } : {}) })
   }
   const active = Math.max(state.textures.findIndex((t) => t.id === state.activeTextureId), 0)
 
   let projectModel: ProjectData['model'] = null
-  if (model?.path) projectModel = { name: model.name, file: fileRef(path, model.path), material: state.modelMaterial, uvSet: state.modelUvSet }
+  if (model?.path) {
+    projectModel = { name: model.name, file: fileRef(path, model.path), material: state.modelMaterial, uvSet: state.modelUvSet }
+    if (model.liveReload === false) projectModel.liveReload = false
+  }
   else if (model) notes.push(`${model.name} has no file on disk, so the project doesn't include it.`)
 
   return { data: { doc: state.docs.shared, presetName: state.presetName, textures, active, model: projectModel }, notes }
@@ -236,6 +239,7 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
       missing.push(t.name)
       continue
     }
+    if (t.liveReload === false) useApp.getState().setTextureLiveReload(id, false)
     if (t.doc) {
       useApp.getState().selectTexture(id)
       useApp.getState().setTextureStack(id, 'separate')
@@ -246,6 +250,8 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
   if (project.model) {
     const f = await read(project.model.file)
     if (f) await loadModelFile(f.name, f.bytes, f.path, { restore: { material: project.model.material, uvSet: project.model.uvSet } })
+    // Set both ways: the same model already open keeps its switch through setModel.
+    if (f) useApp.getState().setModelLiveReload(project.model.liveReload !== false)
     if (!f || useApp.getState().model?.path !== f.path) {
       missing.push(project.model.name)
       closeModel()

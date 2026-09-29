@@ -22,15 +22,15 @@ function sample(): ProjectData {
         ],
         materials: [0, 2]
       },
-      { name: 'roof.png', png: 'iVBORw0KGgo=', maps: [], doc: separate, materials: [1] }
+      { name: 'roof.png', png: 'iVBORw0KGgo=', maps: [], doc: separate, materials: [1], liveReload: false }
     ],
     active: 1,
-    model: { name: 'castle.glb', file: { path: 'C:/art/castle.glb' }, material: 2, uvSet: 1 }
+    model: { name: 'castle.glb', file: { path: 'C:/art/castle.glb' }, material: 2, uvSet: 1, liveReload: false }
   }
 }
 
 describe('projects', () => {
-  it('round-trips the document, files, maps and model', () => {
+  it('round-trips the document, files, maps, model and reload switches', () => {
     const data = sample()
     const { project, warnings } = parseProject(serializeProject(data))
     expect(warnings).toEqual([])
@@ -94,6 +94,8 @@ describe('projects', () => {
     expect(projectSignature({ ...state, textures: [{ ...wall!, maps: { ao: { ...wall!.maps.ao!, version: 4 } } }, roof!] })).not.toBe(base)
     expect(projectSignature({ ...state, textures: [wall!, { ...roof!, materials: [1] }] })).not.toBe(base)
     expect(projectSignature({ ...state, textures: [wall!] })).not.toBe(base)
+    expect(projectSignature({ ...state, textures: [wall!, { ...roof!, liveReload: false }] })).not.toBe(base)
+    expect(projectSignature({ ...state, textures: [wall!, { ...roof!, liveReload: true }] })).toBe(base)
   })
 
   it('encodes bytes as base64 and back', () => {

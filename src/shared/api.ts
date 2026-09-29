@@ -36,8 +36,8 @@ export interface UserSettings {
   tile: boolean
   /** Interface theme. */
   theme: Theme
-  /** Reload the texture, its maps and the model when their files change on disk. */
-  liveReload: boolean
+  /** Reload textures, their maps and the model when their files change on disk: all of them, the ones switched on, or none. */
+  liveReload: LiveReloadMode
   /** Last format chosen in the Export dialog. */
   exportFormat: ExportFormat
   /** Export dialog lists how the result fits PSX texture limits. */
@@ -71,6 +71,16 @@ export interface UserSettings {
   /** Checking for and installing new versions. */
   updates: UpdateSettings
 }
+
+/**
+ * Live reload: `all` reloads every open file that changes on disk; `per-file` only the textures
+ * (with their maps) and the model whose own switch is on; `off` none.
+ */
+export const LIVE_RELOAD_MODES = ['all', 'per-file', 'off'] as const
+export type LiveReloadMode = (typeof LIVE_RELOAD_MODES)[number]
+
+/** Names shown in Settings and File › Reload Changed Files, in LIVE_RELOAD_MODES order. */
+export const LIVE_RELOAD_NAMES: Record<LiveReloadMode, string> = { all: 'All Files', 'per-file': 'Per File', off: 'Off' }
 
 /**
  * Mouse wheel over sliders and dropdowns. `hover`: it changes the value once the pointer has
@@ -162,7 +172,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   split: true,
   tile: false,
   theme: 'dark',
-  liveReload: true,
+  liveReload: 'all',
   exportFormat: 'png-indexed',
   psxCheck: false,
   layout: null,
@@ -224,17 +234,23 @@ function normalizeScale(raw: unknown): number {
   return UI_SCALES.reduce((best, s) => (Math.abs(s - raw) < Math.abs(best - raw) ? s : best), DEFAULT_SETTINGS.uiScale)
 }
 
+/** Older settings files stored live reload as on/off. */
+function normalizeLiveReload(raw: unknown): LiveReloadMode {
+  if (typeof raw === 'boolean') return raw ? 'all' : 'off'
+  return LIVE_RELOAD_MODES.includes(raw as LiveReloadMode) ? (raw as LiveReloadMode) : DEFAULT_SETTINGS.liveReload
+}
+
 /** Settings from disk with missing or invalid fields replaced by defaults (old files keep working). */
 export function normalizeSettings(raw: unknown): UserSettings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const bool = (key: 'grid' | 'split' | 'tile' | 'liveReload' | 'psxCheck' | 'invertZoom'): boolean =>
+  const bool = (key: 'grid' | 'split' | 'tile' | 'psxCheck' | 'invertZoom'): boolean =>
     typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key]
   return {
     grid: bool('grid'),
     split: bool('split'),
     tile: bool('tile'),
     theme: THEMES.includes(r.theme as Theme) ? (r.theme as Theme) : DEFAULT_SETTINGS.theme,
-    liveReload: bool('liveReload'),
+    liveReload: normalizeLiveReload(r.liveReload),
     exportFormat: EXPORT_FORMATS.includes(r.exportFormat as string) ? (r.exportFormat as ExportFormat) : DEFAULT_SETTINGS.exportFormat,
     psxCheck: bool('psxCheck'),
     layout: isObject(r.layout) ? r.layout : null,
@@ -293,7 +309,6 @@ const PLAIN_COMMANDS = [
   'import-palette',
   'presets',
   'import-preset',
-  'toggle-live-reload',
   'undo',
   'redo',
   'settings',
@@ -308,7 +323,12 @@ const PLAIN_COMMANDS = [
   'check-updates'
 ] as const
 
-export type MenuCommand = (typeof PLAIN_COMMANDS)[number] | `theme-${Theme}` | `view-${ViewMode}` | `look-${View3dLookChoice}`
+export type MenuCommand =
+  | (typeof PLAIN_COMMANDS)[number]
+  | `theme-${Theme}`
+  | `live-reload-${LiveReloadMode}`
+  | `view-${ViewMode}`
+  | `look-${View3dLookChoice}`
 
 /** The 3D view's looks and the Custom style, as View › 3D Look lists them. */
 export const LOOK_CHOICES: readonly View3dLookChoice[] = [...VIEW3D_LOOKS, 'custom']
@@ -317,6 +337,7 @@ export const LOOK_CHOICES: readonly View3dLookChoice[] = [...VIEW3D_LOOKS, 'cust
 export const MENU_COMMANDS: readonly MenuCommand[] = [
   ...PLAIN_COMMANDS,
   ...THEMES.map((t) => `theme-${t}` as const),
+  ...LIVE_RELOAD_MODES.map((m) => `live-reload-${m}` as const),
   ...VIEW_MODES.map((m) => `view-${m}` as const),
   ...LOOK_CHOICES.map((l) => `look-${l}` as const)
 ]

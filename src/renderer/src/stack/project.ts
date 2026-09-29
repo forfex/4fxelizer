@@ -15,8 +15,11 @@ export const PROJECT_VERSION = 2
 /** A texture's pixels: a file, or (when it has none) a base64 PNG. */
 export type ProjectImage = { name: string; file: ProjectFileRef } | { name: string; png: string }
 
-/** An open texture: its image, its maps, its separate stack (none = the shared one) and the materials drawn with it. */
-export type ProjectTexture = ProjectImage & { maps: ProjectMap[]; doc?: Doc; materials: number[] }
+/**
+ * An open texture: its image, its maps, its separate stack (none = the shared one), the materials
+ * drawn with it, and `liveReload: false` when its reload switch is off.
+ */
+export type ProjectTexture = ProjectImage & { maps: ProjectMap[]; doc?: Doc; materials: number[]; liveReload?: false }
 
 /** An imported map (by file, or as PNG when it has none) or one baked from the model (as PNG). */
 export type ProjectMap = { slot: MapSlot; channel: MapChannel; name: string } & ({ file: ProjectFileRef } | { png: string; baked?: true })
@@ -27,6 +30,8 @@ export interface ProjectModel {
   /** Texture set (material index) an active texture drawn on no material shows on. */
   material: number
   uvSet: number
+  /** Its reload switch is off. */
+  liveReload?: false
 }
 
 export interface ProjectData {
@@ -107,7 +112,7 @@ export function parseProject(json: string): ParsedProject {
       if (!image) continue
       const separate = isObject(t.doc) ? parseDoc(t.doc, warnings) : undefined
       const materials = Array.isArray(t.materials) ? [...new Set(t.materials.filter((m): m is number => typeof m === 'number' && Number.isInteger(m) && m >= 0))] : []
-      textures.push({ ...image, maps: mapsOf(t.maps, warnings), ...(separate ? { doc: separate } : {}), materials })
+      textures.push({ ...image, maps: mapsOf(t.maps, warnings), ...(separate ? { doc: separate } : {}), materials, ...(t.liveReload === false ? { liveReload: false as const } : {}) })
     }
   }
   const active = Math.min(index(raw.active), Math.max(textures.length - 1, 0))
@@ -115,7 +120,10 @@ export function parseProject(json: string): ParsedProject {
   let model: ProjectModel | null = null
   if (isObject(raw.model)) {
     const file = fileRefOf(raw.model.file)
-    if (file) model = { name: str(raw.model.name) ?? 'model', file, material: index(raw.model.material), uvSet: index(raw.model.uvSet) }
+    if (file) {
+      model = { name: str(raw.model.name) ?? 'model', file, material: index(raw.model.material), uvSet: index(raw.model.uvSet) }
+      if (raw.model.liveReload === false) model.liveReload = false
+    }
     else warnings.push('The model entry is broken.')
   }
 
@@ -154,8 +162,8 @@ type SignatureMaps = Partial<Record<MapSlot, { name: string; channel: MapChannel
 /** What a project stores of the app state (the parts that make it "modified"). */
 export interface ProjectState {
   docs: { shared: Doc; separate: Record<string, Doc> }
-  textures: { id: string; image: { name: string; path?: string; version: number }; maps: SignatureMaps; materials: number[] }[]
-  model: { name: string; path?: string } | null
+  textures: { id: string; image: { name: string; path?: string; version: number }; maps: SignatureMaps; materials: number[]; liveReload?: boolean }[]
+  model: { name: string; path?: string; liveReload?: boolean } | null
   modelMaterial: number
   modelUvSet: number
 }
@@ -182,9 +190,10 @@ export function projectSignature(s: ProjectState): string {
         return [[id, m.channel, m.baked ? `baked#${m.version}` : (m.path ?? `${m.name}#${m.version}`)]]
       }),
       doc: s.docs.separate[t.id] ? docSignature(s.docs.separate[t.id]!) : null,
-      materials: t.materials
+      materials: t.materials,
+      liveReload: t.liveReload !== false
     })),
-    model: s.model && [s.model.path ?? s.model.name, s.modelMaterial, s.modelUvSet]
+    model: s.model && [s.model.path ?? s.model.name, s.modelMaterial, s.modelUvSet, s.model.liveReload !== false]
   })
 }
 
