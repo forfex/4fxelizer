@@ -174,3 +174,6 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+.dockview-theme-fx .dv-groupview:has(.fx-texture-tabs) {
+  --dv-tabs-and-actions-container-height: var(--fx-texture-tabs-height);
+}

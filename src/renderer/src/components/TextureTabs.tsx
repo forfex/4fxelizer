@@ -1,7 +1,7 @@
 // The open textures as tabs in the viewer panel's header: click to work on one, × or middle-click
 // to close it, + to open more. A dot marks a texture with a separate stack.
 
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { closeTexture, openImage } from '@/actions'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
@@ -13,12 +13,18 @@ export function TextureTabs({ fallback }: { fallback: ReactNode }) {
   const active = useApp((s) => s.activeTextureId)
   const separate = useApp((s) => s.docs.separate)
   const model = useApp((s) => s.model)
+  const strip = useRef<HTMLDivElement>(null)
+  // Keep the selected tab in sight (after Ctrl+Tab or a pick in the Textures panel).
+  useEffect(() => {
+    strip.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [active, textures.length])
   if (!textures.length) return fallback
   return (
     <div
+      ref={strip}
       role="tablist"
       aria-label="Textures"
-      className="fx-texture-tabs flex h-full min-w-0 flex-1 items-end gap-(--fx-space-1) overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
+      className="fx-texture-tabs flex h-full min-w-0 flex-1 items-end gap-(--fx-texture-tabs-gap) overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
       // Tabs are buttons, not a handle to drag the viewer panel by (dockview drags its tab on mousedown).
       onMouseDown={(e) => e.preventDefault()}
       onWheel={(e) => {

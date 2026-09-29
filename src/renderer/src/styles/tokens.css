@@ -81,6 +81,9 @@
   --fx-dock-gap: 4px;
   --fx-dock-tab-height: 26px;
   --fx-dock-tab-padding: 12px;
+  /* The viewer header holding the texture tabs: taller than other headers, for air above the tabs. */
+  --fx-texture-tabs-height: 34px;
+  --fx-texture-tabs-gap: 8px;
   --fx-dock-float-grip-height: 10px;
   --fx-dock-float-shadow: var(--fx-shadow-window);
 
