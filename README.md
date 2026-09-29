@@ -35,7 +35,8 @@ Everything runs on your GPU, so changes show up instantly.
   [More](guide/masks-and-maps.md)
 - **3D view and map baking**: glTF, GLB, FBX and OBJ models with switchable PSX quirks (vertex wobble, affine
   warping, 240-line framebuffer), and AO, cavity, curvature and more baked on the GPU. [More](guide/3d.md)
-- **Presets and export**: PSX 8bpp/4bpp, N64, Game Boy and more built in; PNG, TGA or BMP, full color or indexed.
+- **Projects, presets and export**: save your whole session as a project; console, computer and stylized
+  presets built in; PNG, TGA or BMP, full color or indexed.
   [More](guide/presets-and-export.md)
 
 ## Gallery

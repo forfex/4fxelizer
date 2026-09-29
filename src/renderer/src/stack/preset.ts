@@ -132,6 +132,16 @@ export function parsePreset(json: string): ParsedPreset {
     throw new PresetError('This preset was made by a newer version of 4FXELIZER. Update the app to load it.')
   }
   const warnings: string[] = []
+  const doc = parseDoc(raw, warnings)
+  if (!doc.stages.length && !doc.palettes.length) warnings.push('The preset is empty.')
+  return { name: str(raw.name)?.slice(0, 100) || 'Preset', doc, warnings }
+}
+
+/**
+ * The document fields (stages, palettes, output lock) of a preset or project: validated, with
+ * defaults filled in and fresh ids. Skipped parts are added to `warnings`.
+ */
+export function parseDoc(raw: Record<string, unknown>, warnings: string[]): Doc {
 
   // Fresh ids, so a preset can be loaded any number of times.
   const stageIds = new Map<string, string>()
@@ -181,15 +191,13 @@ export function parsePreset(json: string): ParsedPreset {
       const had = params.paletteId
       params.paletteId = remapPalette(had)
       params.projectPaletteId = remapPalette(params.projectPaletteId)
-      if (had && !params.paletteId) warnings.push('A stage referenced a palette that is not in the preset.')
+      if (had && !params.paletteId) warnings.push('A stage referenced a palette that is missing from the file.')
     }
   }
 
   const lock = isObject(raw.outputLock) ? raw.outputLock : {}
   const outputLock = { enabled: lock.enabled === true, paletteId: remapPalette(lock.paletteId) }
-  if (!stages.length && !palettes.length) warnings.push('The preset is empty.')
-
-  return { name: str(raw.name)?.slice(0, 100) || 'Preset', doc: { stages, palettes, outputLock }, warnings }
+  return { stages, palettes, outputLock }
 }
 
 /** File-system-safe preset name (the main process sanitizes again). */

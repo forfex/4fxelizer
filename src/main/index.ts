@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
-import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { IPC, THEME_WINDOW_COLORS, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
-import { siblingMaps } from '@shared/maps'
-import { isModelResource, MODEL_EXTENSIONS, referenceCandidates } from '@shared/model'
+import { MAP_IMAGE_EXTENSIONS, siblingMaps } from '@shared/maps'
+import { isModelFile, isModelResource, MODEL_EXTENSIONS, referenceCandidates } from '@shared/model'
+import { baseName, isProjectFile, PROJECT_EXTENSION, type ProjectFileRef } from '@shared/project'
 import type { MenuRole } from '@shared/menu'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
@@ -99,6 +100,47 @@ async function readModelFile(modelPath: string, reference: string) {
   return null
 }
 
+const PROJECT_FILTERS: FileFilter[] = [{ name: '4FXELIZER project', extensions: [PROJECT_EXTENSION] }]
+
+const isProjectPath = (path: unknown): path is string => typeof path === 'string' && isAbsolute(path) && isProjectFile(path)
+
+/** Writes a project next to its destination first, so a failed write never leaves half a file. */
+async function writeProject(path: unknown, json: unknown): Promise<void> {
+  if (!isProjectPath(path) || typeof json !== 'string') throw new Error('Invalid project path')
+  const temp = `${path}.saving`
+  await writeFile(temp, json, 'utf8')
+  await rename(temp, path)
+}
+
+/**
+ * A texture, map or model a project refers to: at its saved absolute path, else relative to the
+ * project (moved together), else by name next to the project. Only images and models are read.
+ */
+async function readProjectFile(projectPath: unknown, ref: unknown) {
+  if (!isProjectPath(projectPath) || typeof ref !== 'object' || ref === null) return null
+  const { path, relative } = ref as Partial<ProjectFileRef>
+  if (typeof path !== 'string') return null
+  const dir = dirname(projectPath)
+  const candidates = [
+    isAbsolute(path) ? path : null,
+    typeof relative === 'string' ? resolve(dir, relative) : null,
+    // A path saved on another OS may use the other separator.
+    join(dir, baseName(path))
+  ]
+  const readable = (name: string): boolean => isModelFile(name) || MAP_IMAGE_EXTENSIONS.includes(name.split('.').pop()?.toLowerCase() ?? '')
+  for (const candidate of new Set(candidates)) {
+    if (!candidate || !readable(candidate)) continue
+    try {
+      const info = await stat(candidate)
+      if (!info.isFile() || info.size > MAX_MODEL_FILE) continue
+      return { name: basename(candidate), bytes: new Uint8Array(await readFile(candidate)), path: candidate }
+    } catch {
+      // Not there: try the next place.
+    }
+  }
+  return null
+}
+
 /** File watchers per window (see watch.ts), for live reloading. */
 const watchers = new Map<Electron.WebContents, FileWatcher>()
 
@@ -116,6 +158,22 @@ function watcherFor(contents: Electron.WebContents): FileWatcher {
     watcher = created
   }
   return watcher
+}
+
+/** Windows whose project has unsaved changes, and ones closing after the user answered. */
+const edited = new WeakSet<BrowserWindow>()
+const closing = new WeakSet<BrowserWindow>()
+
+/**
+ * Closing a window with unsaved project changes (also by quitting) is held back; the renderer
+ * asks whether to save, then closes it with closeWindow.
+ */
+function guardClose(win: BrowserWindow): void {
+  win.on('close', (event) => {
+    if (!edited.has(win) || closing.has(win) || win.webContents.isDestroyed()) return
+    event.preventDefault()
+    win.webContents.send(IPC.closeRequested)
+  })
 }
 
 /** Settings is recording a shortcut: the menu's own shortcuts must not run meanwhile. */
@@ -161,6 +219,31 @@ function registerIpc(): void {
     if (result.canceled || !result.filePath) return null
     await writeFile(result.filePath, bytes)
     return result.filePath
+  })
+
+  ipcMain.handle(IPC.projectOpen, (event) => openFile(BrowserWindow.fromWebContents(event.sender)!, PROJECT_FILTERS))
+  ipcMain.handle(IPC.projectChoosePath, async (event, defaultName: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showSaveDialog(win, { defaultPath: typeof defaultName === 'string' ? defaultName : undefined, filters: PROJECT_FILTERS })
+    if (result.canceled || !result.filePath) return null
+    // Some platforms don't add the extension from the filter.
+    return isProjectFile(result.filePath) ? result.filePath : `${result.filePath}.${PROJECT_EXTENSION}`
+  })
+  ipcMain.handle(IPC.projectWrite, (_e, path: unknown, json: unknown) => writeProject(path, json))
+  ipcMain.handle(IPC.projectReadFile, (_e, projectPath: unknown, ref: unknown) => readProjectFile(projectPath, ref))
+
+  ipcMain.on(IPC.documentEdited, (event, value: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    if (value === true) edited.add(win)
+    else edited.delete(win)
+    if (process.platform === 'darwin') win.setDocumentEdited(value === true)
+  })
+  ipcMain.on(IPC.closeWindow, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    closing.add(win)
+    win.close()
   })
 
   ipcMain.handle(IPC.presetsList, async (): Promise<PresetEntry[]> => {
@@ -292,6 +375,7 @@ function createWindow(): void {
       win.show()
     })
     trackWindow(win)
+    guardClose(win)
     refreshMenu(win)
   }
 

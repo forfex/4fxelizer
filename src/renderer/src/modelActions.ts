@@ -96,7 +96,12 @@ let loading = 0
  * `reload`: the open model's file changed on disk; the texture set, UV set and view mode stay, and
  * a texture embedded in the model is loaded again.
  */
-export async function loadModelFile(name: string, bytes: Uint8Array, path?: string, opts: { reload?: boolean } = {}): Promise<void> {
+export async function loadModelFile(
+  name: string,
+  bytes: Uint8Array,
+  path?: string,
+  opts: { reload?: boolean; restore?: { material: number; uvSet: number } } = {}
+): Promise<void> {
   const engine = getEngine()
   const app = useApp.getState()
   if (!engine) return
@@ -118,6 +123,8 @@ export async function loadModelFile(name: string, bytes: Uint8Array, path?: stri
     let opened: string | null = null
     let failed: string | null = null
     if (previous && material < 0 && previous.material < model.materials.length) material = previous.material
+    // A project names the texture set; its texture is the project's (already open).
+    if (opts.restore) material = opts.restore.material < model.materials.length ? opts.restore.material : Math.max(material, 0)
     // A texture embedded in the model changes with it.
     const ref = material >= 0 ? model.materials[material]!.texture : null
     if (previous && ref?.kind === 'embedded' && image && !image.path && image.name === ref.name) {
@@ -136,6 +143,7 @@ export async function loadModelFile(name: string, bytes: Uint8Array, path?: stri
     }
     if (job !== loading) return
     useApp.getState().setModel(summary(model, path, paths), material)
+    if (opts.restore && opts.restore.uvSet < model.uvSets.length) useApp.getState().setModelUvSet(opts.restore.uvSet)
     const tris = `${(model.indices.length / 3).toLocaleString('en-US')} triangles`
     if (previous) {
       if (previous.uvSet < model.uvSets.length) useApp.getState().setModelUvSet(previous.uvSet)

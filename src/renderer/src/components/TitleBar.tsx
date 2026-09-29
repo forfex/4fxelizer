@@ -7,6 +7,7 @@ import { runMenuCommand } from '@/actions'
 import iconUrl from '@/assets/icon.svg'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
+import { useProjectDirty } from '@/projectActions'
 import { useSavedSettings } from '@/settings'
 import { useApp } from '@/store'
 import { CAPTURE_KEYS_ATTR } from './settings/Keybinds'
@@ -31,9 +32,13 @@ function tokenRgb(token: string): string {
 export function TitleBar() {
   const header = useRef<HTMLElement>(null)
   const imageName = useApp((s) => s.image?.name ?? null)
+  const projectName = useApp((s) => s.project?.name ?? null)
+  const dirty = useProjectDirty()
   const theme = useApp((s) => s.theme)
   const uiScale = useSavedSettings().uiScale
-  const title = imageName ? `${imageName} — 4FXELIZER` : '4FXELIZER'
+  // The project when one is open (* = unsaved changes), else the texture.
+  const document_ = projectName ? `${projectName}${dirty ? '*' : ''}` : imageName
+  const title = document_ ? `${document_} — 4FXELIZER` : '4FXELIZER'
 
   useEffect(() => {
     document.title = title
@@ -66,7 +71,7 @@ export function TitleBar() {
       )}
       <span className="flex h-full min-w-0 flex-1 items-center justify-center px-4 [-webkit-app-region:drag]">
         <span className="truncate text-[12px] leading-4 font-medium text-(--fx-titlebar-text)">
-          {imageName && `${imageName} — `}
+          {document_ && `${document_} — `}
           <b className="font-display font-bold tracking-[0.08em] text-(--fx-titlebar-symbol)">4FXELIZER</b>
         </span>
       </span>

@@ -1,4 +1,20 @@
-# Presets and export
+# Projects, presets and export
+
+## Projects
+
+**File › Save Project** (Ctrl+S) saves everything you're working on to a `.pxproj` file: the stack, its
+palettes, the texture, its maps and the model with its texture set and UV set. **File › Open Project…** (or
+dropping a `.pxproj` on the window) brings it all back, with fresh undo history. **Save Project As…**
+(Ctrl+Shift+S) saves a copy under another name.
+
+The project refers to your texture, map and model files where they are; it doesn't copy them. It stores each
+path both absolute and relative to the project, so you can move or copy a folder with the project and its files
+inside, or send it to someone else, and it still opens. A file it can't find is also looked for by name next to
+the project; anything still missing is reported, and the rest opens. Maps baked from the model, and a texture that
+only exists inside the model, are stored in the project itself.
+
+The title bar shows the project's name, with `*` when it has unsaved changes. Opening another project or closing
+the window then asks whether to save first.
 
 ## Presets
 

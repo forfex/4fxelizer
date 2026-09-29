@@ -37,6 +37,10 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
     {
       label: 'File',
       items: [
+        command('Open Project…', 'open-project'),
+        command('Save Project', 'save-project', 'CmdOrCtrl+S'),
+        command('Save Project As…', 'save-project-as', 'CmdOrCtrl+Shift+S'),
+        separator,
         command('Open Image…', 'open', 'CmdOrCtrl+O'),
         command('Open Model…', 'open-model', 'CmdOrCtrl+Shift+O'),
         command('Export…', 'export', 'CmdOrCtrl+E'),

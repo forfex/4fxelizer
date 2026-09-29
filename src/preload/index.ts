@@ -20,6 +20,17 @@ const api: FxApi = {
     return () => ipcRenderer.removeListener(IPC.fileChanged, handler)
   },
   readWatchedFile: (path) => ipcRenderer.invoke(IPC.readWatchedFile, path),
+  openProject: () => ipcRenderer.invoke(IPC.projectOpen),
+  chooseProjectPath: (defaultName) => ipcRenderer.invoke(IPC.projectChoosePath, defaultName),
+  writeProject: (path, json) => ipcRenderer.invoke(IPC.projectWrite, path, json),
+  readProjectFile: (projectPath, ref) => ipcRenderer.invoke(IPC.projectReadFile, projectPath, ref),
+  setDocumentEdited: (edited) => ipcRenderer.send(IPC.documentEdited, edited),
+  onCloseRequested: (listener) => {
+    const handler = (): void => listener()
+    ipcRenderer.on(IPC.closeRequested, handler)
+    return () => ipcRenderer.removeListener(IPC.closeRequested, handler)
+  },
+  closeWindow: () => ipcRenderer.send(IPC.closeWindow),
   listPresets: () => ipcRenderer.invoke(IPC.presetsList),
   readPreset: (file) => ipcRenderer.invoke(IPC.presetsRead, file),
   writePreset: (file, json) => ipcRenderer.invoke(IPC.presetsWrite, file, json),

@@ -2,6 +2,7 @@
 
 import { normalizeBake, normalizeBakePresets, normalizeView3d, DEFAULT_BAKE, DEFAULT_VIEW3D, type BakePreset, type BakeSettings, type View3dSettings } from './bake'
 import type { MenuRole } from './menu'
+import type { ProjectFileRef } from './project'
 
 export interface FileFilter {
   name: string
@@ -273,6 +274,9 @@ export interface RendererGpuReport {
 }
 
 const PLAIN_COMMANDS = [
+  'open-project',
+  'save-project',
+  'save-project-as',
   'open',
   'open-model',
   'export',
@@ -328,6 +332,23 @@ export interface FxApi {
   onFileChanged(listener: (path: string) => void): () => void
   /** Reads a watched file again (null when it's not watched or can't be read). */
   readWatchedFile(path: string): Promise<OpenedFile | null>
+  /** Asks for a project file (.pxproj) to open. */
+  openProject(): Promise<OpenedFile | null>
+  /** Asks where to save a project; nothing is written yet (null = cancelled). */
+  chooseProjectPath(defaultName: string): Promise<string | null>
+  /** Writes a project file (an absolute path ending in .pxproj). */
+  writeProject(path: string, json: string): Promise<void>
+  /**
+   * A texture, map or model a project refers to: at its saved path, else relative to the project,
+   * else by name next to it (null = not found).
+   */
+  readProjectFile(projectPath: string, ref: ProjectFileRef): Promise<OpenedFile | null>
+  /** Whether the open project has unsaved changes (closing the window then asks first). */
+  setDocumentEdited(edited: boolean): void
+  /** Called when the user closes the window while the project has unsaved changes. */
+  onCloseRequested(listener: () => void): () => void
+  /** Closes the window without asking again. */
+  closeWindow(): void
   /** Presets folder in the app's user-data directory (created on demand). */
   listPresets(): Promise<PresetEntry[]>
   readPreset(file: string): Promise<string>
@@ -361,6 +382,13 @@ export const IPC = {
   watchFiles: 'files:watch',
   fileChanged: 'files:changed',
   readWatchedFile: 'files:read-watched',
+  projectOpen: 'project:open',
+  projectChoosePath: 'project:choose-path',
+  projectWrite: 'project:write',
+  projectReadFile: 'project:read-file',
+  documentEdited: 'window:document-edited',
+  closeRequested: 'window:close-requested',
+  closeWindow: 'window:close',
   presetsList: 'presets:list',
   presetsRead: 'presets:read',
   presetsWrite: 'presets:write',

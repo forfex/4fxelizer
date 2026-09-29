@@ -11,6 +11,7 @@ import { SettingsDialog } from './components/settings/SettingsDialog'
 import { StatusBar } from './components/StatusBar'
 import { TitleBar } from './components/TitleBar'
 import { Toolbar } from './components/Toolbar'
+import { UnsavedDialog } from './components/UnsavedDialog'
 import { DockArea } from './components/Workspace'
 
 export function App() {
@@ -85,6 +86,7 @@ export function App() {
       <ExportDialog />
       <PresetsDialog />
       <SettingsDialog />
+      <UnsavedDialog />
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 border-2 border-dashed border-accent bg-accent/5" />
       )}

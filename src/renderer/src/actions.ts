@@ -1,6 +1,7 @@
 import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme, ViewMode } from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
+import { isProjectFile } from '@shared/project'
 import { encodePattern, patternFromRgba } from '@/dither/customPattern'
 import { getEngine } from '@/engine'
 import type { DitherParams } from '@/gpu/passes/dither'
@@ -14,6 +15,7 @@ import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
 import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
 import { loadModelFile, openModel } from '@/modelActions'
+import { openProject, openProjectFile, saveProject } from '@/projectActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
 import { LEGACY_PRESET_EXTENSION, parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
 import { useApp, type MapInfo } from '@/store'
@@ -28,7 +30,7 @@ const PALETTE_FILTERS: FileFilter[] = [{ name: 'Palettes', extensions: PALETTE_E
  * loaded too when the file's path is known; the previous texture's maps are dropped (maps baked
  * from the model stay: they belong to the model's UVs).
  */
-export async function loadImageFile(name: string, bytes: Uint8Array, path?: string): Promise<void> {
+export async function loadImageFile(name: string, bytes: Uint8Array, path?: string, opts: { findMaps?: boolean } = {}): Promise<void> {
   const engine = getEngine()
   const { setMessage, setImage } = useApp.getState()
   if (!engine) return
@@ -38,7 +40,7 @@ export async function loadImageFile(name: string, bytes: Uint8Array, path?: stri
     setImage({ name, width: bitmap.width, height: bitmap.height, path })
     bitmap.close()
     clearMaps({ keepBaked: true })
-    const maps = path ? await window.fx.findMaps(path).catch(() => []) : []
+    const maps = path && opts.findMaps !== false ? await window.fx.findMaps(path).catch(() => []) : []
     const loaded = maps.length ? await importMapFiles(maps, { quiet: true }) : []
     setMessage({ kind: 'info', text: loaded.length ? `Loaded ${name} with its ${mapList(loaded)} maps` : `Loaded ${name}` })
   } catch (e) {
@@ -78,6 +80,9 @@ const extensionOf = (name: string): string => /\.([^.]+)$/.exec(name)?.[1]?.toLo
  * is open or comes with them.
  */
 export async function openDroppedFiles(files: OpenedFile[]): Promise<void> {
+  // A project replaces everything, so it opens alone.
+  const project = files.find((f) => isProjectFile(f.name))
+  if (project) return openProjectFile(project)
   const images: OpenedFile[] = []
   const model = files.find((f) => isModelFile(f.name))
   if (model) await loadModelFile(model.name, model.bytes, model.path)
@@ -144,8 +149,14 @@ export function thumbnail(bitmap: ImageBitmap, side = 48): string | null {
   return canvas.toDataURL()
 }
 
-/** Decodes a map image once and puts it into each slot it fills. */
-async function loadMapInto(assignments: { slot: MapSlot; channel: MapChannel }[], name: string, bytes: Uint8Array, path?: string): Promise<void> {
+/** Decodes a map image once and puts it into each slot it fills. `baked`: it was baked from the model (projects store those). */
+export async function loadMapInto(
+  assignments: { slot: MapSlot; channel: MapChannel }[],
+  name: string,
+  bytes: Uint8Array,
+  path?: string,
+  opts: { baked?: boolean } = {}
+): Promise<void> {
   const engine = getEngine()
   if (!engine) throw new Error('The GPU is not ready.')
   const bitmap = await decodeImage(name, bytes)
@@ -154,7 +165,7 @@ async function loadMapInto(assignments: { slot: MapSlot; channel: MapChannel }[]
     for (const { slot, channel } of assignments) {
       const version = ++mapVersion
       engine.loadMap(slot, bitmap, version)
-      useApp.getState().setMap(slot, { name, width: bitmap.width, height: bitmap.height, channel, version, thumbnail: thumb, path })
+      useApp.getState().setMap(slot, { name, width: bitmap.width, height: bitmap.height, channel, version, thumbnail: thumb, path, ...(opts.baked ? { baked: true } : {}) })
     }
   } finally {
     bitmap.close()
@@ -550,6 +561,9 @@ export function redo(): void {
 export function runMenuCommand(command: MenuCommand): void {
   const app = useApp.getState()
   switch (command) {
+    case 'open-project': return void openProject()
+    case 'save-project': return void saveProject()
+    case 'save-project-as': return void saveProject({ as: true })
     case 'open': return void openImage()
     case 'open-model': return void openModel()
     case 'export': return app.image ? app.setExportOpen(true) : undefined

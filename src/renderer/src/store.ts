@@ -61,6 +61,15 @@ export interface ModelInfo {
   version: number
 }
 
+/** The project file the session was opened from or last saved to. */
+export interface ProjectInfo {
+  path: string
+  /** File name without the extension. */
+  name: string
+  /** projectSignature() of the state as saved (or opened); a different one means unsaved changes. */
+  saved: string
+}
+
 /** What the 3D view puts on the model: the result (as the viewer shows it), the source, or a map. */
 export type View3dShow = 'result' | 'source' | MapSlot
 
@@ -137,6 +146,9 @@ export interface AppState extends Doc {
   view3dShow: View3dShow
   bake: BakeSettings
   bakeJob: BakeJob | null
+  project: ProjectInfo | null
+  /** Question of the "unsaved changes" dialog while it's open. */
+  unsavedPrompt: string | null
 
   past: Doc[]
   future: Doc[]
@@ -184,6 +196,10 @@ export interface AppState extends Doc {
   setView3dShow(show: View3dShow): void
   setBake(patch: Partial<BakeSettings>): void
   setBakeJob(job: BakeJob | null): void
+  setProject(project: ProjectInfo | null): void
+  setUnsavedPrompt(question: string | null): void
+  /** Forgets undo history (a project was opened). */
+  clearHistory(): void
 
   /**
    * Applies an undoable change. `coalesce` merges rapid edits with the same key into one step;
@@ -252,6 +268,8 @@ export const useApp = create<AppState>()((set, get) => ({
   view3dShow: 'result',
   bake: DEFAULT_BAKE,
   bakeJob: null,
+  project: null,
+  unsavedPrompt: null,
   past: [],
   future: [],
   lastEdit: null,
@@ -358,6 +376,9 @@ export const useApp = create<AppState>()((set, get) => ({
   setView3dShow: (view3dShow) => set({ view3dShow }),
   setBake: (patch) => set({ bake: { ...get().bake, ...patch } }),
   setBakeJob: (bakeJob) => set({ bakeJob }),
+  setProject: (project) => set({ project }),
+  setUnsavedPrompt: (unsavedPrompt) => set({ unsavedPrompt }),
+  clearHistory: () => set({ past: [], future: [], lastEdit: null }),
 
   edit: (change, opts = {}) => {
     const s = get()
