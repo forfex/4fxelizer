@@ -252,6 +252,8 @@ export async function startBake(): Promise<void> {
     setJob(null)
     useApp.getState().setMessage({ kind: 'error', text: `Baking failed: ${errorText(e)}` })
   } finally {
+    // Textures that never reached their slot (an abandoned bake) belong to no one else.
+    for (const { map, texture } of baker?.outputs ?? []) if (engine.mapTexture(map) !== texture) texture.destroy()
     baker?.dispose()
     if (bakeRun === run) bakeRun = null
     if (useApp.getState().bakeJob?.status === 'running') setJob(null)

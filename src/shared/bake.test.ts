@@ -10,7 +10,7 @@ describe('bake settings', () => {
 
   it('clamps numbers into range and rounds counts', () => {
     const s = normalizeBake({ size: 100000, aoSamples: 12.6, aoDistance: -1, edgeStrength: 'lots', padding: NaN })
-    expect(s.size).toBe(4096)
+    expect(s.size).toBe(2048)
     expect(s.aoSamples).toBe(13)
     expect(s.aoDistance).toBe(0.001)
     expect(s.edgeStrength).toBe(DEFAULT_BAKE.edgeStrength)

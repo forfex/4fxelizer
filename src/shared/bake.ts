@@ -6,8 +6,11 @@ import type { MapSlot } from './maps'
 export const BAKE_MAPS = ['ao', 'cavity', 'curvature', 'edge', 'thickness', 'height', 'up'] as const satisfies readonly MapSlot[]
 export type BakeMap = (typeof BAKE_MAPS)[number]
 
-/** Bake resolutions offered (square, in texels). */
-export const BAKE_SIZES = [256, 512, 1024, 2048, 4096] as const
+/**
+ * Bake resolutions offered (square, in texels). Masks read maps by UV, so they needn't match the
+ * texture; 2048 keeps each G-buffer array at 64 MB (a GPU storage binding may be capped at 128 MB).
+ */
+export const BAKE_SIZES = [256, 512, 1024, 2048] as const
 
 export interface BakeSettings {
   size: number
@@ -37,7 +40,7 @@ type NumberKey = { [K in keyof BakeSettings]: BakeSettings[K] extends number ? K
 
 /** Range and default of every numeric bake setting. */
 export const BAKE_NUMBERS: Record<NumberKey, { min: number; max: number; value: number; integer?: boolean }> = {
-  size: { min: 64, max: 4096, value: 1024, integer: true },
+  size: { min: 64, max: 2048, value: 1024, integer: true },
   padding: { min: 0, max: 64, value: 8, integer: true },
   aoSamples: { min: 4, max: 1024, value: 128, integer: true },
   aoDistance: { min: 0.001, max: 1, value: 0.15 },
