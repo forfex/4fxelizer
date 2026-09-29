@@ -539,5 +539,6 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'theme-retro':
       return app.setTheme(command.slice('theme-'.length) as Theme)
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
+    case 'settings': return app.setSettingsOpen(true)
   }
 }
