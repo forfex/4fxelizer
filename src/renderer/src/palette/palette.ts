@@ -27,6 +27,8 @@ export interface GeneratorSettings {
   lumaWeight: number
   /** Scales OKLab chroma (a, b); > 1 keeps more distinct hues. */
   chromaWeight: number
+  /** Lightness gamma: above 1 gives more dark steps, below 1 more light ones. Left out when 1. */
+  gamma?: number
   /** Where the colors come from: the loaded image, or the input of a stage in the stack. */
   from: { kind: 'source' } | { kind: 'stage'; uid: string }
   /** Regenerate automatically whenever the colors it's generated from change. */

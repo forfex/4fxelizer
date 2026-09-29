@@ -64,6 +64,7 @@ function cleanBlend(raw: unknown): StageBlend {
 
 function cleanGenerator(raw: unknown): GeneratorSettings | undefined {
   if (!isObject(raw)) return undefined
+  const gamma = Math.min(Math.max(num(raw.gamma, 1), 0.2), 5)
   const from = isObject(raw.from) && raw.from.kind === 'stage' && str(raw.from.uid)
     ? { kind: 'stage' as const, uid: raw.from.uid as string }
     : { kind: 'source' as const }
@@ -75,7 +76,8 @@ function cleanGenerator(raw: unknown): GeneratorSettings | undefined {
     chromaWeight: num(raw.chromaWeight, 1),
     from,
     auto: raw.auto !== false,
-    // Only when on, so palettes without it keep their generation key.
+    // Only when set, so palettes without them keep their generation key.
+    ...(gamma !== 1 ? { gamma } : {}),
     ...(raw.color15 === true ? { color15: true } : {})
   }
 }

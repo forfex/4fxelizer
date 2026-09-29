@@ -443,6 +443,15 @@ function GeneratorBox({ palette }: { palette: Palette }) {
         )}
         <ParamSlider label="Light weight" hint="Above 1 keeps more light/dark steps." value={gen.lumaWeight} min={0.25} max={3} step={0.05} onChange={(lumaWeight) => set({ lumaWeight })} />
         <ParamSlider label="Hue weight" hint="Above 1 keeps more distinct hues." value={gen.chromaWeight} min={0.25} max={3} step={0.05} onChange={(chromaWeight) => set({ chromaWeight })} />
+        <ParamSlider
+          label="Gamma"
+          hint="Above 1 spends more colors on the darks, below 1 on the lights."
+          value={gen.gamma ?? 1}
+          min={0.25}
+          max={4}
+          step={0.05}
+          onChange={(gamma) => set({ gamma: gamma === 1 ? undefined : gamma })}
+        />
         <Field label="">
           <Checkbox
             checked={!!gen.color15}
