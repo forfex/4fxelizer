@@ -1,7 +1,7 @@
 // Edit › Settings: preferences in categories (a sidebar), each category a few sections. "All"
 // lists every section; the search box filters sections (and shortcuts) across all of them.
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { MenuCommand } from '@shared/api'
 import { bindableCommands } from '@shared/keybinds'
 import { cn } from '@/lib/utils'
@@ -79,6 +79,13 @@ export function SettingsDialog() {
   const [category, setCategory] = useState<CategoryId>(lastCategory)
   const [query, setQuery] = useState('')
   const [recording, setRecording] = useState<MenuCommand | null>(null)
+
+  // While a shortcut is recorded, the keys pressed must not also run the commands they're bound to.
+  useEffect(() => {
+    if (!recording) return
+    window.fx.suspendShortcuts(true)
+    return () => window.fx.suspendShortcuts(false)
+  }, [recording])
 
   const choose = (id: CategoryId): void => {
     lastCategory = id

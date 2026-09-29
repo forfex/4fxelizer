@@ -29,7 +29,8 @@ const api: FxApi = {
   setTitleBarOverlay: (overlay) => ipcRenderer.send(IPC.titleBarOverlay, overlay),
   setUiScale: (scale) => webFrame.setZoomFactor(scale),
   relaunch: () => ipcRenderer.send(IPC.relaunch),
-  showUserDataFolder: () => ipcRenderer.invoke(IPC.userDataShow)
+  showUserDataFolder: () => ipcRenderer.invoke(IPC.userDataShow),
+  suspendShortcuts: (suspend) => ipcRenderer.send(IPC.suspendShortcuts, suspend)
 }
 
 // Before the first render, so the page lays out at the saved scale.

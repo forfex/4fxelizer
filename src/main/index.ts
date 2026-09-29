@@ -98,6 +98,13 @@ async function readModelFile(modelPath: string, reference: string) {
   return null
 }
 
+/** Settings is recording a shortcut: the menu's own shortcuts must not run meanwhile. */
+let shortcutsSuspended = false
+
+function refreshMenu(win: BrowserWindow): void {
+  Menu.setApplicationMenu(buildMenu(win, isDev, getSettings().keybinds, !shortcutsSuspended))
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.openImage, (event) =>
     openFile(BrowserWindow.fromWebContents(event.sender)!, [{ name: 'Images', extensions: IMAGE_EXTENSIONS }])
@@ -155,7 +162,12 @@ function registerIpc(): void {
     updateSettings(patch)
     // Changed shortcuts: rebuild the native menu, which provides them.
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (win && typeof patch === 'object' && patch !== null && 'keybinds' in patch) Menu.setApplicationMenu(buildMenu(win, isDev, getSettings().keybinds))
+    if (win && typeof patch === 'object' && patch !== null && 'keybinds' in patch) refreshMenu(win)
+  })
+  ipcMain.on(IPC.suspendShortcuts, (event, suspend: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    shortcutsSuspended = suspend === true
+    if (win) refreshMenu(win)
   })
   ipcMain.on(IPC.relaunch, () => {
     app.relaunch()
@@ -247,7 +259,7 @@ function createWindow(): void {
       win.show()
     })
     trackWindow(win)
-    Menu.setApplicationMenu(buildMenu(win, isDev, getSettings().keybinds))
+    refreshMenu(win)
   }
 
   // Keep the app on its own page; send external links to the system browser.

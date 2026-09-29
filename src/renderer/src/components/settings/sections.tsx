@@ -20,8 +20,9 @@ import { useApp } from '@/store'
 import { Button } from '../ui/button'
 import { Checkbox, Field, ParamSlider, Segmented } from '../ui/controls'
 import { MENU_MARK_CLASS } from '../ui/menu'
-import { Led } from '../ui/retro'
+import { Lcd, Led } from '../ui/retro'
 import { Select } from '../ui/select'
+import { Slider } from '../ui/slider'
 
 export function InterfaceSection() {
   const { uiScale } = useSavedSettings()
@@ -131,7 +132,8 @@ export function WheelSection() {
       />
       <Field label="Try it" hint="Scroll over these to feel the setting. They change nothing else.">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <ParamSlider label="" value={trySlider} onChange={setTrySlider} min={0} max={100} />
+          <Slider className="min-w-24 flex-1" value={[trySlider]} onValueChange={([v]) => setTrySlider(v!)} min={0} max={100} aria-label="Test slider" />
+          <Lcd className="w-12">{trySlider}</Lcd>
           <Select className="w-28" value={trySelect} onValueChange={setTrySelect} options={TRY_OPTIONS} />
         </div>
       </Field>

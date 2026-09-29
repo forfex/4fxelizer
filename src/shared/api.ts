@@ -306,6 +306,8 @@ export interface FxApi {
   relaunch(): void
   /** Opens the folder holding settings.json and the presets. */
   showUserDataFolder(): Promise<void>
+  /** Turns the menu's keyboard shortcuts off (true) while Settings records a new one, and back on. */
+  suspendShortcuts(suspend: boolean): void
 }
 
 export const IPC = {
@@ -328,7 +330,8 @@ export const IPC = {
   menuRole: 'menu:role',
   titleBarOverlay: 'window:title-bar-overlay',
   relaunch: 'app:relaunch',
-  userDataShow: 'app:show-user-data'
+  userDataShow: 'app:show-user-data',
+  suspendShortcuts: 'menu:suspend-shortcuts'
 } as const
 
 /** Colors (CSS color strings) and height (CSS px) of the native window buttons over the custom title bar. */
