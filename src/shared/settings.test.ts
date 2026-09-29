@@ -23,6 +23,7 @@ describe('settings', () => {
       viewSplit: 0.5,
       view3d: DEFAULT_SETTINGS.view3d,
       bake: DEFAULT_SETTINGS.bake,
+      bakePresets: [],
       wheel: DEFAULT_SETTINGS.wheel,
       keybinds: {},
       gpu: 'auto',

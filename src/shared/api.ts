@@ -1,6 +1,6 @@
 // Contract between the preload bridge (window.fx) and the renderer.
 
-import { normalizeBake, normalizeView3d, DEFAULT_BAKE, DEFAULT_VIEW3D, type BakeSettings, type View3dSettings } from './bake'
+import { normalizeBake, normalizeBakePresets, normalizeView3d, DEFAULT_BAKE, DEFAULT_VIEW3D, type BakePreset, type BakeSettings, type View3dSettings } from './bake'
 import type { MenuRole } from './menu'
 
 export interface FileFilter {
@@ -53,6 +53,8 @@ export interface UserSettings {
   view3d: View3dSettings
   /** Map baking: resolution, which maps, and their settings. */
   bake: BakeSettings
+  /** Bake settings the user saved under a name. */
+  bakePresets: BakePreset[]
   /** How the mouse wheel reaches sliders and dropdowns. */
   wheel: WheelSettings
   /** Keyboard shortcuts changed from the defaults: an accelerator per command, '' = none. */
@@ -165,6 +167,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   viewSplit: 0.5,
   view3d: DEFAULT_VIEW3D,
   bake: DEFAULT_BAKE,
+  bakePresets: [],
   wheel: { mode: 'hover', delay: 1000 },
   keybinds: {},
   gpu: 'auto',
@@ -238,6 +241,7 @@ export function normalizeSettings(raw: unknown): UserSettings {
         : DEFAULT_SETTINGS.viewSplit,
     view3d: normalizeView3d(r.view3d),
     bake: normalizeBake(r.bake),
+    bakePresets: normalizeBakePresets(r.bakePresets),
     wheel: normalizeWheel(r.wheel),
     keybinds: normalizeKeybinds(r.keybinds),
     gpu: GPU_PREFERENCES.includes(r.gpu as GpuPreference) ? (r.gpu as GpuPreference) : DEFAULT_SETTINGS.gpu,
