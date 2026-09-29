@@ -46,6 +46,8 @@
   --dv-context-menu-color: var(--fx-text);
   --dv-scrollbar-background-color: var(--fx-scrollbar-thumb);
   --dv-tabs-container-scrollbar-color: var(--fx-scrollbar-thumb);
+  /* Stacking of dockview's popups (the hidden-tabs list); dockview's own themes set it too. */
+  --dv-overlay-z-index: 999;
   --dv-border-radius: var(--fx-radius-md);
   --dv-tab-border-radius: var(--fx-radius-md) var(--fx-radius-md) 0 0;
 
@@ -62,17 +64,30 @@
   box-shadow: inset var(--px) var(--px) 0 var(--fx-bevel-light);
 }
 
-/* The tab strip sits on the app background, over an ink line the active tab covers. */
+/*
+ * The tab strip sits on the app background, over an ink line the active tab covers. The line is
+ * drawn over the strip's bottom edge rather than below it, so no tab has to stick out of the tab
+ * list to cover it: dockview treats a tab that sticks out as overflowing and shows its hidden-tabs
+ * dropdown.
+ */
 .dockview-theme-fx .dv-tabs-and-actions-container {
+  position: relative;
   padding: 0 4px;
-  border-bottom: var(--px) solid var(--fx-edge);
   box-sizing: border-box;
 }
+.dockview-theme-fx .dv-tabs-and-actions-container::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--px);
+  background: var(--fx-edge);
+  pointer-events: none;
+}
 
-/* Tabs: the tracked uppercase label style. */
+/* Tabs: the tracked uppercase label style. Inactive tabs end under the line. */
 .dockview-theme-fx .dv-tab {
   align-self: flex-end;
-  height: calc(var(--fx-dock-tab-height) - 4px);
+  height: calc(var(--fx-dock-tab-height) - 3px);
   padding: 0 var(--fx-dock-tab-padding);
   font-family: var(--fx-font-display);
   font-weight: 600;
@@ -84,11 +99,10 @@
 .dockview-theme-fx .dv-tab:hover {
   color: var(--fx-text);
 }
-/* The visible tab: raised into its panel, covering the strip's bottom line. */
+/* The visible tab: drawn over the strip's bottom line, so it merges into its panel. */
 .dockview-theme-fx .dv-tab.dv-active-tab {
   position: relative;
-  top: var(--px);
-  height: calc(var(--fx-dock-tab-height) - 3px);
+  z-index: 1;
   border-color: var(--fx-edge);
   box-shadow: inset var(--px) var(--px) 0 var(--fx-bevel-light);
 }
@@ -112,4 +126,29 @@
 .dockview-theme-fx .dv-resize-container .dv-groupview {
   border: 0;
   border-radius: 0;
+}
+
+/* The hidden-tabs list (the chevron at the end of a crowded tab strip) floats like a menu. */
+.dockview-theme-fx .dv-tabs-overflow-container {
+  min-width: 140px;
+  padding: 4px;
+  background: var(--fx-panel);
+  border: var(--fx-outline) solid var(--fx-edge);
+  border-radius: var(--fx-radius-md);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--fx-bevel-light),
+    inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--fx-bevel-dark),
+    var(--fx-shadow-window);
+}
+.dockview-theme-fx .dv-tabs-overflow-container .dv-tab {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 2px;
+  color: var(--fx-text);
+  background: transparent;
+  box-shadow: none;
+}
+.dockview-theme-fx .dv-tabs-overflow-container .dv-tab:hover {
+  background: var(--fx-accent-soft);
 }
