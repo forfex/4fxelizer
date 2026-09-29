@@ -4,6 +4,7 @@ import { getEngine } from '@/engine'
 import { cssColor } from '@/lib/pixelSnap'
 import { stageLabel } from '@/gpu/passes'
 import { cn } from '@/lib/utils'
+import { savedSettings } from '@/settings'
 import { tilesOf, useApp } from '@/store'
 import { pan, pixelAt, splitPosAt, splitScreenX, stepZoom, uvAt, zoomAt } from '@/viewer/viewport'
 import { Button } from './ui/button'
@@ -121,7 +122,7 @@ export function Viewer() {
       }
       accumulated += e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 33 : e.deltaY
       if (Math.abs(accumulated) < WHEEL_STEP) return
-      const dir = accumulated < 0 ? 1 : -1
+      const dir = (accumulated < 0) !== savedSettings().invertZoom ? 1 : -1
       accumulated = 0
       const rect = canvas.getBoundingClientRect()
       const anchor = { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale }

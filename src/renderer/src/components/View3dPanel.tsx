@@ -10,6 +10,7 @@ import { ModelRenderer } from '@/gpu/model/modelRenderer'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
 import { openModel } from '@/modelActions'
+import { savedSettings } from '@/settings'
 import { useApp, type View3dShow } from '@/store'
 import { dolly, frameBounds, orbit, panCamera, type OrbitCamera } from '@/viewer3d/camera'
 import { Button } from './ui/button'
@@ -132,7 +133,7 @@ export function View3dPanel() {
       if (Math.abs(accumulated) < WHEEL_STEP) return
       const { min, max } = data.bounds
       const size = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2])
-      camera.current = dolly(c, accumulated < 0 ? 1 : -1, size * 0.01)
+      camera.current = dolly(c, (accumulated < 0 ? 1 : -1) * (savedSettings().invertZoom ? -1 : 1), size * 0.01)
       accumulated = 0
       redraw.current()
     }

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 import { IPC, type FxApi, type MenuCommand } from '@shared/api'
 
 const api: FxApi = {
@@ -26,7 +26,13 @@ const api: FxApi = {
     return () => ipcRenderer.removeListener(IPC.menuCommand, handler)
   },
   runMenuRole: (role) => ipcRenderer.send(IPC.menuRole, role),
-  setTitleBarOverlay: (overlay) => ipcRenderer.send(IPC.titleBarOverlay, overlay)
+  setTitleBarOverlay: (overlay) => ipcRenderer.send(IPC.titleBarOverlay, overlay),
+  setUiScale: (scale) => webFrame.setZoomFactor(scale),
+  relaunch: () => ipcRenderer.send(IPC.relaunch),
+  showUserDataFolder: () => ipcRenderer.invoke(IPC.userDataShow)
 }
+
+// Before the first render, so the page lays out at the saved scale.
+if (typeof api.settings?.uiScale === 'number') webFrame.setZoomFactor(api.settings.uiScale)
 
 contextBridge.exposeInMainWorld('fx', api)

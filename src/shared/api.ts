@@ -102,6 +102,15 @@ export type Theme = (typeof THEMES)[number]
 /** Names shown in the theme pickers (menu and toolbar), in THEMES order. */
 export const THEME_NAMES: Record<Theme, string> = { dark: 'Dark', night: 'Night', light: 'Light', matrix: 'Matrix', retro: 'Retro' }
 
+/** One-line descriptions shown with the theme names (toolbar dropdown, Settings). */
+export const THEME_HINTS: Record<Theme, string> = {
+  dark: 'Plum with purple and magenta accents',
+  night: 'Neutral greyscale, for dim rooms and judging colors',
+  light: 'Daylight: pale lilac surfaces, dark text',
+  matrix: 'Green phosphor on black',
+  retro: 'Classic silver-grey desktop, navy title bars, square corners'
+}
+
 /**
  * Title-bar ground (also the window background before the renderer has loaded its tokens) and the
  * window-button symbol color per theme. Keep in sync with --fx-titlebar-bg / --fx-titlebar-symbol
@@ -216,6 +225,8 @@ export interface MainGpuInfo {
   arch: string
   versions: { electron: string; chrome: string; node: string }
   commandLineFlags: string[]
+  /** The GPU preference this run started with (a changed one applies after a restart). */
+  gpuPreference: GpuPreference
   featureStatus: Record<string, string>
   gpuInfo: unknown
 }

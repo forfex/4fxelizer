@@ -5,11 +5,12 @@ export interface Gpu {
 
 export class GpuUnavailableError extends Error {}
 
-export async function initGpu(): Promise<Gpu> {
+/** low-power asks for the integrated GPU where there are two (Settings › GPU); otherwise the fastest. */
+export async function initGpu(powerPreference: GPUPowerPreference = 'high-performance'): Promise<Gpu> {
   if (!('gpu' in navigator) || !navigator.gpu) {
     throw new GpuUnavailableError('WebGPU is not available (navigator.gpu is missing).')
   }
-  const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference })
   if (!adapter) {
     throw new GpuUnavailableError('No WebGPU adapter found. The GPU or its driver may be blocklisted.')
   }
