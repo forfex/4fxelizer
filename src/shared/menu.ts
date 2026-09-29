@@ -1,7 +1,7 @@
 // The app menu, defined once. Main builds the native menu from it (keyboard shortcuts everywhere,
 // the menu bar on macOS); the renderer draws it in the custom title bar on Windows and Linux.
 
-import { THEME_NAMES, THEMES, type MenuCommand } from './api'
+import { THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type MenuCommand } from './api'
 
 /** Actions main performs itself (clipboard, window, dev tools). */
 export type MenuRole = 'cut' | 'copy' | 'paste' | 'selectAll' | 'togglefullscreen' | 'quit' | 'close' | 'reload' | 'toggleDevTools'
@@ -55,6 +55,8 @@ export function appMenu(platform: string, isDev: boolean): MenuSection[] {
     {
       label: 'View',
       items: [
+        ...VIEW_MODES.map((m, i) => command(`${VIEW_MODE_NAMES[m]} View`, `view-${m}`, `CmdOrCtrl+Shift+${i + 1}`)),
+        separator,
         command('Fit to Window', 'zoom-fit', 'CmdOrCtrl+0'),
         command('Actual Pixels', 'zoom-actual', 'CmdOrCtrl+1'),
         command('Zoom In', 'zoom-in', 'CmdOrCtrl+='),

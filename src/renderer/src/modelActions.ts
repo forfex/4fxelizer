@@ -11,7 +11,6 @@ import { gbufferAsync, loadModelAsync } from '@/model/modelAsync'
 import type { ModelData, TextureRef } from '@/model/model'
 import { objMaterialLibraries } from '@/model/mtl'
 import { useApp, type ModelInfo } from '@/store'
-import { showPanel } from '@/workspace/workspace'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 const fileName = (path: string): string => path.split(/[\\/]/).pop() ?? path
@@ -119,7 +118,8 @@ export async function loadModelFile(name: string, bytes: Uint8Array, path?: stri
     }
     if (job !== loading) return
     useApp.getState().setModel(summary(model, path), material)
-    showPanel('view3d')
+    // Show the model: the 2D viewer alone switches to 2D and 3D side by side.
+    if (useApp.getState().viewMode === '2d') useApp.getState().setViewMode('split')
 
     const tris = `${(model.indices.length / 3).toLocaleString('en-US')} triangles`
     const detail = opened ? ` with its texture ${opened}` : failed ? `; its texture ${failed} couldn’t be opened` : ''

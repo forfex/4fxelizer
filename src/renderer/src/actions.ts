@@ -1,4 +1,4 @@
-import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme } from '@shared/api'
+import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme, ViewMode } from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
 import { encodePattern, patternFromRgba } from '@/dither/customPattern'
@@ -538,6 +538,10 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'theme-matrix':
     case 'theme-retro':
       return app.setTheme(command.slice('theme-'.length) as Theme)
+    case 'view-2d':
+    case 'view-split':
+    case 'view-3d':
+      return app.setViewMode(command.slice('view-'.length) as ViewMode)
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
   }
 }

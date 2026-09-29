@@ -34,6 +34,12 @@ describe('app menu', () => {
     ])
   })
 
+  it('switches the view mode from the View menu', () => {
+    const view = appMenu('win32', false).find((s) => s.label === 'View')!
+    const commands = view.items.flatMap((i) => (i.kind === 'command' ? [i.command] : []))
+    expect(commands).toEqual(expect.arrayContaining(['view-2d', 'view-split', 'view-3d']))
+  })
+
   it('formats shortcuts per platform', () => {
     expect(formatAccelerator('CmdOrCtrl+Shift+P', 'win32')).toBe('Ctrl+Shift+P')
     expect(formatAccelerator('CmdOrCtrl+\\', 'linux')).toBe('Ctrl+\\')

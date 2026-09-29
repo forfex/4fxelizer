@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, MAX_WORKSPACES, normalizeSettings } from './api'
+import { DEFAULT_SETTINGS, MAX_WORKSPACES, MIN_VIEW_SPLIT, normalizeSettings } from './api'
 
 describe('settings', () => {
   it('defaults: pixel grid off, split on', () => {
@@ -18,6 +18,8 @@ describe('settings', () => {
       layout: null,
       workspace: 'essentials',
       workspaces: [],
+      viewMode: '2d',
+      viewSplit: 0.5,
       view3d: DEFAULT_SETTINGS.view3d,
       bake: DEFAULT_SETTINGS.bake
     })
@@ -30,6 +32,14 @@ describe('settings', () => {
     for (const t of ['night', 'light', 'matrix', 'retro']) expect(normalizeSettings({ theme: t }).theme).toBe(t)
     expect(normalizeSettings({ theme: 'sepia' }).theme).toBe('dark')
     expect(normalizeSettings({}).theme).toBe('dark')
+  })
+
+  it('keeps a known view mode and clamps the 2D / 3D split', () => {
+    for (const m of ['2d', 'split', '3d']) expect(normalizeSettings({ viewMode: m }).viewMode).toBe(m)
+    expect(normalizeSettings({ viewMode: '4d' }).viewMode).toBe('2d')
+    expect(normalizeSettings({ viewSplit: 0.3 }).viewSplit).toBe(0.3)
+    expect(normalizeSettings({ viewSplit: 2 }).viewSplit).toBe(1 - MIN_VIEW_SPLIT)
+    expect(normalizeSettings({ viewSplit: 'wide' }).viewSplit).toBe(0.5)
   })
 
   it('keeps panel layouts and saved workspaces, dropping broken entries', () => {

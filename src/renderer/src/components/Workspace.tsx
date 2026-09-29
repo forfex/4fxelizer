@@ -15,6 +15,7 @@ import {
   deleteWorkspace,
   isPanelOpen,
   isReservedName,
+  LEGACY_VIEW3D,
   PANELS,
   resetWorkspace,
   savedWorkspaces,
@@ -35,8 +36,7 @@ import { Dialog, DialogClose, DialogContent } from './ui/dialog'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Menu, MENU_MARK_CLASS, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { CaretIcon } from './ui/icons'
-import { View3dPanel } from './View3dPanel'
-import { Viewer } from './Viewer'
+import { MainView } from './MainView'
 
 /** dockview theme whose CSS variables map onto our --fx-* tokens (styles/dock.css). */
 const THEME: DockviewTheme = {
@@ -50,17 +50,14 @@ const THEME: DockviewTheme = {
 }
 
 const COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelProps>> = {
-  [VIEWER]: () => (
-    <div className="flex h-full min-h-0 bg-panel p-1.5">
-      <Viewer />
-    </div>
-  ),
+  [VIEWER]: MainView,
   stack: StackPanel,
   palettes: PalettePanel,
   generate: GeneratePanel,
   maps: MapsPanel,
-  view3d: View3dPanel,
-  bake: BakePanel
+  bake: BakePanel,
+  // The 3D view used to be a panel; layouts that still have one close it on load (see workspace.ts).
+  [LEGACY_VIEW3D]: () => null
 }
 
 const TAB_COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelHeaderProps>> = {

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Theme } from '@shared/api'
+import { MIN_VIEW_SPLIT, type Theme, type ViewMode } from '@shared/api'
 import { DEFAULT_BAKE, DEFAULT_VIEW3D, type BakeSettings, type View3dSettings } from '@shared/bake'
 import type { MapChannel, MapSlot } from '@shared/maps'
 import type { StageSpec } from '@/gpu/plan'
@@ -120,6 +120,10 @@ interface AppState extends Doc {
   modelMaterial: number
   /** UV set textures and bakes use. */
   modelUvSet: number
+  /** Main view: the 2D viewer, 2D and 3D side by side, or the 3D view. */
+  viewMode: ViewMode
+  /** Share of the main view the 2D viewer gets side by side. */
+  viewSplit: number
   view3d: View3dSettings
   view3dShow: View3dShow
   bake: BakeSettings
@@ -162,6 +166,8 @@ interface AppState extends Doc {
   setModel(model: Omit<ModelInfo, 'version'> | null, material?: number): void
   setModelMaterial(material: number): void
   setModelUvSet(uvSet: number): void
+  setViewMode(mode: ViewMode): void
+  setViewSplit(split: number): void
   setView3d(patch: Partial<View3dSettings>): void
   setView3dShow(show: View3dShow): void
   setBake(patch: Partial<BakeSettings>): void
@@ -226,6 +232,8 @@ export const useApp = create<AppState>()((set, get) => ({
   model: null,
   modelMaterial: 0,
   modelUvSet: 0,
+  viewMode: '2d',
+  viewSplit: 0.5,
   view3d: DEFAULT_VIEW3D,
   view3dShow: 'result',
   bake: DEFAULT_BAKE,
@@ -325,6 +333,8 @@ export const useApp = create<AppState>()((set, get) => ({
   },
   setModelMaterial: (modelMaterial) => set({ modelMaterial }),
   setModelUvSet: (modelUvSet) => set({ modelUvSet }),
+  setViewMode: (viewMode) => set({ viewMode }),
+  setViewSplit: (split) => set({ viewSplit: Math.min(Math.max(split, MIN_VIEW_SPLIT), 1 - MIN_VIEW_SPLIT) }),
   setView3d: (patch) => set({ view3d: { ...get().view3d, ...patch } }),
   setView3dShow: (view3dShow) => set({ view3dShow }),
   setBake: (patch) => set({ bake: { ...get().bake, ...patch } }),

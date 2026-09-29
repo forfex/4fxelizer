@@ -85,7 +85,8 @@ function AppMenuBar() {
       'toggle-grid': s.grid,
       'toggle-split': s.split,
       'toggle-tile': s.tile,
-      [`theme-${s.theme}`]: true
+      [`theme-${s.theme}`]: true,
+      [`view-${s.viewMode}`]: true
     }))
   )
   // Clipboard actions must reach the field that was focused before the menu took focus. Recorded

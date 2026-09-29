@@ -43,6 +43,10 @@ export interface UserSettings {
   workspace: string
   /** Workspaces the user saved (Workspace › Save workspace as…). */
   workspaces: SavedWorkspace[]
+  /** What the main view shows: the 2D viewer, it and the 3D view side by side, or the 3D view. */
+  viewMode: ViewMode
+  /** Share of the main view the 2D viewer gets in the side-by-side mode (0.15–0.85). */
+  viewSplit: number
   /** How the 3D view draws models (the PSX look). */
   view3d: View3dSettings
   /** Map baking: resolution, which maps, and their settings. */
@@ -80,6 +84,16 @@ export const THEME_WINDOW_COLORS: Record<Theme, { background: string; symbol: st
   retro: { background: '#000080', symbol: '#ffffff' }
 }
 
+/** Main view modes: the 2D viewer, 2D and 3D side by side, or the 3D view alone. */
+export const VIEW_MODES = ['2d', 'split', '3d'] as const
+export type ViewMode = (typeof VIEW_MODES)[number]
+
+/** Names shown in the view mode switch and the View menu, in VIEW_MODES order. */
+export const VIEW_MODE_NAMES: Record<ViewMode, string> = { '2d': '2D', split: '2D / 3D', '3d': '3D' }
+
+/** Narrowest share of the main view either side gets in the side-by-side mode. */
+export const MIN_VIEW_SPLIT = 0.15
+
 /** Most saved workspaces kept (oldest dropped first). */
 export const MAX_WORKSPACES = 32
 
@@ -100,6 +114,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   layout: null,
   workspace: 'essentials',
   workspaces: [],
+  viewMode: '2d',
+  viewSplit: 0.5,
   view3d: DEFAULT_VIEW3D,
   bake: DEFAULT_BAKE
 }
@@ -133,6 +149,11 @@ export function normalizeSettings(raw: unknown): UserSettings {
     layout: isObject(r.layout) ? r.layout : null,
     workspace: typeof r.workspace === 'string' && r.workspace.trim() ? r.workspace.trim() : DEFAULT_SETTINGS.workspace,
     workspaces: normalizeWorkspaces(r.workspaces),
+    viewMode: VIEW_MODES.includes(r.viewMode as ViewMode) ? (r.viewMode as ViewMode) : DEFAULT_SETTINGS.viewMode,
+    viewSplit:
+      typeof r.viewSplit === 'number' && Number.isFinite(r.viewSplit)
+        ? Math.min(Math.max(r.viewSplit, MIN_VIEW_SPLIT), 1 - MIN_VIEW_SPLIT)
+        : DEFAULT_SETTINGS.viewSplit,
     view3d: normalizeView3d(r.view3d),
     bake: normalizeBake(r.bake)
   }
@@ -175,6 +196,7 @@ export type MenuCommand =
   | 'toggle-split'
   | 'toggle-tile'
   | `theme-${Theme}`
+  | `view-${ViewMode}`
   | 'gpu-diagnostics'
 
 export interface FxApi {

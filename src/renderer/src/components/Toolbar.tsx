@@ -1,8 +1,10 @@
-import { THEME_NAMES, THEMES, type Theme } from '@shared/api'
+import { THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type Theme, type ViewMode } from '@shared/api'
+import { formatAccelerator } from '@shared/menu'
 import { openImage, redo, undo } from '@/actions'
 import { useApp } from '@/store'
 import { PresetsMenu } from './Presets'
 import { Button } from './ui/button'
+import { Segmented } from './ui/controls'
 import { MinusIcon, PlusIcon, RedoIcon, UndoIcon } from './ui/icons'
 import { Lcd } from './ui/retro'
 import { Select } from './ui/select'
@@ -18,6 +20,12 @@ const THEME_HINTS: Record<Theme, string> = {
   retro: 'Classic silver-grey desktop, navy title bars, square corners'
 }
 
+const VIEW_MODE_HINTS: Record<ViewMode, string> = {
+  '2d': 'The texture only',
+  split: 'The texture and the model side by side',
+  '3d': 'The model only'
+}
+
 function Separator() {
   return <div className="mx-1 h-5 w-(--px) shrink-0 bg-edge shadow-[var(--px)_0_0_var(--fx-bevel-light)]" />
 }
@@ -30,9 +38,10 @@ export function Toolbar() {
   const split = useApp((s) => s.split)
   const tile = useApp((s) => s.tile)
   const theme = useApp((s) => s.theme)
+  const viewMode = useApp((s) => s.viewMode)
   const canUndo = useApp((s) => s.past.length > 0)
   const canRedo = useApp((s) => s.future.length > 0)
-  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setTheme, setExportOpen } = useApp.getState()
+  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setTheme, setViewMode, setExportOpen } = useApp.getState()
   const redoKey = window.fx.platform === 'darwin' ? '⇧⌘Z' : 'Ctrl+Y'
 
   return (
@@ -80,6 +89,14 @@ export function Toolbar() {
       <Button aria-pressed={tile} onClick={toggleTile} title={`Tiling view: copies around the texture to check its seams (${mod}T)`}>
         Tile
       </Button>
+
+      <Separator />
+      <Segmented
+        className="shrink-0 flex-nowrap"
+        value={viewMode}
+        onChange={setViewMode}
+        options={VIEW_MODES.map((m, i) => ({ value: m, label: VIEW_MODE_NAMES[m], hint: `${VIEW_MODE_HINTS[m]} (${formatAccelerator(`CmdOrCtrl+Shift+${i + 1}`, window.fx.platform)})` }))}
+      />
 
       <div className="flex-1" />
       <WorkspaceMenu />

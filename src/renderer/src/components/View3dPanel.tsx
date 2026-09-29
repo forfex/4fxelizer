@@ -1,4 +1,4 @@
-// The 3D view: the loaded model with the processed texture (or the source, or a map) on it, drawn
+// The 3D view (in the main view's 3D and 2D / 3D modes): the loaded model with the processed texture (or the source, or a map) on it, drawn
 // with switchable PSX quirks. Drag to orbit, right/middle/Shift-drag to pan, wheel to zoom,
 // double-click to frame the model.
 
@@ -30,7 +30,8 @@ const QUIRKS: { key: keyof Omit<View3dSettings, 'resolution'>; label: string; hi
 
 const RESOLUTION_LABELS: Record<View3dResolution, string> = { full: 'Full resolution', '480': '480 lines', '240': '240 lines (PSX)' }
 
-export function View3dPanel() {
+/** The 3D view's well (canvas, toolbar, model readout); the main view places it (see MainView). */
+export function View3d() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const camera = useRef<OrbitCamera | null>(null)
   const redraw = useRef<() => void>(() => {})
@@ -169,30 +170,28 @@ export function View3dPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-panel p-1.5">
-      <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
-        <canvas
-          ref={canvasRef}
-          className={cn('block size-full', model && 'cursor-grab active:cursor-grabbing')}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onDoubleClick={frameModel}
-          onContextMenu={(e) => e.preventDefault()}
-          onAuxClick={(e) => e.preventDefault()}
-        />
-        {model ? (
-          <>
-            <View3dToolbar onFrame={frameModel} />
-            <span className="bevel-raised pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-fx bg-panel/90 px-1.5 py-px text-small text-dim">
-              {model.name} · {model.triangles.toLocaleString('en-US')} tris
-            </span>
-          </>
-        ) : (
-          <EmptyState />
-        )}
-      </div>
+    <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
+      <canvas
+        ref={canvasRef}
+        className={cn('block size-full', model && 'cursor-grab active:cursor-grabbing')}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onDoubleClick={frameModel}
+        onContextMenu={(e) => e.preventDefault()}
+        onAuxClick={(e) => e.preventDefault()}
+      />
+      {model ? (
+        <>
+          <View3dToolbar onFrame={frameModel} />
+          <span className="bevel-raised pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-fx bg-panel/90 px-1.5 py-px text-small text-dim">
+            {model.name} · {model.triangles.toLocaleString('en-US')} tris
+          </span>
+        </>
+      ) : (
+        <EmptyState />
+      )}
     </div>
   )
 }
