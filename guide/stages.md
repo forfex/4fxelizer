@@ -2,8 +2,8 @@
 
 A texture is shaped by a stack of stages. Add them in the stack panel, drag them into any order, and switch them
 on and off. Every stage has an **opacity**, a **blend mode** and a **mask** over its input (under **Blending**; see
-[stage masks](masks-and-maps.md#stage-masks)). Click a stage to preview the image
-at that point; **Split View** (Ctrl+\\) compares before and after.
+[stage masks](masks-and-maps.md#stage-masks)). Click a stage's **preview** button (the square target in its header)
+to see the image at that point, and again to go back to the final result; **Split View** (Ctrl+\\) compares before and after.
 
 | Stage | What it does |
 |---|---|

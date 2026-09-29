@@ -64,7 +64,7 @@ yet, so Windows and macOS may warn on first launch; see [Troubleshooting](guide/
 
 1. **Open a texture**: drag it onto the window, or **File › Open Image…** (Ctrl+O).
 2. **Pick a preset**: toolbar › **Presets**, for example *PSX 8bpp*.
-3. **Tweak**: drag sliders, reorder stages, click a stage to preview the image at that point.
+3. **Tweak**: drag sliders, reorder stages, click a stage's preview button (the square target in its header) to preview the image at that point.
 4. **See it in 3D** (optional): drop the model on the window, or **File › Open Model…** (Ctrl+Shift+O).
 5. **Export**: **File › Export…** (Ctrl+E).
 

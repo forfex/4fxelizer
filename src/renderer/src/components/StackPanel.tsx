@@ -206,14 +206,12 @@ function StageCard({
           checked={stage.enabled}
           onCheckedChange={(enabled) => updateStage(stage.uid, { enabled })}
         />
-        <button
-          type="button"
+        {/* Only the preview button previews: a stray click on the name must not change the view. */}
+        <span
           className={cn(
-            'min-w-0 flex-1 truncate text-left font-display text-[14px] leading-[18px] font-semibold',
+            'min-w-0 flex-1 truncate font-display text-[14px] leading-[18px] font-semibold',
             !stage.enabled && 'text-faint line-through'
           )}
-          title={previewing ? 'Showing the image after this stage. Click to show the final result.' : 'Show the image after this stage'}
-          onClick={() => setPreview(previewing ? null : stage.uid)}
         >
           {stageLabel(stage.passId)}
           {(blended || masked) && (
@@ -221,7 +219,7 @@ function StageCard({
               · {blended ? `${Math.round(stage.blend.opacity * 100)}%` : 'masked'}
             </span>
           )}
-        </button>
+        </span>
         {resized && (
           <span className="hidden shrink-0 font-mono text-[10px] text-dim @min-[280px]/card:inline" title="Output size">
             {info.output.width}×{info.output.height}
@@ -235,9 +233,8 @@ function StageCard({
         <Button
           variant="ghost"
           size="icon"
-          // Narrow cards drop it: clicking the stage name does the same.
-          className="hidden size-5 shrink-0 @min-[220px]/card:inline-flex"
-          title={previewing ? 'Previewing this stage' : 'Preview the image at this stage'}
+          className="size-5 shrink-0"
+          title={previewing ? 'Showing the image after this stage. Click to show the final result.' : 'Show the image after this stage'}
           aria-label="Preview this stage"
           aria-pressed={previewing}
           onClick={() => setPreview(previewing ? null : stage.uid)}
