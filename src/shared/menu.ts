@@ -38,6 +38,7 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
     {
       label: 'File',
       items: [
+        command('New Project', 'new-project', 'CmdOrCtrl+N'),
         command('Open Project…', 'open-project'),
         command('Save Project', 'save-project', 'CmdOrCtrl+S'),
         command('Save Project As…', 'save-project-as', 'CmdOrCtrl+Shift+S'),

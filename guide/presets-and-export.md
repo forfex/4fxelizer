@@ -6,7 +6,8 @@
 palettes, every open texture with its maps and separate stack, and the model with the materials each texture is
 drawn on and its UV set. **File › Open Project…** (or
 dropping a `.pxproj` on the window) brings it all back, with fresh undo history. **Save Project As…**
-(Ctrl+Shift+S) saves a copy under another name.
+(Ctrl+Shift+S) saves a copy under another name. **File › New Project** (Ctrl+N) starts over: it closes every
+texture and the model and puts back the default stack (it asks first if the open project has unsaved changes).
 
 The project refers to your texture, map and model files where they are; it doesn't copy them. It stores each
 path both absolute and relative to the project, so you can move or copy a folder with the project and its files

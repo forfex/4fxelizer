@@ -275,6 +275,7 @@ export interface RendererGpuReport {
 }
 
 const PLAIN_COMMANDS = [
+  'new-project',
   'open-project',
   'save-project',
   'save-project-as',

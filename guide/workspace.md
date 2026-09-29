@@ -51,6 +51,7 @@ The defaults; change them in **Settings › Keybinds**. On macOS, use Cmd instea
 
 | Action | Shortcut |
 |---|---|
+| New project | Ctrl+N |
 | Open textures | Ctrl+O |
 | Close texture | Ctrl+F4 (macOS: Shift+Cmd+W) |
 | Next / previous texture | Ctrl+Tab / Ctrl+Shift+Tab |

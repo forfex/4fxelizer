@@ -11,6 +11,7 @@ import { getEngine } from '@/engine'
 import { readTextureRgba8 } from '@/gpu/textureIO'
 import { encodePng } from '@/image/png'
 import { closeModel, loadModelFile, stopBake } from '@/modelActions'
+import { initialDoc } from '@/stack/doc'
 import { base64ToBytes, bytesToBase64, parseProject, projectSignature, serializeProject, type ProjectData, type ProjectMap, type ProjectTexture } from '@/stack/project'
 import { useApp, type AppState } from '@/store'
 
@@ -161,6 +162,22 @@ export function startProjectGuard(): () => void {
     unsubscribe()
     offClose()
   }
+}
+
+// ── New ────────────────────────────────────────────────────────────────────
+
+/** Starts over: no textures, no model, the default stack, no project file, fresh undo history. */
+export async function newProject(): Promise<void> {
+  if (!(await confirmDiscard('starting a new project'))) return
+  stopBake()
+  const app = useApp.getState()
+  for (const t of app.textures) useApp.getState().closeTexture(t.id)
+  if (useApp.getState().model) closeModel()
+  app.loadDoc(initialDoc())
+  app.setPresetName(null)
+  app.clearHistory()
+  app.setProject(null)
+  app.setMessage({ kind: 'info', text: 'New project.' })
 }
 
 // ── Opening ────────────────────────────────────────────────────────────────

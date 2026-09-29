@@ -17,7 +17,7 @@ import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
 import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
 import { loadModelFile, openModel } from '@/modelActions'
-import { openProject, openProjectFile, saveProject } from '@/projectActions'
+import { newProject, openProject, openProjectFile, saveProject } from '@/projectActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
 import { LEGACY_PRESET_EXTENSION, parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
 import { newId, useApp, type MapInfo } from '@/store'
@@ -692,6 +692,7 @@ export function redo(): void {
 export function runMenuCommand(command: MenuCommand): void {
   const app = useApp.getState()
   switch (command) {
+    case 'new-project': return void newProject()
     case 'open-project': return void openProject()
     case 'save-project': return void saveProject()
     case 'save-project-as': return void saveProject({ as: true })
