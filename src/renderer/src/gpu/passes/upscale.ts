@@ -13,6 +13,17 @@ export const UPSCALE_METHODS = [
 
 export type UpscaleMethod = (typeof UPSCALE_METHODS)[number]['id']
 
+/** How alpha is enlarged; a position is its shader index. */
+export const UPSCALE_ALPHA = [
+  { id: 'same', label: 'Same as color', hint: 'Alpha is filtered with the color.' },
+  { id: 'nearest', label: 'Nearest', hint: 'Hard, blocky edges.' },
+  { id: 'smooth', label: 'Smooth', hint: 'Bilinear: soft edges.' },
+  { id: 'cutout', label: 'Cutout', hint: 'Smooth alpha cut at a threshold: hard edges that follow curves (alpha test).' },
+  { id: 'source', label: 'Original image', hint: 'The alpha of the loaded image, 1:1 when Size is Original: crisp full-resolution edges.' }
+] as const
+
+export type UpscaleAlpha = (typeof UPSCALE_ALPHA)[number]['id']
+
 export interface UpscaleParams {
   method: UpscaleMethod
   /** factor: input × factor; source: back to the original image size. */
@@ -20,13 +31,19 @@ export interface UpscaleParams {
   factor: number
   /** Wrap around the edges (tiling textures) instead of clamping. */
   wrap: boolean
+  /** Alpha filter, separate from the color filter. */
+  alpha: UpscaleAlpha
+  /** Cutout: the alpha from which a texel is opaque. */
+  alphaThreshold: number
 }
 
 export const DEFAULT_UPSCALE: UpscaleParams = {
   method: 'n64',
   sizeMode: 'factor',
   factor: 4,
-  wrap: false
+  wrap: false,
+  alpha: 'same',
+  alphaThreshold: 0.5
 }
 
 export const MAX_UPSCALE_FACTOR = 16
@@ -42,7 +59,7 @@ export const upscale = definePass<UpscaleParams>({
   id: 'upscale',
   label: 'Upscale',
   wgsl: /* wgsl */ `
-struct Params { method: u32, wrap: u32, _pad0: u32, _pad1: u32 }
+struct Params { method: u32, wrap: u32, alphaMode: u32, alphaThreshold: f32 }
 
 fn texel(q: vec2i) -> vec4f {
   let n = vec2i(textureDimensions(src));
@@ -157,7 +174,7 @@ fn epx(p: vec2u, size: vec2u, srcSize: vec2f) -> vec4f {
   return scale2x(c);
 }
 
-fn run(p: vec2u, size: vec2u) -> vec4f {
+fn colorAt(p: vec2u, size: vec2u) -> vec4f {
   let srcSize = vec2f(textureDimensions(src));
   // Source-space position of this output texel's center, relative to texel centers.
   let pos = (vec2f(p) + 0.5) * srcSize / vec2f(size) - 0.5;
@@ -215,8 +232,51 @@ fn run(p: vec2u, size: vec2u) -> vec4f {
   }
   return unpremul(acc);
 }
+
+/** The loaded image's alpha: exact at its own size, filtered to fit at any other. */
+fn sourceAlpha(p: vec2u, size: vec2u) -> f32 {
+  if (all(textureDimensions(sourceTex) == size)) { return textureLoad(sourceTex, p, 0).a; }
+  return textureSampleLevel(sourceTex, linearSampler, (vec2f(p) + 0.5) / vec2f(size), 0.0).a;
+}
+
+/** Color of the visible texels around q, for texels the color filter left transparent. */
+fn nearbyColor(q: vec2i, fallback: vec3f) -> vec3f {
+  var acc = vec4f(0.0);
+  for (var j = -1; j <= 1; j++) {
+    for (var i = -1; i <= 1; i++) { acc += premul(texel(q + vec2i(i, j))); }
+  }
+  if (acc.a <= 1.0 / 512.0) { return fallback; }
+  return clamp(acc.rgb / acc.a, vec3f(0.0), vec3f(1.0));
+}
+
+fn run(p: vec2u, size: vec2u) -> vec4f {
+  let c = colorAt(p, size);
+  if (params.alphaMode == 0u) { return c; }
+  let srcSize = vec2f(textureDimensions(src));
+  let q = vec2i(floor((vec2f(p) + 0.5) * srcSize / vec2f(size)));
+  var a = 0.0;
+  if (params.alphaMode == 1u) {
+    a = texel(q).a;
+  } else if (params.alphaMode == 4u) {
+    a = sourceAlpha(p, size);
+  } else {
+    let pos = (vec2f(p) + 0.5) * srcSize / vec2f(size) - 0.5;
+    let base = vec2i(floor(pos));
+    let f = pos - floor(pos);
+    a = mix(mix(texel(base).a, texel(base + vec2i(1, 0)).a, f.x), mix(texel(base + vec2i(0, 1)).a, texel(base + vec2i(1, 1)).a, f.x), f.y);
+    if (params.alphaMode == 3u) { a = select(0.0, 1.0, a >= max(params.alphaThreshold, 1.0 / 512.0)); }
+  }
+  var rgb = c.rgb;
+  if (c.a <= 1.0 / 512.0 && a > 0.0) { rgb = nearbyColor(q, rgb); }
+  return vec4f(rgb, clamp(a, 0.0, 1.0));
+}
 `,
   pack: (p) =>
-    packStruct(['u', Math.max(0, UPSCALE_METHODS.findIndex((m) => m.id === p.method))], ['u', p.wrap ? 1 : 0], ['u', 0], ['u', 0]),
+    packStruct(
+      ['u', Math.max(0, UPSCALE_METHODS.findIndex((m) => m.id === p.method))],
+      ['u', p.wrap ? 1 : 0],
+      ['u', Math.max(0, UPSCALE_ALPHA.findIndex((m) => m.id === p.alpha))],
+      ['f', p.alphaThreshold]
+    ),
   outputSize: (input, p, ctx) => upscaleSize(input, p, ctx?.source ?? null)
 })

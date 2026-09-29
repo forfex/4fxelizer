@@ -20,9 +20,9 @@ import { EMPTY_MASK, MASK_COMBINE, maskMapSlot, MAX_MASK_BLUR, normalizeMask, ty
 import { PASSES } from '@/gpu/passes'
 import { decodePattern } from '@/dither/customPattern'
 import { loadPatternImage } from '@/actions'
-import { DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
+import { DOWNSCALE_ALPHA, DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/passes/downscale'
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
-import { MAX_UPSCALE_FACTOR, UPSCALE_METHODS, type UpscaleParams } from '@/gpu/passes/upscale'
+import { MAX_UPSCALE_FACTOR, UPSCALE_ALPHA, UPSCALE_METHODS, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { StageSpec } from '@/gpu/plan'
 import { GENERATE_METHODS, MAX_PALETTE, type GeneratorSettings, type Palette } from '@/palette/palette'
 import type { StageInfo } from '@/stack/analyze'
@@ -211,6 +211,31 @@ function AdjustEditor({ params: p, set }: EditorProps<AdjustParams>) {
 
 const SIZE_PRESETS = [32, 64, 128, 256]
 
+/** Alpha filter chosen apart from the color one (Downscale, Upscale). */
+function AlphaFields<A extends string>({
+  modes,
+  params: p,
+  set,
+  thresholdHint
+}: {
+  modes: readonly { id: A; label: string; hint: string }[]
+  params: { alpha: A; alphaThreshold: number }
+  set(patch: { alpha?: A; alphaThreshold?: number }): void
+  thresholdHint: string
+}) {
+  const mode = modes.find((m) => m.id === p.alpha)
+  return (
+    <>
+      <Field label="Alpha" hint={mode?.hint}>
+        <Select className="flex-1" value={p.alpha} onValueChange={(alpha) => set({ alpha })} options={modes.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))} />
+      </Field>
+      {p.alpha === 'cutout' && (
+        <ParamSlider label="Threshold" hint={thresholdHint} value={p.alphaThreshold} min={0} max={1} step={0.01} onChange={(alphaThreshold) => set({ alphaThreshold })} />
+      )}
+    </>
+  )
+}
+
 function DownscaleEditor({ params: p, set, info }: EditorProps<DownscaleParams>) {
   const method = DOWNSCALE_METHODS.find((m) => m.id === p.method)
   return (
@@ -278,6 +303,7 @@ function DownscaleEditor({ params: p, set, info }: EditorProps<DownscaleParams>)
       {p.method === 'contrast' && (
         <ParamSlider label="Detail" hint="How strongly dark texels win over the average." value={p.detail} min={0} max={1} step={0.01} onChange={(detail) => set({ detail })} />
       )}
+      <AlphaFields modes={DOWNSCALE_ALPHA} params={p} set={set} thresholdHint="How much of a block must be covered for its texel to be opaque." />
     </>
   )
 }
@@ -316,6 +342,7 @@ function UpscaleEditor({ params: p, set, info }: EditorProps<UpscaleParams>) {
           hint="Blend across the edges as if the texture repeats, so tiling textures have no seams."
         />
       </Field>
+      <AlphaFields modes={UPSCALE_ALPHA} params={p} set={set} thresholdHint="Alpha from which a texel is opaque." />
       {info && info.input.width > 0 && (
         <Field label="Result" hint="Input → output size">
           <span className="font-mono text-small">

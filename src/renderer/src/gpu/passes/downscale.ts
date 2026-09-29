@@ -14,6 +14,16 @@ export const DOWNSCALE_METHODS = [
 
 export type DownscaleMethod = (typeof DOWNSCALE_METHODS)[number]['id']
 
+/** How alpha is reduced; a position is its shader index. */
+export const DOWNSCALE_ALPHA = [
+  { id: 'same', label: 'Same as color', hint: 'Alpha is filtered with the color method.' },
+  { id: 'nearest', label: 'Nearest', hint: 'One texel per block: hard, blocky edges.' },
+  { id: 'smooth', label: 'Smooth', hint: 'Average coverage of each block: soft edges.' },
+  { id: 'cutout', label: 'Cutout', hint: 'Opaque where enough of the block is covered, transparent elsewhere (1-bit, PSX-style).' }
+] as const
+
+export type DownscaleAlpha = (typeof DOWNSCALE_ALPHA)[number]['id']
+
 export interface DownscaleParams {
   method: DownscaleMethod
   /** longest: longest side = `longest`, aspect kept; exact: width × height; scale: input × scale. */
@@ -28,6 +38,10 @@ export interface DownscaleParams {
   tolerance: number
   /** Contrast-aware: how strongly dark texels win. */
   detail: number
+  /** Alpha filter, separate from the color method. */
+  alpha: DownscaleAlpha
+  /** Cutout: the block coverage from which a texel is opaque. */
+  alphaThreshold: number
 }
 
 export const DEFAULT_DOWNSCALE: DownscaleParams = {
@@ -39,7 +53,9 @@ export const DEFAULT_DOWNSCALE: DownscaleParams = {
   scale: 0.25,
   pot: false,
   tolerance: 0.06,
-  detail: 0.5
+  detail: 0.5,
+  alpha: 'same',
+  alphaThreshold: 0.5
 }
 
 /** Largest output side; also bounds the per-stage texture size. */
@@ -79,7 +95,7 @@ export const downscale = definePass<DownscaleParams>({
   id: 'downscale',
   label: 'Downscale',
   wgsl: /* wgsl */ `
-struct Params { method: u32, tolerance: f32, detail: f32, _p: f32 }
+struct Params { method: u32, tolerance: f32, detail: f32, alphaMode: u32, alphaThreshold: f32, _p0: f32, _p1: f32, _p2: f32 }
 
 const MAX_TAPS = ${MAX_TAPS};
 const BLOCK = ${BLOCK_SAMPLES};
@@ -130,26 +146,29 @@ fn resolve(acc: Acc) -> vec4f {
   return clamp(vec4f(rgb, a), vec4f(0.0), vec4f(1.0));
 }
 
+/** Box: exact area coverage of the footprint. */
+fn box(center: vec2f, scale: vec2f) -> vec4f {
+  var acc = Acc(vec3f(0.0), vec3f(0.0), 0.0, 0.0);
+  let a = center - scale * 0.5;
+  let b = center + scale * 0.5;
+  let lo = vec2i(floor(a));
+  let hi = vec2i(ceil(b));
+  let stride = max(vec2i(1), (hi - lo + MAX_TAPS - 1) / MAX_TAPS);
+  for (var y = lo.y; y < hi.y; y += stride.y) {
+    let wy = overlap(f32(y), a.y, b.y) * f32(stride.y);
+    for (var x = lo.x; x < hi.x; x += stride.x) {
+      let wx = overlap(f32(x), a.x, b.x) * f32(stride.x);
+      accumulate(&acc, texel(vec2i(x, y)), wx * wy);
+    }
+  }
+  return resolve(acc);
+}
+
 fn filtered(center: vec2f, scale: vec2f) -> vec4f {
   let method = params.method;
   let fs = max(scale, vec2f(1.0));
   var acc = Acc(vec3f(0.0), vec3f(0.0), 0.0, 0.0);
-  if (method == 3u) {
-    // Box: exact area coverage of the footprint.
-    let a = center - scale * 0.5;
-    let b = center + scale * 0.5;
-    let lo = vec2i(floor(a));
-    let hi = vec2i(ceil(b));
-    let stride = max(vec2i(1), (hi - lo + MAX_TAPS - 1) / MAX_TAPS);
-    for (var y = lo.y; y < hi.y; y += stride.y) {
-      let wy = overlap(f32(y), a.y, b.y) * f32(stride.y);
-      for (var x = lo.x; x < hi.x; x += stride.x) {
-        let wx = overlap(f32(x), a.x, b.x) * f32(stride.x);
-        accumulate(&acc, texel(vec2i(x, y)), wx * wy);
-      }
-    }
-    return resolve(acc);
-  }
+  if (method == 3u) { return box(center, scale); }
   let radius = select(3.0, 2.0, method == 2u) * fs;
   let lo = vec2i(floor(center - radius));
   let hi = vec2i(ceil(center + radius));
@@ -264,10 +283,8 @@ fn kuwahara(center: vec2f, scale: vec2f) -> vec4f {
   return best;
 }
 
-fn run(p: vec2u, size: vec2u) -> vec4f {
+fn colorAt(center: vec2f, scale: vec2f) -> vec4f {
   let srcSize = vec2f(textureDimensions(src));
-  let scale = srcSize / vec2f(size);
-  let center = (vec2f(p) + 0.5) * scale;
   switch params.method {
     case 0u: { return texel(vec2i(floor(center))); }
     case 1u: { return textureSampleLevel(src, linearSampler, center / srcSize, 0.0); }
@@ -278,13 +295,29 @@ fn run(p: vec2u, size: vec2u) -> vec4f {
     default: { return contrastAware(gather(center - scale * 0.5, center + scale * 0.5)); }
   }
 }
+
+fn run(p: vec2u, size: vec2u) -> vec4f {
+  let scale = vec2f(textureDimensions(src)) / vec2f(size);
+  let center = (vec2f(p) + 0.5) * scale;
+  let c = colorAt(center, scale);
+  if (params.alphaMode == 0u) { return c; }
+  // Alpha on its own; coverage is the block's box average.
+  let covered = box(center, scale);
+  var a = covered.a;
+  if (params.alphaMode == 1u) { a = texel(vec2i(floor(center))).a; }
+  if (params.alphaMode == 3u) { a = select(0.0, 1.0, a >= max(params.alphaThreshold, 1.0 / 512.0)); }
+  // A texel the color method left transparent takes the color of the block's visible texels.
+  let rgb = select(c.rgb, covered.rgb, c.a <= 1.0 / 512.0 && covered.a > 1.0 / 512.0);
+  return vec4f(rgb, a);
+}
 `,
   pack: (p) =>
     packStruct(
       ['u', Math.max(0, DOWNSCALE_METHODS.findIndex((m) => m.id === p.method))],
       ['f', p.tolerance],
       ['f', p.detail],
-      ['f', 0]
+      ['u', Math.max(0, DOWNSCALE_ALPHA.findIndex((m) => m.id === p.alpha))],
+      ['f', p.alphaThreshold]
     ),
   outputSize: downscaleSize
 })

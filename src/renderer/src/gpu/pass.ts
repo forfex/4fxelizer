@@ -68,7 +68,8 @@ export interface PassDef<P = unknown> {
    * and, if the pass has parameters, `struct Params { ... }` matching `pack`.
    * In scope: `src` (texture_2d<f32>), `params` (uniform Params), `linearSampler`, `palette`,
    * `pattern` (blue noise), `customPattern` (thresholds of a custom pattern image, r32float),
-   * `scratch` (read-write storage, see `scratchBytes`), the stage mask
+   * `scratch` (read-write storage, see `scratchBytes`), `sourceTex` (the loaded image, full
+   * size; stage keys already start from the source's, so reading it needs no cache key), the stage mask
    * (`maskAt(p, size)`, see `mask`) and the helpers in wgslLib.ts.
    *
    * A pass whose pixels depend on each other (error diffusion) can also define
@@ -144,6 +145,7 @@ struct PaletteEntry { color: vec4f, lab: vec4f }
 @group(0) @binding(8) var maskTex: texture_2d<f32>;
 @group(0) @binding(9) var customPattern: texture_2d<f32>;
 @group(0) @binding(10) var blendMaskTex: texture_2d<f32>;
+@group(0) @binding(11) var sourceTex: texture_2d<f32>;
 
 const ROW_THREADS = ${ROW_THREADS}u;
 
@@ -199,6 +201,8 @@ export interface PassBindings {
   customPattern?: GPUTexture | null
   /** The stage blend's mask (see StageBlend.mask); needs `blendMask` set in the stage uniforms. */
   blendMask?: GPUTexture | null
+  /** The loaded image (`sourceTex`); defaults to the pass input. */
+  source?: GPUTexture | null
 }
 
 export class PassRunner {
@@ -226,7 +230,8 @@ export class PassRunner {
         { binding: 7, visibility: compute, buffer: { type: 'storage' } },
         { binding: 8, visibility: compute, texture: { sampleType: 'float' } },
         { binding: 9, visibility: compute, texture: { sampleType: 'unfilterable-float' } },
-        { binding: 10, visibility: compute, texture: { sampleType: 'float' } }
+        { binding: 10, visibility: compute, texture: { sampleType: 'float' } },
+        { binding: 11, visibility: compute, texture: { sampleType: 'float' } }
       ]
     })
     this.emptyScratch = device.createBuffer({ label: 'empty scratch', size: 16, usage: GPUBufferUsage.STORAGE })
@@ -335,7 +340,8 @@ export class PassRunner {
           { binding: 7, resource: { buffer: bindings.scratch ?? this.emptyScratch } },
           { binding: 8, resource: (bindings.mask ?? this.noMask).createView() },
           { binding: 9, resource: (bindings.customPattern ?? this.noPattern).createView() },
-          { binding: 10, resource: (bindings.blendMask ?? this.noMask).createView() }
+          { binding: 10, resource: (bindings.blendMask ?? this.noMask).createView() },
+          { binding: 11, resource: (bindings.source ?? input).createView() }
         ]
       })
     const pass = encoder.beginComputePass({ label: def.id })
