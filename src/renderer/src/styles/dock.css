@@ -177,7 +177,11 @@
 .dockview-theme-fx .dv-groupview:has(.fx-texture-tabs) {
   --dv-tabs-and-actions-container-height: var(--fx-texture-tabs-height);
 }
-/* A texture tab: the dock tab's label font (not uppercased: file names), square, no accent line. */
+/* The viewer's tab stays unmarked when its group is focused: the selected texture tab has the line. */
+.dockview-theme-fx .dv-groupview.dv-active-group .dv-tab.dv-active-tab:has(.fx-texture-tabs) {
+  box-shadow: none;
+}
+/* A texture tab: the dock tab's label font (not uppercased: file names), square. */
 .dockview-theme-fx .fx-texture-tab {
   height: calc(var(--fx-dock-tab-height) - 3px);
   font-family: var(--fx-font-display);
@@ -191,5 +195,7 @@
 .dockview-theme-fx .fx-texture-tab[aria-selected='true'] {
   background: var(--fx-panel);
   border-color: var(--fx-edge);
-  box-shadow: inset var(--px) var(--px) 0 var(--fx-bevel-light);
+  box-shadow:
+    inset 0 calc(2 * var(--px)) 0 var(--fx-accent),
+    inset var(--px) 0 0 var(--fx-bevel-light);
 }

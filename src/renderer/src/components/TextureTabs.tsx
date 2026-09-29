@@ -50,7 +50,7 @@ export function TextureTabs({ fallback }: { fallback: ReactNode }) {
               if (e.key === 'Delete') closeTexture(t.id)
             }}
             className={cn(
-              'fx-texture-tab group/tab flex max-w-52 min-w-0 shrink-0 cursor-default items-center gap-2 pr-1.5 pl-3',
+              'fx-texture-tab group/tab flex max-w-52 min-w-0 shrink-0 cursor-default items-center gap-1.5 pr-1 pl-2.5',
               selected ? 'relative z-1 text-text' : 'text-dim hover:text-text'
             )}
           >
