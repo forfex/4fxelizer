@@ -22,13 +22,24 @@ export function GroupBox({ title, className, children, ...props }: ComponentProp
 }
 
 /**
+ * For a vertically scrolling box with `p-3` / `p-4`: the space for the scrollbar is always kept, and
+ * taken out of the right padding, so the content is as wide with a scrollbar as without one (the
+ * scrollbar takes the padding's place instead of squeezing the content).
+ */
+export const SCROLL_GUTTER_CLASS = {
+  '3': '[scrollbar-gutter:stable] pr-[max(0px,calc(var(--spacing)*3-var(--fx-scrollbar-size)))]',
+  '4': '[scrollbar-gutter:stable] pr-[max(0px,calc(var(--spacing)*4-var(--fx-scrollbar-size)))]'
+} as const
+
+/**
  * Scrollable content of a dockable panel (fills the panel, scrolls vertically). It is a size
- * container (`@container/panel`), so rows inside can reflow when the panel is narrow.
+ * container (`@container/panel`), so rows inside can reflow when the panel is narrow. The
+ * scrollbar sits in the right padding (`SCROLL_GUTTER_CLASS`), so the content keeps its width when it appears.
  */
 export function PanelBody({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
-      className={cn('@container/panel flex h-full min-h-0 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-panel p-3', className)}
+      className={cn('@container/panel flex h-full min-h-0 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-panel p-3', SCROLL_GUTTER_CLASS['3'], className)}
       {...props}
     />
   )
