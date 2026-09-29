@@ -54,7 +54,6 @@ let state: UpdateState = { status: 'idle' }
 /** The downloaded update, installed when the app quits with the 'update' intent. */
 let downloaded: { kind: InstallKind; file: string } | null = null
 let busy: Promise<void> | null = null
-let quitToInstall: () => void = () => app.quit()
 
 function setState(next: UpdateState): void {
   state = next
@@ -102,13 +101,18 @@ export function checkForUpdates(launch = false): Promise<void> {
       const kind = installKind()
       const installable = canInstallInPlace(kind) && kind !== null && pickAsset(release.assets, kind, process.arch) !== null
       const { auto, skipped } = getSettings().updates
-      if (launch && auto && installable) {
+      const prompt = launch && skipped !== release.version
+      if (prompt && auto && installable) {
         setState({ status: 'available', release, installable, prompt: false })
-        await download(release)
-        if (downloaded) quitToInstall()
+        // Ready: the renderer asks about unsaved work, then restarts (restartToInstall).
+        await download(release).catch((e: unknown) => {
+          console.warn('Update download failed:', e)
+          // Nobody asked for this one, so the update window opens to say what went wrong.
+          setState({ status: 'error', message: message(e), release, prompt: true })
+        })
         return
       }
-      setState({ status: 'available', release, installable, prompt: launch && skipped !== release.version })
+      setState({ status: 'available', release, installable, prompt })
     } catch (e) {
       console.warn('Update check failed:', e)
       setState({ status: 'error', message: message(e), release: 'release' in state ? state.release : undefined })
@@ -174,11 +178,11 @@ async function download(release: Release): Promise<void> {
 }
 
 /**
- * The user chose to update: builds that install in place download and then quit to install
- * (asking about unsaved changes first); the others open the release page.
+ * The user chose to update: builds that install in place download it (once ready, the renderer
+ * asks about unsaved work and calls restartToInstall); the others open the release page.
  */
 export async function installUpdate(): Promise<void> {
-  if (state.status === 'ready') return quitToInstall()
+  if (state.status === 'ready') return
   const release = state.status === 'available' || state.status === 'error' ? state.release : undefined
   if (!release) return
   const installable = canInstallInPlace(installKind())
@@ -188,7 +192,6 @@ export async function installUpdate(): Promise<void> {
   }
   if (busy) return busy
   busy = download(release)
-    .then(() => quitToInstall())
     .catch((e: unknown) => {
       console.warn('Update download failed:', e)
       setState({ status: 'error', message: message(e), release })
@@ -199,15 +202,11 @@ export async function installUpdate(): Promise<void> {
   return busy
 }
 
-/** How the app quits to install a downloaded update (index.ts: the unsaved-changes question, then quit). */
-export function setQuitToInstall(quit: () => void): void {
-  quitToInstall = () => {
-    void prepareInstall().then((ok) => ok && quit())
-  }
-}
-
-/** Before quitting to update: puts the new AppImage in place of the old one (the running app keeps its mounted copy). */
-async function prepareInstall(): Promise<boolean> {
+/**
+ * Before quitting to update (the renderer already asked about unsaved work): puts the new AppImage
+ * in place of the old one (the running app keeps its mounted copy). False: don't quit.
+ */
+export async function prepareInstall(): Promise<boolean> {
   if (!downloaded) return false
   if (!app.isPackaged) {
     console.log(`Development build: would install ${downloaded.file} and restart.`)
@@ -223,7 +222,8 @@ async function prepareInstall(): Promise<boolean> {
       await rename(staged, target)
     } catch (e) {
       await rm(staged, { force: true })
-      setState({ status: 'error', message: `Could not replace ${basename(target)}: ${message(e)}`, release: 'release' in state ? state.release : undefined })
+      const release = 'release' in state ? state.release : undefined
+      setState({ status: 'error', message: `Could not replace ${basename(target)}: ${message(e)}`, release, prompt: true })
       downloaded = null
       return false
     }

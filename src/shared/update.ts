@@ -47,7 +47,9 @@ export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { checkOnLaunch: true, au
 
 /**
  * Where updating stands, as main reports it to the renderer. `prompt`: found by the startup
- * check, so the renderer asks the user. `installable`: this build can install it in place
+ * check, so the renderer asks the user (for an error: one the user didn't see coming, so the
+ * update window opens to show it). `ready`: downloaded; the renderer asks about unsaved work, then
+ * restarts to install. `installable`: this build can install it in place
  * (otherwise the release page is opened to download it).
  */
 export type UpdateState =
@@ -57,7 +59,7 @@ export type UpdateState =
   | { status: 'available'; release: Release; installable: boolean; prompt: boolean }
   | { status: 'downloading'; release: Release; received: number; total: number }
   | { status: 'ready'; release: Release }
-  | { status: 'error'; message: string; release?: Release }
+  | { status: 'error'; message: string; release?: Release; prompt?: boolean }
 
 const VERSION = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/
 

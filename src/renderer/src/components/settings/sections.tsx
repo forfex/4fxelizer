@@ -209,7 +209,7 @@ export function UpdatesSection() {
           disabled={!updates.checkOnLaunch}
           onCheckedChange={(auto) => saveSettings({ updates: { ...updates, auto } })}
           label="Update automatically"
-          hint="Download a new version at launch and restart into it without asking (Windows installer and Linux AppImage; other builds still ask). Unsaved project changes are asked about first."
+          hint="Download a new version at launch and restart into it without asking (Windows installer and Linux AppImage; other builds still ask). Unsaved work is asked about first."
         />
       </Field>
     </>

@@ -3,7 +3,7 @@ import type { UpdateState } from '@shared/update'
 import { parseNotes, type Span } from '@/lib/releaseNotes'
 import { saveSettings, useSavedSettings } from '@/settings'
 import { useApp } from '@/store'
-import { useUpdateState, WHATS_NEW } from '@/updates'
+import { restartToUpdate, useUpdateState, WHATS_NEW } from '@/updates'
 import { Button } from './ui/button'
 import { Dialog, DialogContent } from './ui/dialog'
 import { Led, type LedState } from './ui/retro'
@@ -26,7 +26,7 @@ function describe(state: UpdateState): { led: LedState; text: string } {
       return { led: 'busy', text: `Downloading ${state.release.version}… ${pct}% (${(state.received / MB).toFixed(1)} of ${(state.total / MB).toFixed(1)} MB)` }
     }
     case 'ready':
-      return { led: 'busy', text: `Version ${state.release.version} is downloaded. The app restarts to install it.` }
+      return { led: 'warn', text: `Version ${state.release.version} is downloaded. Restart to install it.` }
     case 'error':
       return { led: 'error', text: state.message }
   }
@@ -112,11 +112,13 @@ export function UpdateAction({ primary = false }: { primary?: boolean }) {
           Try again
         </Button>
       ) : (
-        <Button onClick={() => window.fx.checkForUpdates()}>Check again</Button>
+        <Button variant={variant} onClick={() => window.fx.checkForUpdates()}>
+          Check again
+        </Button>
       )
     case 'ready':
       return (
-        <Button variant={variant} onClick={() => window.fx.installUpdate()}>
+        <Button variant={variant} onClick={() => void restartToUpdate()}>
           Restart now
         </Button>
       )
@@ -157,7 +159,7 @@ export function UpdateDialog() {
           {offered && (
             <p className="text-small text-dim">
               {state.installable
-                ? 'The app restarts to install the update. You are asked to save unsaved project changes first.'
+                ? 'The app restarts to install the update. You are asked to save unsaved work first.'
                 : 'This copy of the app can’t update itself. Download opens the release page to get the new version.'}
             </p>
           )}

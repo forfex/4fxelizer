@@ -11,7 +11,7 @@ import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
 import { flushSettings, getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
-import { checkForUpdates, currentVersion, installUpdate, runInstaller, setQuitToInstall, updateState } from './updater'
+import { checkForUpdates, currentVersion, installUpdate, prepareInstall, runInstaller, updateState } from './updater'
 import { FileWatcher } from './watch'
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
@@ -366,6 +366,16 @@ function registerIpc(): void {
   ipcMain.handle(IPC.updateGetState, () => updateState())
   ipcMain.on(IPC.updateCheck, () => void checkForUpdates())
   ipcMain.on(IPC.updateInstall, () => void installUpdate())
+  // The renderer already asked about unsaved work (also work that isn't in a project), so the
+  // windows close without asking again.
+  ipcMain.on(IPC.updateRestart, () =>
+    void prepareInstall().then((ok) => {
+      if (!ok) return
+      for (const win of BrowserWindow.getAllWindows()) closing.add(win)
+      quitIntent = 'update'
+      app.quit()
+    })
+  )
 
   ipcMain.on(IPC.menuRole, (event, role: MenuRole) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -478,11 +488,6 @@ function scheduleUpdateCheck(): void {
 
 app.whenReady().then(() => {
   registerIpc()
-  // Relaunched from will-quit, like Restart now, once the unsaved-changes question is answered.
-  setQuitToInstall(() => {
-    quitIntent = 'update'
-    app.quit()
-  })
   createWindow()
   scheduleUpdateCheck()
   app.on('activate', () => {

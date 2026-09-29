@@ -42,7 +42,8 @@ there is one, a window shows what's new: **Update and restart** downloads it, ch
 Updates…** or **Check for updates** in Settings looks right away.
 
 **Update automatically** (off by default) installs a new version at startup and restarts into it without asking.
-Either way, unsaved project changes are asked about before the app restarts.
+Either way, the app asks before it restarts if you have unsaved work (project changes, or open textures not saved
+as a project).
 
 The first time a new version starts, it shows a short list of what's new.
 

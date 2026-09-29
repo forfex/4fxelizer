@@ -398,8 +398,10 @@ export interface FxApi {
   onUpdateState(listener: (state: UpdateState) => void): () => void
   /** Looks for a newer release on GitHub. */
   checkForUpdates(): void
-  /** Downloads and installs the new version, then restarts (or opens its release page where the app can't update itself). */
+  /** Downloads the new version (or opens its release page where the app can't update itself); the state then becomes 'ready'. */
   installUpdate(): void
+  /** Quits and installs the downloaded update, which starts the app again. Ask about unsaved work first: main doesn't. */
+  restartToUpdate(): void
 }
 
 export const IPC = {
@@ -440,7 +442,8 @@ export const IPC = {
   updateGetState: 'update:get-state',
   updateState: 'update:state',
   updateCheck: 'update:check',
-  updateInstall: 'update:install'
+  updateInstall: 'update:install',
+  updateRestart: 'update:restart'
 } as const
 
 /** Colors (CSS color strings) and height (CSS px) of the native window buttons over the custom title bar. */

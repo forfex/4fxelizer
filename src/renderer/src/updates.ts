@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react'
 import type { UpdateState } from '@shared/update'
 import WHATS_NEW from '../../../WHATSNEW.md?raw'
+import { confirmDiscard } from './projectActions'
 import { savedSettings, saveSettings } from './settings'
 import { useApp } from './store'
 
@@ -46,23 +47,43 @@ function showWhatsNewOnce(): void {
   if (WHATS_NEW.trim()) useApp.getState().setWhatsNewOpen(true)
 }
 
+let restarting = false
+
+/**
+ * Restarts into the downloaded update, after asking about unsaved work: a project's changes, and
+ * also open textures that aren't in a project (the user didn't close the app, so nothing may be
+ * lost without asking). Cancelling keeps the update ready for Restart now.
+ */
+export async function restartToUpdate(): Promise<void> {
+  if (current.status !== 'ready' || restarting) return
+  const version = current.release.version
+  const app = useApp.getState()
+  // The unsaved-changes question gets the screen.
+  app.setUpdateOpen(false)
+  restarting = true
+  try {
+    if (!(await confirmDiscard('updating', { unsavedWork: true }))) return
+    app.setMessage({ kind: 'info', text: `Restarting to install version ${version}…` })
+    window.fx.restartToUpdate()
+  } finally {
+    restarting = false
+  }
+}
+
 /** Follows main's update state; a new version found at startup opens the update window. */
 export function startUpdates(): () => void {
   showWhatsNewOnce()
   let stopped = false
-  const receive = (state: UpdateState): void => {
+  const receive = (state: UpdateState, initial = false): void => {
     if (stopped) return
+    const was = current.status
     set(state)
-    const app = useApp.getState()
-    if (state.status === 'available' && state.prompt) openUpdateWindow()
-    // Quitting to install: the unsaved-changes question may come up, so it gets the screen.
-    if (state.status === 'ready') {
-      app.setUpdateOpen(false)
-      app.setMessage({ kind: 'info', text: `Restarting to install version ${state.release.version}…` })
-    }
+    if ((state.status === 'available' || state.status === 'error') && state.prompt) openUpdateWindow()
+    // Just downloaded (not a reloaded window finding it ready): restart into it.
+    if (state.status === 'ready' && was !== 'ready' && !initial) void restartToUpdate()
   }
-  const unsubscribe = window.fx.onUpdateState(receive)
-  window.fx.getUpdateState().then(receive, () => {})
+  const unsubscribe = window.fx.onUpdateState((state) => receive(state))
+  window.fx.getUpdateState().then((state) => receive(state, true), () => {})
   return () => {
     stopped = true
     unsubscribe()
