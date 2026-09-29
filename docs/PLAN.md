@@ -148,8 +148,9 @@ Bake resolution is independent of texture resolution (masks are sampled in UV), 
 Metallic/roughness/specular: same downscale, no dither/quantize (or grayscale quantize).
 
 ### UI
-Before/after split view, zoom with pixel grid, 3D viewport tab, collapsible stage panels with on/off toggles,
-presets ("PSX 8bpp", "PSX 4bpp", "NES-ish", "Crunchy"), undo/redo, drag & drop, batch export, tooltips on every setting.
+Before/after split view, zoom with pixel grid, a 2D · 2D / 3D · 3D view switch, collapsible stage panels with on/off toggles,
+presets ("PSX 8bpp", "PSX 4bpp", "NES-ish", "Crunchy"), undo/redo, drag & drop, live reload of the texture, maps and
+model when they're saved from another app, batch export, tooltips on every setting.
 
 ## Visual style: retro, not pixelated
 Late-90s / early-2000s software feel (PS1 menus, classic desktop apps, old 3D and audio tools) with
@@ -182,8 +183,9 @@ source into the project and Radix supplies only behavior, so every visual detail
 ## Roadmap
 0. **Foundation** — Electron + React + Vite skeleton, WebGPU pass framework, image load/save, 2D viewer (zoom, pixel grid, split view). Verify WebGPU on Win/macOS/Linux.
 1. **2D core (first usable version)** — reorderable stage stack with per-stage blend + preview-at-stage, adjust, downscale modes, palette generation + editor, ordered + blue-noise dither, indexed PNG export.
-   *Status: implemented, verified on Windows, including Wu/octree palette generation, the palette eyedropper
-   and TGA/BMP export. Not in yet: per-stage masks (Phase 2).*
+   *Status: implemented, verified on Windows, including Wu/octree palette generation (with luma/chroma weights and a
+   lightness gamma), the palette eyedropper and TGA/BMP export. Every stage's blend has an optional mask (the same
+   sources as Dither's, combined and blurred, with a mask view); Dither keeps its own mask instead.*
 2. **Dither expansion** — line/halftone/error-diffusion dithers, texture-derived masks, imported map slots, mask blending, presets.
    *Status: implemented, verified on Windows: error diffusion (8 kernels, serpentine, wrap-around), lines/halftone/
    clustered/noise/checker/crosshatch patterns and custom pattern images, Knoll mixing, dither saturation, masks built

@@ -55,14 +55,16 @@ Load a texture (drag and drop, or **File › Open**), then shape it with a reord
   inverted, then blurred and shaped by strength and gamma; a mask view shows the result, and a different
   pattern can run outside the mask. **Wrap edges** makes error diffusion and mask filtering tile seamlessly.
 
-Every stage has on/off, opacity and a blend mode; click a stage to preview the image at that point.
+Every stage has on/off, opacity, a blend mode and a **mask** (Blending › Mask: the same image and map sources,
+combined and blurred, with a mask view) that limits it to part of the texture; click a stage to preview the image at that point.
 **Maps** (Maps panel) load with the texture when they sit next to it with a map suffix (`rock_ao.png`,
 `Rock_AmbientOcclusion.tga`, `T_Rock_ORM.png`; ORM/ARM and RMA files are split into their channels), can be
 dropped on the window or loaded per slot, and are sampled in UV, so their size doesn't need to match.
 **Tiling view** (View › Tiling View, Ctrl+T) repeats the texture 3×3 to show its seams.
 **3D models** (**File › Open Model…**, Ctrl+Shift+O, or drop a glTF, GLB, FBX or OBJ file): the **3D view** shows the
-processed texture on the model as you work, with the PSX quirks each switchable (vertex snapping, affine texture
-warping, nearest texels, a 240- or 480-line framebuffer, lighting and 15-bit dither). The model's base color texture
+processed texture on the model as you work. The toolbar's **2D · 2D / 3D · 3D** switch (View menu, Ctrl+Shift+1/2/3)
+shows the texture, both side by side (drag the bar between them), or the model alone; opening a model shows both.
+Each PSX quirk of the 3D view can be switched (vertex snapping, affine texture warping, nearest texels, a 240- or 480-line framebuffer, lighting and 15-bit dither). The model's base color texture
 opens with it (from next to the file, or embedded in GLB/FBX), or the open texture stays when the model uses it.
 The **Bake** panel bakes AO, cavity, curvature, edge, thickness, height and up-facing maps from the model's shape
 straight into the map slots, ray traced on the GPU in the model's UV space, with edge padding; the maps sharpen
@@ -71,7 +73,8 @@ while they bake and can be stopped early. Baked maps drive masks and Adjust's sh
 Quantize and Dither take their colors from a **palette** or a **generated** palette (2–8192 colors, built
 automatically from the stage's input). Palettes are shared resources: generate them from the image
 (median cut, Wu, octree or k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
-`.hex/.gpl/.pal/.act/.ase`, edit and lock colors, or pick colors from the image with the eyedropper
+`.hex/.gpl/.pal/.act/.ase`, edit and lock colors (generation weighs lightness, hue and a gamma that spends more
+colors on the darks or the lights), or pick colors from the image with the eyedropper
 (**Pick**, or Alt+click the viewer; some Linux desktops reserve Alt+click for moving windows, so use **Pick** there).
 Wu and octree reach the requested color count even on smooth gradients.
 **Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
@@ -83,7 +86,9 @@ the menus and Alt+letter opens one, as in a native menu bar. macOS keeps its sys
 Five themes: **Dark** (plum with purple and magenta accents), **Night** (neutral greyscale, for dim rooms and for
 judging colors with no tinted chrome around the image), **Light**, **Matrix** (green phosphor) and **Retro** (the classic
 silver-grey desktop); pick one in View › Theme or the toolbar's theme menu. GPU details are in Help › GPU Diagnostics.
-The theme, grid, split view, tiling view, the export format, the 3D view's look, the bake settings, the panel layout and the window size and position are remembered between sessions.
+**Live reload**: the open texture, its maps and the model reload when you save them from another app (Photoshop,
+Blender, …), keeping the stack, the zoom and the 3D camera; File › Reload Changed Files turns it off.
+The theme, grid, split view, tiling view, the view mode, the export format, the 3D view's look, the bake settings, the panel layout and the window size and position are remembered between sessions.
 **File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
 indexed BMP has no alpha, so transparent pixels use index 0 and semi-transparent ones become opaque).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.

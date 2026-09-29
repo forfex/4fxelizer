@@ -1,4 +1,4 @@
-// Imported maps (AO, cavity, …) that dither masks can use. Maps named like the texture load with it;
+// Imported maps (AO, cavity, …) that stage masks can use. Maps named like the texture load with it;
 // each slot can also be filled or cleared by hand, and packed maps pick the channel they read.
 
 import { MAP_CHANNELS, MAP_SLOTS, type MapSlot } from '@shared/maps'
@@ -16,7 +16,7 @@ export function MapsPanel() {
     <PanelBody>
       <GroupBox title="Maps">
         <p className="mb-2 text-small text-dim">
-          Grayscale maps for dither masks (Dither › Mask) and Adjust's shading. Maps named like the texture, such as rock_ao.png or
+          Grayscale maps for masks (Dither › Mask, or any stage's Blending › Mask) and Adjust's shading. Maps named like the texture, such as rock_ao.png or
           rock_orm.png next to rock.png, load with it. You can also drop map files on the window, or bake them from a model (Bake panel).
         </p>
         <div className="flex flex-col gap-1.5">
