@@ -60,6 +60,14 @@ Every stage has on/off, opacity and a blend mode; click a stage to preview the i
 `Rock_AmbientOcclusion.tga`, `T_Rock_ORM.png`; ORM/ARM and RMA files are split into their channels), can be
 dropped on the window or loaded per slot, and are sampled in UV, so their size doesn't need to match.
 **Tiling view** (View › Tiling View, Ctrl+T) repeats the texture 3×3 to show its seams.
+**3D models** (**File › Open Model…**, Ctrl+Shift+O, or drop a glTF, GLB, FBX or OBJ file): the **3D view** shows the
+processed texture on the model as you work, with the PSX quirks each switchable (vertex snapping, affine texture
+warping, nearest texels, a 240- or 480-line framebuffer, lighting and 15-bit dither). The model's base color texture
+opens with it (from next to the file, or embedded in GLB/FBX), or the open texture stays when the model uses it.
+The **Bake** panel bakes AO, cavity, curvature, edge, thickness, height and up-facing maps from the model's shape
+straight into the map slots, ray traced on the GPU in the model's UV space, with edge padding; the maps sharpen
+while they bake and can be stopped early. Baked maps drive masks and Adjust's shading like imported ones, and
+**Save…** in the Maps panel writes them as PNGs named to load with the texture next time (`rock_ao.png`).
 Quantize and Dither take their colors from a **palette** or a **generated** palette (2–8192 colors, built
 automatically from the stage's input). Palettes are shared resources: generate them from the image
 (median cut, Wu, octree or k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
@@ -69,13 +77,13 @@ Wu and octree reach the requested color count even on smooth gradients.
 **Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
 PSX 15-bit, N64, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
 Panels dock, tab together, float over the viewer and resize, like in Photoshop; the toolbar's workspace menu
-switches between built-in layouts (Essentials, Wide viewer, Palette editing, Floating), saves your own and resets them.
+switches between built-in layouts (Essentials, Wide viewer, Palette editing, 3D, Floating), saves your own and resets them.
 On Windows and Linux the app draws its own title bar with the menus in the theme's colors; Alt or F10 moves to
 the menus and Alt+letter opens one, as in a native menu bar. macOS keeps its system menu bar.
 Five themes: **Dark** (plum with purple and magenta accents), **Night** (neutral greyscale, for dim rooms and for
 judging colors with no tinted chrome around the image), **Light**, **Matrix** (green phosphor) and **Retro** (the classic
 silver-grey desktop); pick one in View › Theme or the toolbar's theme menu. GPU details are in Help › GPU Diagnostics.
-The theme, grid, split view, tiling view, the export format, the panel layout and the window size and position are remembered between sessions.
+The theme, grid, split view, tiling view, the export format, the 3D view's look, the bake settings, the panel layout and the window size and position are remembered between sessions.
 **File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
 indexed BMP has no alpha, so transparent pixels use index 0 and semi-transparent ones become opaque).
 Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
@@ -136,6 +144,8 @@ src/preload/         window.fx bridge (sandboxed, CommonJS)
 src/shared/api.ts    IPC contract and user settings shared by main, preload and renderer
 src/shared/menu.ts   the app menu, defined once: native menu in main, title bar menus in the renderer
 src/shared/maps.ts   map slots and how map files are recognized by name (_ao, _cavity, _orm, …)
+src/shared/model.ts  model file types and where to look for the files a model refers to
+src/shared/bake.ts   bake and 3D view settings
 src/renderer/src/
   gpu/pass.ts        pass framework: each stage = one WGSL compute function (+ blend, palette, mask, patterns)
   gpu/mask.ts        stage masks: sources (image-derived or imported maps), combine, blur, built on the GPU
@@ -145,6 +155,10 @@ src/renderer/src/
   gpu/resources.ts   GPU copies of palettes, imported maps, custom patterns and the blue-noise texture
   gpu/viewer.*       2D viewer renderer: zoom, split view, tiling view, pixel grid, alpha checker
   gpu/passes/        stages: adjust, downscale, upscale, quantize, dither
+  gpu/model/         3D view renderer (PSX look) and the model's GPU buffers
+  gpu/bake/          map baking: BVH ray tracing from a texture-space G-buffer, progressive
+  model/             model loading (three.js loaders, in a worker), BVH, UV rasterizer (pure, unit-tested)
+  viewer3d/          orbit camera math
   color/             OKLab conversion
   palette/           palette model, generation (worker), file formats, built-ins, auto-regeneration
   dither/            blue-noise generator (void-and-cluster), custom pattern images
@@ -154,7 +168,7 @@ src/renderer/src/
   engine.ts          owns GPU objects; React talks to it
   store.ts           app state + undoable document (zustand)
   workspace/         dockable panel layout: built-in workspaces, saved layouts and their checks
-  components/        title bar, dock, stack panel, stage editors, palette and maps panels, export dialog, viewer
+  components/        title bar, dock, stack panel, stage editors, palette, maps and bake panels, export dialog, viewer, 3D view
   components/ui/     shadcn-style primitives, restyled via tokens
   styles/tokens.css  design tokens: the one place to restyle the app
 ```
@@ -178,8 +192,8 @@ The landing page lives in `site/` and is deployed to GitHub Pages by `.github/wo
 
 ## License
 
-4FXELIZER is released under the [MIT License](LICENSE). It bundles open-source libraries (React, Radix UI, dockview, zustand
-and a few small helpers, all MIT, ISC, Apache-2.0 or 0BSD) and the Chakra Petch, Rubik and Martian Mono fonts (SIL Open
+4FXELIZER is released under the [MIT License](LICENSE). It bundles open-source libraries (React, Radix UI, dockview, zustand,
+three.js and a few small helpers, all MIT, ISC, Apache-2.0 or 0BSD) and the Chakra Petch, Rubik and Martian Mono fonts (SIL Open
 Font License 1.1), and runs on Electron; their notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and
 installers include the Electron and Chromium licenses. The app ships no third-party images or textures.
 

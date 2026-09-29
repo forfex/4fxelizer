@@ -15,7 +15,7 @@ Target users: artists, not programmers.
 | Design hand-off | UI designed in **Figma** + Figma variables → mapped 1:1 to CSS variables / Tailwind tokens |
 | Image processing | **WebGPU** (WGSL) passes, each stage cached |
 | CPU algorithms | TypeScript in **Web Workers** first (k-means, median cut, error diffusion); move hot paths to **Rust → WASM** only if profiling says so (no native modules → no per-OS builds) |
-| 3D | **three.js** + **three-mesh-bvh** (GPU ray tracing for baking) |
+| 3D | **three.js** loaders (in a worker) for import; the 3D view and baking are our own WGSL on the app's GPU device (a BVH built on the CPU, traced in compute shaders) |
 | Model formats | glTF/GLB, FBX, OBJ(+MTL) via three.js loaders; **assimpjs** (WASM) fallback for problem FBX files + extras (DAE, 3DS, PLY) |
 | Missing UVs | auto-unwrap with **xatlas** (WASM) |
 | Export | PNG (RGBA + 8-bit indexed with palette), TGA, BMP; palettes .gpl/.act/.hex; later PSX .TIM |
@@ -192,5 +192,15 @@ source into the project and Radix supplies only behavior, so every visual detail
    unpacking, Maps panel), a 3×3 tiling view and presets.*
 3. **3D** — model import (glTF/FBX/OBJ), viewport, PSX preview shader, UV G-buffer + BVH ray tracing,
    AO/cavity/curvature/edge/thickness baking with edge padding and progressive refinement.
+   *Status: implemented, verified on Windows: glTF/GLB (external and embedded buffers and images), FBX (embedded or
+   referenced textures) and OBJ+MTL import; base color textures found next to the model or embedded; texture sets
+   (materials) and UV sets; a 3D view with the processed texture, the source or any map on the model and switchable
+   PSX quirks (vertex snapping, affine mapping, nearest texels, 240/480-line framebuffer, lighting, 15-bit dither);
+   baking of AO, cavity, curvature, edge, thickness, height and up-facing maps (up to 2048²) into the map slots,
+   with supersampled coverage, overlap detection, edge padding, progressive refinement and early stop; baked maps
+   saved as PNGs named to load with the texture. The BVH is our own (binned SAH) rather than three-mesh-bvh, laid out
+   for the WGSL traversal. Curvature/edge come from surface probes (rays), not mesh curvature or normal-map divergence.
+   Not in yet: assimpjs fallback (old FBX, DAE, 3DS, PLY), xatlas unwrap for models without UVs, normal maps in bakes,
+   averaging overlapping UV layers, baking several texture sets at once, high-poly → low-poly baking.*
 4. **Mask-driven dithering** using baked maps.
 5. **Polish** — project files, batch processing, shared palettes, PBR maps, TIM export, onboarding, installers for all OSes.
