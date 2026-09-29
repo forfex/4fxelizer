@@ -61,6 +61,9 @@ code{font:0.9em var(--font-mono)}
 .ramp>span{flex:1}
 .ramp>span:first-child{background:var(--b)}
 .ramp>span:last-child{background:var(--a)}
+/* Mirrored ramp: fades out toward both ends, solid in the middle. */
+.ramp.mirror>span:last-child{background:var(--b)}
+.ramp>span.solid{background:var(--a)}
 
 /* Buttons: beveled, inside an ink outline. The primary one sits on its hard shadow. */
 .btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);
@@ -246,7 +249,7 @@ footer .logo{margin-right:auto;font-size:14px}
 </div></section>
 
 <footer>
-  <div class="ramp" aria-hidden="true" style="--b:var(--fx-bg)"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></div>
+  <div class="ramp mirror" aria-hidden="true" style="--b:var(--fx-bg)"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span class="solid"></span><span class="d75"></span><span class="d50"></span><span class="d25"></span><span></span></div>
   <div class="wrap">
     <a class="logo" href="#"><img src="icon.svg" alt="">4FXELIZER</a>
     <a href="https://github.com/forfex/4fxelizer">GitHub</a>
