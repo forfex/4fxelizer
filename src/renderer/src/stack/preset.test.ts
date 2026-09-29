@@ -3,7 +3,7 @@ import { MAX_MASK_BLUR } from '@/gpu/mask'
 import type { DitherParams } from '@/gpu/passes/dither'
 import type { DownscaleParams } from '@/gpu/passes/downscale'
 import { analyzeStack } from './analyze'
-import { BUILTIN_PRESETS } from './builtinPresets'
+import { BUILTIN_PRESETS, PRESET_CATEGORIES } from './builtinPresets'
 import { initialDoc, ownedPalette, toProjectPalette } from './doc'
 import { parsePreset, presetFileName, PresetError, serializePreset } from './preset'
 
@@ -130,6 +130,11 @@ describe('presets', () => {
     doc = { ...doc, ...toProjectPalette(doc, doc.stages[2]!.uid, 'proj') }
     const { doc: loaded } = parsePreset(serializePreset(doc, 'x'))
     expect((loaded.stages[2]!.params as DitherParams).paletteId).toBe(loaded.palettes[0]!.id)
+  })
+
+  it('files every built-in under a category, with unique names', () => {
+    for (const c of PRESET_CATEGORIES) expect(BUILTIN_PRESETS.some((p) => p.category === c.id)).toBe(true)
+    expect(new Set(BUILTIN_PRESETS.map((p) => p.name)).size).toBe(BUILTIN_PRESETS.length)
   })
 
   for (const preset of BUILTIN_PRESETS) {
