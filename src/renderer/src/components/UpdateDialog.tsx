@@ -3,7 +3,7 @@ import type { UpdateState } from '@shared/update'
 import { parseNotes, type Span } from '@/lib/releaseNotes'
 import { saveSettings, useSavedSettings } from '@/settings'
 import { useApp } from '@/store'
-import { useUpdateState } from '@/updates'
+import { useUpdateState, WHATS_NEW } from '@/updates'
 import { Button } from './ui/button'
 import { Dialog, DialogContent } from './ui/dialog'
 import { Led, type LedState } from './ui/retro'
@@ -170,6 +170,26 @@ export function UpdateDialog() {
               </Button>
             )}
             <Button onClick={() => setOpen(false)}>{offered ? 'Later' : 'Close'}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** This version's What's new (WHATSNEW.md, bundled), shown once on its first launch. */
+export function WhatsNewDialog() {
+  const open = useApp((s) => s.whatsNewOpen)
+  const setOpen = useApp((s) => s.setWhatsNewOpen)
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent title={`What's new in ${window.fx.version}`} className="w-[min(520px,90vw)]">
+        <div className="flex flex-col gap-3">
+          <ReleaseNotes markdown={WHATS_NEW} />
+          <div className="flex justify-end">
+            <Button variant="primary" autoFocus onClick={() => setOpen(false)}>
+              OK
+            </Button>
           </div>
         </div>
       </DialogContent>

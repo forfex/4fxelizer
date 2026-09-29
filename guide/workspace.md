@@ -44,6 +44,8 @@ Updates…** or **Check for updates** in Settings looks right away.
 **Update automatically** (off by default) installs a new version at startup and restarts into it without asking.
 Either way, unsaved project changes are asked about before the app restarts.
 
+The first time a new version starts, it shows a short list of what's new.
+
 The Windows installer build and the Linux AppImage update themselves. On macOS and with the `.deb` package the
 update window opens the release page, to download the new version there.
 

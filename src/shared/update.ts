@@ -39,9 +39,11 @@ export interface UpdateSettings {
   auto: boolean
   /** Version the user chose to skip (no popup for it at startup); '' = none. */
   skipped: string
+  /** Last version whose "What's new" was shown at launch; '' = none yet (a new install shows it). */
+  seen: string
 }
 
-export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { checkOnLaunch: true, auto: false, skipped: '' }
+export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = { checkOnLaunch: true, auto: false, skipped: '', seen: '' }
 
 /**
  * Where updating stands, as main reports it to the renderer. `prompt`: found by the startup
@@ -158,6 +160,7 @@ export function normalizeUpdateSettings(raw: unknown): UpdateSettings {
   return {
     checkOnLaunch: typeof r.checkOnLaunch === 'boolean' ? r.checkOnLaunch : DEFAULT_UPDATE_SETTINGS.checkOnLaunch,
     auto: typeof r.auto === 'boolean' ? r.auto : DEFAULT_UPDATE_SETTINGS.auto,
-    skipped: typeof r.skipped === 'string' && parseVersion(r.skipped) ? r.skipped : ''
+    skipped: typeof r.skipped === 'string' && parseVersion(r.skipped) ? r.skipped : '',
+    seen: typeof r.seen === 'string' && parseVersion(r.seen) ? r.seen : ''
   }
 }

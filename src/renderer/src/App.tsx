@@ -13,7 +13,7 @@ import { StatusBar } from './components/StatusBar'
 import { TitleBar } from './components/TitleBar'
 import { Toolbar } from './components/Toolbar'
 import { UnsavedDialog } from './components/UnsavedDialog'
-import { UpdateDialog } from './components/UpdateDialog'
+import { UpdateDialog, WhatsNewDialog } from './components/UpdateDialog'
 import { DockArea } from './components/Workspace'
 
 export function App() {
@@ -108,6 +108,7 @@ export function App() {
       <SettingsDialog />
       <UnsavedDialog />
       <UpdateDialog />
+      <WhatsNewDialog />
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 border-2 border-dashed border-accent bg-accent/5" />
       )}

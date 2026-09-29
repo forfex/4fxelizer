@@ -17,7 +17,7 @@ import {
 } from '@shared/api'
 import { listGpus, type GpuEntry } from '@/gpu/gpuList'
 import { cn } from '@/lib/utils'
-import { saveSettings, useSavedSettings } from '@/settings'
+import { savedSettings, saveSettings, useSavedSettings } from '@/settings'
 import { useApp } from '@/store'
 import { Button } from '../ui/button'
 import { Checkbox, Field, ParamSlider, Segmented } from '../ui/controls'
@@ -51,7 +51,8 @@ export function ResetSection() {
 
   const restore = (): void => {
     const { wheel, keybinds, gpu, uiScale, invertZoom, theme, liveReload, updates } = DEFAULT_SETTINGS
-    saveSettings({ wheel, keybinds, gpu, uiScale, invertZoom, updates })
+    // Keeps which version's What's new was seen, so it doesn't show again.
+    saveSettings({ wheel, keybinds, gpu, uiScale, invertZoom, updates: { ...updates, seen: savedSettings().updates.seen } })
     useApp.getState().setTheme(theme)
     useApp.getState().setLiveReload(liveReload)
     setConfirming(false)

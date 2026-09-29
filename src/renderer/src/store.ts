@@ -123,6 +123,8 @@ export interface AppState extends Doc {
   diagnosticsOpen: boolean
   /** The update window (a new version found at startup, or Help › Check for Updates). */
   updateOpen: boolean
+  /** This version's What's new, shown on its first launch. */
+  whatsNewOpen: boolean
   settingsOpen: boolean
   exportOpen: boolean
   presetsOpen: boolean
@@ -203,6 +205,7 @@ export interface AppState extends Doc {
   setMessage(message: Message | null): void
   setDiagnosticsOpen(open: boolean): void
   setUpdateOpen(open: boolean): void
+  setWhatsNewOpen(open: boolean): void
   setSettingsOpen(open: boolean): void
   setExportOpen(open: boolean): void
   setPresetsOpen(open: boolean): void
@@ -336,6 +339,7 @@ export const useApp = create<AppState>()((set, get) => ({
   message: null,
   diagnosticsOpen: false,
   updateOpen: false,
+  whatsNewOpen: false,
   settingsOpen: false,
   exportOpen: false,
   presetsOpen: false,
@@ -471,6 +475,7 @@ export const useApp = create<AppState>()((set, get) => ({
   setMessage: (message) => set({ message }),
   setDiagnosticsOpen: (diagnosticsOpen) => set({ diagnosticsOpen }),
   setUpdateOpen: (updateOpen) => set({ updateOpen }),
+  setWhatsNewOpen: (whatsNewOpen) => set({ whatsNewOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
   setPresetsOpen: (presetsOpen) => set({ presetsOpen }),

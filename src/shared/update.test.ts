@@ -104,11 +104,16 @@ describe('checksumFor', () => {
 describe('normalizeUpdateSettings', () => {
   it('checks on launch, does not update automatically by default', () => {
     expect(normalizeUpdateSettings(undefined)).toEqual(DEFAULT_UPDATE_SETTINGS)
-    expect(DEFAULT_UPDATE_SETTINGS).toEqual({ checkOnLaunch: true, auto: false, skipped: '' })
+    expect(DEFAULT_UPDATE_SETTINGS).toEqual({ checkOnLaunch: true, auto: false, skipped: '', seen: '' })
   })
 
   it('keeps valid values', () => {
-    expect(normalizeUpdateSettings({ checkOnLaunch: false, auto: true, skipped: '1.2.0' })).toEqual({ checkOnLaunch: false, auto: true, skipped: '1.2.0' })
-    expect(normalizeUpdateSettings({ auto: 'yes', skipped: 'soon' })).toEqual(DEFAULT_UPDATE_SETTINGS)
+    expect(normalizeUpdateSettings({ checkOnLaunch: false, auto: true, skipped: '1.2.0', seen: '1.1.1' })).toEqual({
+      checkOnLaunch: false,
+      auto: true,
+      skipped: '1.2.0',
+      seen: '1.1.1'
+    })
+    expect(normalizeUpdateSettings({ auto: 'yes', skipped: 'soon', seen: 3 })).toEqual(DEFAULT_UPDATE_SETTINGS)
   })
 })
