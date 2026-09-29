@@ -4,209 +4,80 @@
 
 # 4FXELIZER
 
-**Turn high-res textures into crunchy PSX-style low-res, palettized, dithered ones.**
+**Turn high-res textures into crunchy PSX-style low-res, palettized, dithered ones, and see them on your model.**
 
 [![CI](https://github.com/forfex/4fxelizer/actions/workflows/ci.yml/badge.svg)](https://github.com/forfex/4fxelizer/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/forfex/4fxelizer?color=d9a441)](https://github.com/forfex/4fxelizer/releases/latest)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-2b2a27)
 ![WebGPU](https://img.shields.io/badge/WebGPU-compute-d9a441)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2b2a27)](LICENSE)
 
-[**Download**](https://github.com/forfex/4fxelizer/releases/latest) · [**Website**](https://forfex.github.io/4fxelizer/) · [Roadmap](docs/PLAN.md)
+[**Download**](https://github.com/forfex/4fxelizer/releases/latest) · [**Guide**](guide/README.md) · [Website](https://forfex.github.io/4fxelizer/) · [Report a bug](https://github.com/forfex/4fxelizer/issues)
 
-<img src="site/images/app.png" alt="4FXELIZER showing a brick texture before and after" width="900">
+<img src="site/images/customize-a.png" alt="4FXELIZER with a statue model: its texture before and after a PSX preset, and the 3D view" width="900">
 
 </div>
 
+4FXELIZER is a free desktop app for artists making textures for retro-styled games. Drop in a texture, stack a few
+stages (downscale, quantize to a palette, dither) and export something that looks like it came off a PlayStation,
+N64 or Game Boy. Load the model it belongs to and watch the result in a PSX-style 3D view as you tweak.
+
+Everything runs on your GPU, so changes show up instantly.
+
+## Highlights
+
+- **A reorderable stage stack**: Adjust, Downscale, Upscale, Quantize and Dither, each with opacity, blend mode and
+  a live preview. [More](guide/stages.md)
+- **Palettes**: generate them from the image, start from classics (PICO-8, NES, Game Boy, …), import and edit
+  them, or let a stage build its own of up to 8192 colors. [More](guide/palettes.md)
+- **Every dither you know**: Bayer, blue noise, halftone, the N64 magic square, your own pattern, error diffusion
+  from Floyd–Steinberg to Sierra, limited by masks from the image or from AO and cavity maps.
+  [More](guide/masks-and-maps.md)
+- **3D view and map baking**: glTF, GLB, FBX and OBJ models with switchable PSX quirks (vertex wobble, affine
+  warping, 240-line framebuffer), and AO, cavity, curvature and more baked on the GPU. [More](guide/3d.md)
+- **Presets and export**: PSX 8bpp/4bpp, N64, Game Boy and more built in; PNG, TGA or BMP, full color or indexed.
+  [More](guide/presets-and-export.md)
+
 ## Gallery
 
-One source texture through the built-in presets:
+One texture through the built-in presets:
 
-| Source | PSX 8bpp | PSX 4bpp | N64 |
+| Source\* | PSX 8bpp | PSX 4bpp | PSX 15-bit |
 |:--:|:--:|:--:|:--:|
-| <img src="site/images/gallery-source.png" width="200"> | <img src="site/images/gallery-psx-8bpp.png" width="200"> | <img src="site/images/gallery-psx-4bpp.png" width="200"> | <img src="site/images/gallery-n64.png" width="200"> |
+| <img src="site/images/gallery-source.png" width="200"> | <img src="site/images/gallery-psx-8bpp.png" width="200"> | <img src="site/images/gallery-psx-4bpp.png" width="200"> | <img src="site/images/gallery-psx-15-bit.png" width="200"> |
 
-| NES-ish | Game Boy | Crunchy |
-|:--:|:--:|:--:|
-| <img src="site/images/gallery-nes.png" width="200"> | <img src="site/images/gallery-gameboy.png" width="200"> | <img src="site/images/gallery-crunchy.png" width="200"> |
+| N64 | NES-ish | Game Boy | Crunchy |
+|:--:|:--:|:--:|:--:|
+| <img src="site/images/gallery-n64.png" width="200"> | <img src="site/images/gallery-nes.png" width="200"> | <img src="site/images/gallery-game-boy.png" width="200"> | <img src="site/images/gallery-crunchy.png" width="200"> |
+
+\* Texture: [PavingStones116](https://ambientcg.com/a/PavingStones116) by ambientCG (CC0).
 
 ## Install
 
-Grab the installer for your OS from the [latest release](https://github.com/forfex/4fxelizer/releases/latest):
-Windows setup `.exe`, macOS `.dmg` (Apple Silicon and Intel), Linux `.AppImage` or `.deb`.
-Builds are not code-signed yet: Windows SmartScreen may warn (More info › Run anyway), and on macOS, if the app is
-reported as damaged, run `xattr -cr /Applications/4FXELIZER.app`. A GPU with WebGPU is required.
+Download the installer for your system from the [latest release](https://github.com/forfex/4fxelizer/releases/latest):
+Windows `setup.exe`, macOS `.dmg` (Apple Silicon or Intel), or Linux `.AppImage` / `.deb`.
 
-## What it does
+You need a GPU with WebGPU support (any reasonably recent GPU with current drivers). The builds aren't code-signed
+yet, so Windows and macOS may warn on first launch; see [Troubleshooting](guide/troubleshooting.md).
 
-Load a texture (drag and drop, or **File › Open**), then shape it with a reorderable stack of stages:
+## Quick start
 
-- **Adjust**: brightness, contrast, gamma, saturation, hue, levels, sharpen.
-- **Downscale**: nearest, bilinear, bicubic, box, Lanczos, dominant color, median, edge-preserving,
-  contrast-aware; longest side / exact size / scale, optional power-of-two.
-- **Upscale**: enlarge ×2–×16 or back to the original size with the N64 3-point filter, bilinear, bicubic,
-  sharp bilinear, Lanczos, Scale2x/Scale3x (EPX, pixel art) or nearest (optional edge wrap for tiling textures). Downscale → Dither → Upscale gives the N64 blur.
-- **Quantize**: snap to a palette (perceptual OKLab or RGB matching) or to N levels per channel (32 = PSX 15-bit).
-- **Dither**: ordered (Bayer 2×2–16×16, blue noise, white noise, IGN, clustered dots, halftone, lines, checker,
-  crosshatch, N64 magic square, or your own pattern image) or error diffusion (Floyd–Steinberg, Atkinson,
-  Jarvis–Judice–Ninke, Stucki, Burkes, Sierra ×3, with serpentine scanning); to palette, to levels, or pattern only.
-  Palette mixing: offset, two nearest or Knoll. Saturation, and a **mask** saying where to dither: from the image
-  (edges, flats, shadows, midtones, highlights, saturated, grays) or from an imported map (AO, cavity, curvature,
-  edge, thickness, height, roughness, metallic). Two sources can be combined (multiply, add, min, max), each
-  inverted, then blurred and shaped by strength and gamma; a mask view shows the result, and a different
-  pattern can run outside the mask. **Wrap edges** makes error diffusion and mask filtering tile seamlessly.
+1. **Open a texture**: drag it onto the window, or **File › Open Image…** (Ctrl+O).
+2. **Pick a preset**: toolbar › **Presets**, for example *PSX 8bpp*.
+3. **Tweak**: drag sliders, reorder stages, click a stage to preview the image at that point.
+4. **See it in 3D** (optional): drop the model on the window, or **File › Open Model…** (Ctrl+Shift+O).
+5. **Export**: **File › Export…** (Ctrl+E).
 
-Every stage has on/off, opacity, a blend mode and a **mask** (Blending › Mask: the same image and map sources,
-combined and blurred, with a mask view) that limits it to part of the texture; click a stage to preview the image at that point.
-**Maps** (Maps panel) load with the texture when they sit next to it with a map suffix (`rock_ao.png`,
-`Rock_AmbientOcclusion.tga`, `T_Rock_ORM.png`; ORM/ARM and RMA files are split into their channels), can be
-dropped on the window or loaded per slot, and are sampled in UV, so their size doesn't need to match.
-**Tiling view** (View › Tiling View, Ctrl+T) repeats the texture 3×3 to show its seams.
-**3D models** (**File › Open Model…**, Ctrl+Shift+O, or drop a glTF, GLB, FBX or OBJ file): the **3D view** shows the
-processed texture on the model as you work. The toolbar's **2D · 2D / 3D · 3D** switch (View menu, Ctrl+Shift+1/2/3)
-shows the texture, both side by side (drag the bar between them), or the model alone; opening a model shows both.
-Each PSX quirk of the 3D view can be switched (vertex snapping, affine texture warping, nearest texels, a 240- or 480-line framebuffer, lighting and 15-bit dither). The model's base color texture
-opens with it (from next to the file, or embedded in GLB/FBX), or the open texture stays when the model uses it.
-The **Bake** panel bakes AO, cavity, curvature, edge, thickness, height and up-facing maps from the model's shape
-straight into the map slots, ray traced on the GPU in the model's UV space, with edge padding; the maps sharpen
-while they bake and can be stopped early. Baked maps drive masks and Adjust's shading like imported ones, and
-**Save…** in the Maps panel writes them as PNGs named to load with the texture next time (`rock_ao.png`).
-Quantize and Dither take their colors from a **palette** or a **generated** palette (2–8192 colors, built
-automatically from the stage's input). Palettes are shared resources: generate them from the image
-(median cut, Wu, octree or k-means), start from a built-in (PICO-8, NES, Game Boy, CGA, C64, …), import
-`.hex/.gpl/.pal/.act/.ase`, edit and lock colors (generation weighs lightness, hue and a gamma that spends more
-colors on the darks or the lights), or pick colors from the image with the eyedropper
-(**Pick**, or Alt+click the viewer; some Linux desktops reserve Alt+click for moving windows, so use **Pick** there).
-Wu and octree reach the requested color count even on smooth gradients.
-**Presets** (toolbar › Presets) save the whole stack to reuse on other textures; built-ins include PSX 8bpp/4bpp,
-PSX 15-bit, N64, NES-ish, Game Boy and Crunchy. Presets are `.4fxpreset` files you can share.
-Panels dock, tab together, float over the viewer and resize, like in Photoshop; the toolbar's workspace menu
-switches between built-in layouts (Essentials, Wide viewer, Palette editing, 3D, Floating), saves your own and resets them.
-On Windows and Linux the app draws its own title bar with the menus in the theme's colors; Alt or F10 moves to
-the menus and Alt+letter opens one, as in a native menu bar. macOS keeps its system menu bar.
-Five themes: **Dark** (plum with purple and magenta accents), **Night** (neutral greyscale, for dim rooms and for
-judging colors with no tinted chrome around the image), **Light**, **Matrix** (green phosphor) and **Retro** (the classic
-silver-grey desktop); pick one in View › Theme or the toolbar's theme menu. GPU details are in Help › GPU Diagnostics.
-**Live reload**: the open texture, its maps and the model reload when you save them from another app (Photoshop,
-Blender, …), keeping the stack, the zoom and the 3D camera; File › Reload Changed Files turns it off.
-The theme, grid, split view, tiling view, the view mode, the export format, the 3D view's look, the bake settings, the panel layout and the window size and position are remembered between sessions.
-**File › Export** writes PNG, TGA or BMP, full color or indexed (palette order kept, transparency at index 0;
-indexed BMP has no alpha, so transparent pixels use index 0 and semi-transparent ones become opaque).
-Undo/redo covers the stack and palettes. Hover a slider for a second (or click it) to adjust it with the mouse wheel.
+The [guide](guide/README.md) covers everything else, including [keyboard shortcuts](guide/workspace.md#keyboard-shortcuts).
 
-## Development
+## Contributing
 
-```bash
-npm install          # also downloads the Electron binary (postinstall)
-npm run dev          # app with hot reload
-npm test             # unit tests (vitest)
-npm run typecheck
-npm run build        # typecheck + production bundles in out/
-npm run dist         # installer for the current OS (dist/)
-```
-
-## Verifying WebGPU on a machine
-
-```bash
-npm run build
-npx electron . --gpu-report
-```
-
-This runs headless: it collects adapter info and limits, runs a real
-upload → compute → readback test, writes `4fxelizer-gpu-report.json`, and exits 0 on success.
-A packaged app accepts the same flag (`4fxelizer --gpu-report=path.json`). In the app,
-**Help › GPU Diagnostics…** shows the same report.
-
-On Linux the app adds `--enable-unsafe-webgpu`. Launch with `FXELIZER_NO_GPU_FLAGS=1` to compare against the
-defaults. (It used to add `--enable-features=Vulkan` too, which crashed the GPU process under Wayland.)
-
-**Linux without a real GPU** (virtual machines): the app asks for a hardware adapter and otherwise says WebGPU
-isn't available. For testing only, Mesa's software Vulkan driver works, slowly (rendering on the CPU):
-`sudo apt install mesa-vulkan-drivers`, then
-`FXELIZER_NO_GPU_FLAGS=1 4fxelizer --enable-unsafe-webgpu --ignore-gpu-blocklist`. Some virtual GPUs (VMware's)
-also need `--disable-gpu-sandbox`; that switch turns off a security boundary, so use it only inside a test VM.
-
-| OS | Status |
-|---|---|
-| Windows 11 (NVIDIA RTX 5070 Ti, Electron 44 / Chrome 152) | ✅ passes |
-| macOS | not yet tested |
-| Linux | not yet tested |
-
-## CI and releases
-
-`.github/workflows/ci.yml` runs on every push and pull request, on Windows, macOS and Linux: typecheck,
-unit tests, bundle, a headless launch of the app (`scripts/gpu-smoke.mjs`, which uses `--gpu-report`) and an
-unpacked package build. The launch must succeed; missing WebGPU only warns, because hosted runners have no GPU
-(each run uploads the GPU report as an artifact).
-
-`.github/workflows/release.yml` builds the installers (Windows NSIS, macOS dmg for x64 and arm64, Linux
-AppImage + deb) and publishes a GitHub release when a `v*` tag is pushed. Bump `version` in `package.json`
-first; the tag must match it:
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-## Layout
-
-```
-src/main/            Electron main: window, native menu, file dialogs, settings, GPU flags, --gpu-report
-src/preload/         window.fx bridge (sandboxed, CommonJS)
-src/shared/api.ts    IPC contract and user settings shared by main, preload and renderer
-src/shared/menu.ts   the app menu, defined once: native menu in main, title bar menus in the renderer
-src/shared/maps.ts   map slots and how map files are recognized by name (_ao, _cavity, _orm, …)
-src/shared/model.ts  model file types and where to look for the files a model refers to
-src/shared/bake.ts   bake and 3D view settings
-src/renderer/src/
-  gpu/pass.ts        pass framework: each stage = one WGSL compute function (+ blend, palette, mask, patterns)
-  gpu/mask.ts        stage masks: sources (image-derived or imported maps), combine, blur, built on the GPU
-  gpu/wgslLib.ts     WGSL helpers shared by all passes (OKLab, palette lookup, dither thresholds, blend)
-  gpu/plan.ts        stage-cache planning (pure, unit-tested)
-  gpu/chain.ts       runs the stage stack on the GPU with per-stage caching
-  gpu/resources.ts   GPU copies of palettes, imported maps, custom patterns and the blue-noise texture
-  gpu/viewer.*       2D viewer renderer: zoom, split view, tiling view, pixel grid, alpha checker
-  gpu/passes/        stages: adjust, downscale, upscale, quantize, dither
-  gpu/model/         3D view renderer (PSX look) and the model's GPU buffers
-  gpu/bake/          map baking: BVH ray tracing from a texture-space G-buffer, progressive
-  model/             model loading (three.js loaders, in a worker), BVH, UV rasterizer (pure, unit-tested)
-  viewer3d/          orbit camera math
-  color/             OKLab conversion
-  palette/           palette model, generation (worker), file formats, built-ins, auto-regeneration
-  dither/            blue-noise generator (void-and-cluster), custom pattern images
-  stack/             document ops, presets, built-in presets, order warnings (pure, unit-tested)
-  image/             PNG, TGA and BMP encoders (RGBA + indexed), TGA decoder, half-float readback
-  viewer/viewport.ts zoom/pan math in device pixels
-  engine.ts          owns GPU objects; React talks to it
-  store.ts           app state + undoable document (zustand)
-  workspace/         dockable panel layout: built-in workspaces, saved layouts and their checks
-  components/        title bar, dock, stack panel, stage editors, palette, maps and bake panels, export dialog, viewer, 3D view
-  components/ui/     shadcn-style primitives, restyled via tokens
-  styles/tokens.css  design tokens: the one place to restyle the app
-```
-
-## Notes
-
-- **Vite 7, not 8**: electron-vite 5 supports Vite ≤ 7. Upgrade together when electron-vite 6 is stable.
-- **Everything is a devDependency**: the renderer bundles its libraries, and main/preload have
-  no runtime deps, so the packaged app ships only `out/`.
-- **Adding a stage**: create `gpu/passes/<name>.ts` with `definePass` (a WGSL `run` function,
-  a `Params` struct and `pack`), register it in `gpu/passes/index.ts` (`PASSES` + `STAGE_TYPES`),
-  and add its settings editor in `components/stages/editors.tsx`.
-- **Image values are kept exact**: images decode without color-space conversion or alpha
-  premultiplication, stages work in `rgba16float`, and PNG export uses our own encoder
-  (canvas encoding would premultiply alpha).
-
-## Website
-
-The landing page lives in `site/` and is deployed to GitHub Pages by `.github/workflows/pages.yml` on pushes to
-`master` that touch it. One-time setup: **Settings › Pages › Source: GitHub Actions**.
+Build instructions, the project layout and release steps are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-4FXELIZER is released under the [MIT License](LICENSE). It bundles open-source libraries (React, Radix UI, dockview, zustand,
-three.js and a few small helpers, all MIT, ISC, Apache-2.0 or 0BSD) and the Chakra Petch, Rubik and Martian Mono fonts (SIL Open
-Font License 1.1), and runs on Electron; their notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and
-installers include the Electron and Chromium licenses. The app ships no third-party images or textures.
+4FXELIZER is released under the [MIT License](LICENSE). Bundled libraries and fonts are listed with their licenses
+in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The app ships no third-party images or textures.
 
-PlayStation, PSX, Nintendo 64, NES and Game Boy are trademarks of their respective owners. They are used here only to
-describe the look and limits this tool imitates; 4FXELIZER is not affiliated with or endorsed by them.
+PlayStation, PSX, Nintendo 64, NES and Game Boy are trademarks of their respective owners. They are used here only
+to describe the look this tool imitates; 4FXELIZER is not affiliated with or endorsed by them.

@@ -5,3 +5,4 @@ dist/
 .DS_Store
 4fxelizer-gpu-report*.json
 *.tsbuildinfo
+docs/

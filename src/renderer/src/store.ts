@@ -102,6 +102,7 @@ export interface AppState extends Doc {
   cursor: { x: number; y: number } | null
   message: Message | null
   diagnosticsOpen: boolean
+  settingsOpen: boolean
   exportOpen: boolean
   presetsOpen: boolean
   /** Name of the last loaded or saved preset (suggested when saving). */
@@ -157,6 +158,7 @@ export interface AppState extends Doc {
   setCursor(cursor: { x: number; y: number } | null): void
   setMessage(message: Message | null): void
   setDiagnosticsOpen(open: boolean): void
+  setSettingsOpen(open: boolean): void
   setExportOpen(open: boolean): void
   setPresetsOpen(open: boolean): void
   setPresetName(name: string | null): void
@@ -228,6 +230,7 @@ export const useApp = create<AppState>()((set, get) => ({
   cursor: null,
   message: null,
   diagnosticsOpen: false,
+  settingsOpen: false,
   exportOpen: false,
   presetsOpen: false,
   presetName: null,
@@ -309,6 +312,7 @@ export const useApp = create<AppState>()((set, get) => ({
   setCursor: (cursor) => set({ cursor }),
   setMessage: (message) => set({ message }),
   setDiagnosticsOpen: (diagnosticsOpen) => set({ diagnosticsOpen }),
+  setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
   setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
   setPresetName: (presetName) => set({ presetName }),

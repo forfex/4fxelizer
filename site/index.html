@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="icon" type="image/png" href="favicon.png">
-<title>4FXELIZER — PSX-style texture stylizer</title>
+<title>4FXELIZER — Make your models retro</title>
 <meta name="description" content="Turn high-res textures into low-res, palettized, dithered PSX-style textures. Free desktop app for Windows, macOS and Linux.">
 <meta name="theme-color" content="#16121e">
 <meta property="og:title" content="4FXELIZER">
 <meta property="og:description" content="Turn high-res textures into PSX-style low-res, palettized, dithered textures.">
 <meta property="og:url" content="https://forfex.github.io/4fxelizer/">
-<meta property="og:image" content="https://forfex.github.io/4fxelizer/images/app.png">
+<meta property="og:image" content="https://forfex.github.io/4fxelizer/images/customize-a.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Martian+Mono:wght@400;500&family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
@@ -61,6 +61,9 @@ code{font:0.9em var(--font-mono)}
 .ramp>span{flex:1}
 .ramp>span:first-child{background:var(--b)}
 .ramp>span:last-child{background:var(--a)}
+/* Mirrored ramp: fades out toward both ends, solid in the middle. */
+.ramp.mirror>span:last-child{background:var(--b)}
+.ramp>span.solid{background:var(--a)}
 
 /* Buttons: beveled, inside an ink outline. The primary one sits on its hard shadow. */
 .btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);
@@ -92,7 +95,6 @@ nav .wrap{display:flex;align-items:center;gap:20px;height:56px}
 
 /* Hero */
 .hero{padding:64px 0 32px}
-.hero-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:40px;align-items:center}
 .label{font:600 12px/16px var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--fx-text-dim)}
 h1{margin:12px 0 0;font:700 clamp(44px,9vw,92px)/.92 var(--font-display);letter-spacing:.02em;overflow-wrap:anywhere}
 .tag{margin:20px 0 28px;max-width:520px;font-size:clamp(17px,2.3vw,20px);line-height:1.5;color:var(--fx-text-dim)}
@@ -100,9 +102,6 @@ h1{margin:12px 0 0;font:700 clamp(44px,9vw,92px)/.92 var(--font-display);letter-
 .btns{display:flex;gap:14px;flex-wrap:wrap}
 .meta{display:flex;align-items:center;gap:8px;margin-top:18px;font-size:14px;color:var(--fx-text-dim)}
 .led{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--fx-led-green);box-shadow:0 0 6px var(--fx-led-green);flex-shrink:0}
-.art{width:100%;height:auto;display:block}
-.art .deep{fill:var(--fx-drop)}.art .brand{fill:var(--fx-accent)}.art .hot{fill:var(--fx-magenta)}.art .cream{fill:var(--fx-text)}
-.art .dot{fill:var(--fx-accent)}.art .cut{fill:var(--fx-bg)}
 
 /* A floating window: 2px ink outline, the large corner, the hard offset shadow, a dither-ramp title strip. */
 .window{background:var(--fx-panel);border:2px solid var(--fx-edge);border-radius:var(--fx-radius-lg);box-shadow:var(--fx-shadow-window);overflow:hidden}
@@ -111,8 +110,43 @@ h1{margin:12px 0 0;font:700 clamp(44px,9vw,92px)/.92 var(--font-display);letter-
 .window-bar .ramp{flex:1;height:10px}
 .winbtn{margin-left:auto;display:grid;place-items:center;width:24px;height:24px;border:1px solid var(--fx-edge);border-radius:var(--fx-radius);background:var(--fx-panel-hi);box-shadow:var(--bevel-raised);color:var(--fx-text)}
 .winbtn svg{width:14px;height:14px}
-.shot{margin-top:48px}
-.shot img{display:block;width:100%;height:auto;background:var(--fx-bg)}
+button.winbtn{padding:0;cursor:pointer}
+button.winbtn:hover{background:var(--fx-hover)}
+.zoomable{cursor:zoom-in}
+
+/* Full-screen viewer: a floating window over a dimmed page. It shows an image, or borrows the 3D comparison
+   (moved in while open, back on close, so its slider keeps working). */
+.lightbox{padding:0;max-width:none;max-height:none;background:var(--fx-panel);color:var(--fx-text);border:2px solid var(--fx-edge);border-radius:var(--fx-radius-lg);box-shadow:var(--fx-shadow-window);overflow:hidden}
+.lightbox::backdrop{background:rgba(6,4,10,.85)}
+.lightbox .window-bar{gap:12px}
+.lightbox .window-title{overflow:hidden;text-overflow:ellipsis}
+.lightbox .count{font:500 12px/18px var(--font-mono);color:var(--fx-text-dim);white-space:nowrap}
+.lightbox .body{display:block;background:#000}
+.lightbox .body>img{display:block;image-rendering:pixelated}
+.lightbox .body>.compare{display:block}
+.lightbox .nav{display:flex;gap:6px;margin-left:auto}
+.lightbox .nav[hidden]{display:none}
+.lightbox .nav .winbtn,.lightbox .nav:not([hidden])+.winbtn{margin-left:0}
+
+/* 3D before/after: two stacked renders, the after one clipped at --pos. A transparent range input on top
+   does the dragging, so the keyboard and screen readers get a real slider. */
+.model-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:48px;align-items:center}
+.model-text .sub{margin-bottom:24px}
+.quirks{display:grid;gap:10px;margin:0;padding:0;list-style:none;font:600 15px/20px var(--font-display)}
+.quirks li{display:flex;align-items:center;gap:10px}
+.model-view .compare-win{max-width:440px;margin:0 auto}
+.compare{position:relative;--pos:50%;background:#000;touch-action:pan-y}
+.compare img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+.compare .after{position:absolute;inset:0;height:100%;clip-path:inset(0 0 0 var(--pos))}
+.compare.pixel .after{image-rendering:pixelated}
+.compare .divider{position:absolute;top:0;bottom:0;left:var(--pos);width:2px;margin-left:-1px;background:var(--fx-accent);pointer-events:none}
+.compare .handle{position:absolute;top:50%;left:50%;display:grid;place-items:center;width:32px;height:32px;margin:-16px 0 0 -16px;background:var(--fx-panel-hi);border:2px solid var(--fx-edge);border-radius:var(--fx-radius);box-shadow:var(--bevel-raised),var(--fx-shadow-hard);color:var(--fx-text)}
+.compare .handle svg{width:14px;height:14px}
+.compare .chip{position:absolute;top:12px;padding:2px 8px;background:var(--fx-lcd-bg);border-radius:2px;font:500 12px/18px var(--font-mono);color:var(--fx-lcd-text);text-shadow:var(--lcd-glow);pointer-events:none}
+.compare .chip.l{left:12px}.compare .chip.r{right:12px}
+.compare .chip.b{top:auto;bottom:12px}
+.compare input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize}
+.compare:has(input:focus-visible) .handle{outline:2px solid var(--fx-magenta);outline-offset:2px}
 
 /* Sections */
 section{padding:64px 0}
@@ -134,6 +168,8 @@ h2{margin:8px 0 10px;font:700 clamp(28px,4vw,38px)/1.1 var(--font-display);lette
 .gallery figcaption{display:flex;justify-content:space-between;gap:8px;margin-top:6px;padding:4px 8px;background:var(--fx-lcd-bg);border-radius:2px;
   font:400 12px/18px var(--font-mono);color:var(--fx-lcd-text);text-shadow:var(--lcd-glow)}
 .gallery figcaption span{color:var(--fx-text-dim);text-shadow:none}
+.credit{margin:16px 0 0;font-size:13px;color:var(--fx-text-dim);text-align:center;opacity:.3;transition:opacity .15s}
+.credit:hover,.credit:focus-within{opacity:1}
 
 /* Steps */
 .steps{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:14px}
@@ -154,9 +190,7 @@ footer a:hover{color:var(--fx-text)}
 footer .logo{margin-right:auto;font-size:14px}
 
 @media(max-width:860px){
-  .gallery{--cols:3}
-  .hero-grid{grid-template-columns:1fr}
-  .art{max-width:520px}
+  .model-grid{grid-template-columns:1fr;gap:32px}
 }
 @media(max-width:640px){
   .gallery{--cols:2}
@@ -171,8 +205,10 @@ footer .logo{margin-right:auto;font-size:14px}
 <body>
 <nav><div class="wrap">
   <a class="logo" href="#"><img src="icon.svg" alt="">4FXELIZER</a>
-  <a class="navlink" href="#features">Features</a>
+  <a class="navlink" href="#model">3D</a>
   <a class="navlink" href="#gallery">Gallery</a>
+  <a class="navlink" href="#customize">Customize</a>
+  <a class="navlink" href="#features">Features</a>
   <a class="navlink" href="#start">Get started</a>
   <a class="navlink" href="https://github.com/forfex/4fxelizer">GitHub</a>
   <button class="switch" id="theme" type="button" role="switch" aria-checked="false" aria-label="Light theme">
@@ -181,67 +217,105 @@ footer .logo{margin-right:auto;font-size:14px}
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <div class="hero-grid">
-    <div>
-      <div class="label">PSX-style texture stylizer</div>
-      <h1>4FXELIZER</h1>
-      <p class="tag">Big textures in. <b>Small, palettized, dithered out.</b> A desktop app for artists that turns high-res textures into crunchy PSX-era ones, live on the GPU.</p>
-      <div class="btns">
-        <a class="btn primary" href="https://github.com/forfex/4fxelizer/releases/latest">Download</a>
-        <a class="btn" href="https://github.com/forfex/4fxelizer">View on GitHub</a>
-      </div>
-      <p class="meta"><span class="led" aria-hidden="true"></span>Windows · macOS · Linux · free and open source</p>
+  <div>
+    <div class="label">Make your models retro</div>
+    <h1>4FXELIZER</h1>
+    <p class="tag">Big textures in. <b>Small, palettized, dithered out.</b> A desktop app for artists that turns high-res textures into crunchy PSX-era ones, live on the GPU.</p>
+    <div class="btns">
+      <a class="btn primary" href="https://github.com/forfex/4fxelizer/releases/latest">Download</a>
+      <a class="btn" href="https://github.com/forfex/4fxelizer">View on GitHub</a>
     </div>
-    <!-- The design system's cover art: a window slab and its hard shadow, dithered by a 4x4 Bayer matrix. -->
-    <svg class="art" viewBox="0 0 480 288" aria-hidden="true">
-      <rect class="deep" x="16" y="0" width="176" height="224" rx="10"/>
-      <rect class="brand" x="208" y="40" width="128" height="248" rx="10"/>
-      <rect class="hot" x="352" y="24" width="112" height="112" rx="6"/>
-      <rect class="cream" x="352" y="152" width="112" height="56" rx="6"/>
-      <g id="dots"></g>
-    </svg>
-  </div>
-
-  <div class="window shot">
-    <div class="window-bar">
-      <span class="window-title">mossy-brick.png</span>
-      <span class="ramp"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></span>
-      <span class="winbtn" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg></span>
-    </div>
-    <img src="images/app.png" width="2560" height="1392" alt="4FXELIZER with a brick texture, split into the source and the dithered 16-color result">
+    <p class="meta"><span class="led" aria-hidden="true"></span>Windows · macOS · Linux · free and open source</p>
   </div>
 </div></header>
 
-<section id="features"><div class="wrap">
-  <div class="label">Features</div>
-  <h2>A stack of stages, like adjustment layers</h2>
-  <p class="sub">Reorder them, stack them, switch them off, and watch the result update live.</p>
-  <div class="grid">
-    <div class="card"><h3><span class="led"></span>Reorderable stage stack</h3><p>Adjust, Downscale, Upscale, Quantize and Dither. Drag them in any order, add the same stage twice, click one to preview the image at that point.</p></div>
-    <div class="card"><h3><span class="led"></span>Real dithering</h3><p>Bayer, blue noise, halftone, lines, crosshatch, checker, N64 magic square or your own pattern image, plus Floyd–Steinberg, Atkinson, Stucki, Sierra and more, with serpentine and wrap-around scanning.</p></div>
-    <div class="card"><h3><span class="led"></span>Masks &amp; maps</h3><p>Decide where the dither goes: edges, shadows, saturation, or your AO, cavity and curvature maps, loaded automatically from <code>_ao</code> / <code>_orm</code> files. Combine, invert and blur masks, and run a different pattern outside them.</p></div>
-    <div class="card"><h3><span class="led"></span>3D preview &amp; baking</h3><p>Open a glTF, GLB, FBX or OBJ model to see the texture on it with the PSX look: vertex wobble, affine warping, 240 lines, 15-bit dither. Bake AO, cavity, curvature, edge and thickness maps from its shape on the GPU, straight into your masks.</p></div>
-    <div class="card"><h3><span class="led"></span>Smart palettes</h3><p>Generate up to 8192 colors in OKLab with median cut, Wu, octree or k-means, start from PICO-8, NES, Game Boy, CGA or C64, import <code>.hex .gpl .pal .act .ase</code>, edit and lock colors, or pick them from the image with the eyedropper.</p></div>
-    <div class="card"><h3><span class="led"></span>Downscale &amp; upscale filters</h3><p>Box, Lanczos, dominant color, edge-preserving, contrast-aware; back up with the N64 3-point filter, Scale2x, sharp bilinear and more.</p></div>
-    <div class="card"><h3><span class="led"></span>Presets</h3><p>PSX 8bpp / 4bpp / 15-bit, N64, NES-ish, Game Boy, Crunchy. Save your own as shareable <code>.4fxpreset</code> files.</p></div>
-    <div class="card"><h3><span class="led"></span>Exact export</h3><p>PNG, TGA or BMP, full color or indexed, with palette order kept and transparency at index 0. No color-space surprises.</p></div>
-    <div class="card"><h3><span class="led"></span>WebGPU speed</h3><p>Every stage is a compute shader with per-stage caching, so tweaking a slider only re-runs what changed.</p></div>
-    <div class="card"><h3><span class="led"></span>Your workspace</h3><p>Dock, tab, float and resize the panels, save your own workspaces, and pick a theme: Dark, Night (greyscale), Light, Matrix or Retro. Split view, pixel grid and a 3×3 tiling view to check seams.</p></div>
+<section id="model"><div class="wrap">
+  <div class="model-grid">
+  <div class="model-text">
+    <div class="label">3D view</div>
+    <h2>See it on your model</h2>
+    <p class="sub">Open a glTF, GLB, FBX or OBJ model and the PSX look follows every tweak. Drag the divider to compare.</p>
+    <ul class="quirks">
+      <li><span class="led"></span>Vertex wobble</li>
+      <li><span class="led"></span>Affine texture warping</li>
+      <li><span class="led"></span>240-line framebuffer</li>
+      <li><span class="led"></span>15-bit dither</li>
+      <li><span class="led"></span>AO, cavity and curvature baking</li>
+    </ul>
+  </div>
+  <div class="model-view">
+  <div class="window compare-win">
+    <div class="window-bar">
+      <span class="window-title">3D view</span>
+      <span class="ramp"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></span>
+      <button class="winbtn" type="button" data-expand="#compare-3d" data-title="3D view" aria-label="View the 3D comparison full screen"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M2 5.5V2h3.5M8.5 2H12v3.5M12 8.5V12H8.5M5.5 12H2V8.5"/></svg></button>
+    </div>
+    <div class="compare pixel" id="compare-3d">
+      <img src="images/3d-before.png" width="696" height="928" alt="A scanned stone statue rendered with its original texture" loading="lazy">
+      <img class="after" src="images/3d-after.png" width="696" height="928" alt="The same statue in the PSX-style 3D view, with a dithered low-color texture" loading="lazy">
+      <span class="chip l">Before*</span><span class="chip r">After</span>
+      <span class="divider"><span class="handle"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M5 3.5L1.5 7 5 10.5M9 3.5L12.5 7 9 10.5"/></svg></span></span>
+      <input type="range" min="0" max="100" value="50" step="0.1" autocomplete="off" aria-label="Before and after divider position">
+    </div>
+  </div>
+  <p class="credit">* Model: <a href="https://sketchfab.com/3d-models/prague-statue-01-82e35234fc3044f5bf7413a85bb45a20">Prague Statue</a> by Amanpreet Bajwa.</p>
+  </div>
   </div>
 </div></section>
 
 <section id="gallery"><div class="wrap">
   <div class="label">Gallery</div>
-  <h2>One texture, six presets</h2>
+  <h2>One texture, seven presets</h2>
   <p class="sub">The same source run through the built-in presets.</p>
   <div class="gallery">
-    <figure><img src="images/gallery-source.png" alt="Source texture: mossy bricks" loading="lazy"><figcaption>Source<span>683²</span></figcaption></figure>
+    <figure><img src="images/gallery-source.png" alt="Source texture: weathered paving stones" loading="lazy"><figcaption>Source*<span>1024²</span></figcaption></figure>
     <figure><img src="images/gallery-psx-8bpp.png" alt="PSX 8bpp preset" loading="lazy"><figcaption>PSX 8bpp<span>256 col</span></figcaption></figure>
     <figure><img src="images/gallery-psx-4bpp.png" alt="PSX 4bpp preset" loading="lazy"><figcaption>PSX 4bpp<span>16 col</span></figcaption></figure>
+    <figure><img src="images/gallery-psx-15-bit.png" alt="PSX 15-bit direct preset" loading="lazy"><figcaption>PSX 15-bit<span>direct</span></figcaption></figure>
     <figure><img src="images/gallery-n64.png" alt="N64 preset" loading="lazy"><figcaption>N64<span>filtered</span></figcaption></figure>
     <figure><img src="images/gallery-nes.png" alt="NES-ish preset" loading="lazy"><figcaption>NES-ish<span>NES</span></figcaption></figure>
-    <figure><img src="images/gallery-gameboy.png" alt="Game Boy preset" loading="lazy"><figcaption>Game Boy<span>4 col</span></figcaption></figure>
-    <figure><img src="images/gallery-crunchy.png" alt="Crunchy preset" loading="lazy"><figcaption>Crunchy<span>dither</span></figcaption></figure>
+    <figure><img src="images/gallery-game-boy.png" alt="Game Boy preset" loading="lazy"><figcaption>Game Boy<span>4 col</span></figcaption></figure>
+    <figure><img src="images/gallery-crunchy.png" alt="Crunchy preset" loading="lazy"><figcaption>Crunchy<span>8 col</span></figcaption></figure>
+  </div>
+  <p class="credit">* Texture: <a href="https://ambientcg.com/a/PavingStones116">PavingStones116</a> by ambientCG (CC0).</p>
+</div></section>
+
+<section id="customize"><div class="wrap">
+  <div class="label">Customize</div>
+  <h2>Make it yours</h2>
+  <p class="sub">Dock, tab and float the panels, save your own workspaces, and pick one of five themes: Dark, Night, Light, Matrix or Retro. Drag to compare.</p>
+  <div class="window compare-win">
+    <div class="window-bar">
+      <span class="window-title">Workspaces &amp; themes</span>
+      <span class="ramp"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></span>
+      <button class="winbtn" type="button" data-expand="#compare-ui" data-title="Workspaces &amp; themes" aria-label="View the layout comparison full screen"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M2 5.5V2h3.5M8.5 2H12v3.5M12 8.5V12H8.5M5.5 12H2V8.5"/></svg></button>
+    </div>
+    <div class="compare" id="compare-ui">
+      <img src="images/customize-a.png" width="1600" height="1000" alt="4FXELIZER in the Dark theme, 3D workspace: the stack, the statue texture before and after, the 3D view and the bake panel" loading="lazy">
+      <img class="after" src="images/customize-b.png" width="1600" height="1000" alt="The same workspace in the Retro theme, with the palette and maps panels in front" loading="lazy">
+      <span class="chip l b">Dark*</span><span class="chip r b">Retro</span>
+      <span class="divider"><span class="handle"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M5 3.5L1.5 7 5 10.5M9 3.5L12.5 7 9 10.5"/></svg></span></span>
+      <input type="range" min="0" max="100" value="50" step="0.1" autocomplete="off" aria-label="Before and after divider position">
+    </div>
+  </div>
+  <p class="credit">* Model: <a href="https://sketchfab.com/3d-models/prague-statue-01-82e35234fc3044f5bf7413a85bb45a20">Prague Statue</a> by Amanpreet Bajwa.</p>
+</div></section>
+
+<section id="features"><div class="wrap">
+  <div class="label">Features</div>
+  <h2>Everything for the retro look</h2>
+  <p class="sub">Drop in a texture, tweak a few sliders, export. No setup, no scripting.</p>
+  <div class="grid">
+    <div class="card"><h3><span class="led"></span>Stage stack</h3><p>Build the look step by step, like adjustment layers. Reorder anything, preview any step.</p></div>
+    <div class="card"><h3><span class="led"></span>Real dithering</h3><p>Every classic pattern, from Bayer to Floyd–Steinberg, or bring your own.</p></div>
+    <div class="card"><h3><span class="led"></span>Masks</h3><p>Choose where the dither goes: shadows, edges, or your AO and cavity maps.</p></div>
+    <div class="card"><h3><span class="led"></span>3D preview</h3><p>See the texture on your model, wobble and warping included.</p></div>
+    <div class="card"><h3><span class="led"></span>Map baking</h3><p>No AO map? Bake one from the model, right on your GPU.</p></div>
+    <div class="card"><h3><span class="led"></span>Palettes</h3><p>Grab colors from the image or start from NES, Game Boy, PICO-8 and friends.</p></div>
+    <div class="card"><h3><span class="led"></span>Presets</h3><p>PSX, N64, Game Boy and more in one click. Save and share your own.</p></div>
+    <div class="card"><h3><span class="led"></span>Clean export</h3><p>PNG, TGA or BMP, full color or indexed, ready for your engine.</p></div>
+    <div class="card"><h3><span class="led"></span>Instant</h3><p>Everything runs on the GPU, so every slider updates live.</p></div>
+    <div class="card"><h3><span class="led"></span>Your workspace</h3><p>Dockable panels, five themes, and a tiling view to catch seams.</p></div>
   </div>
 </div></section>
 
@@ -262,35 +336,24 @@ footer .logo{margin-right:auto;font-size:14px}
 </div></section>
 
 <footer>
-  <div class="ramp" aria-hidden="true" style="--b:var(--fx-bg)"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></div>
+  <div class="ramp mirror" aria-hidden="true" style="--b:var(--fx-bg)"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span class="solid"></span><span class="d75"></span><span class="d50"></span><span class="d25"></span><span></span></div>
   <div class="wrap">
     <a class="logo" href="#"><img src="icon.svg" alt="">4FXELIZER</a>
     <a href="https://github.com/forfex/4fxelizer">GitHub</a>
-    <a href="https://github.com/forfex/4fxelizer/blob/master/docs/PLAN.md">Roadmap</a>
+    <a href="https://github.com/forfex/4fxelizer/blob/master/guide/README.md">Guide</a>
     <a href="https://github.com/forfex/4fxelizer/issues">Issues</a>
     <a href="https://github.com/forfex/4fxelizer/blob/master/LICENSE">MIT License</a>
   </div>
 </footer>
 
 <script>
-  // Cover art dither: 8px squares on a 16px pitch, placed by a 4x4 Bayer matrix. Density rises toward
-  // the purple slab, then continues as holes cut into it.
-  const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
-  const dots = document.getElementById('dots')
-  const ns = 'http://www.w3.org/2000/svg'
-  for (let y = 16; y < 224; y += 16) {
-    for (let x = 32; x < 336; x += 16) {
-      const onSlab = x >= 208
-      if (onSlab && y < 48) continue
-      const t = onSlab ? 1 - (x - 208) / 128 : (x - 32) / 160
-      if (BAYER[(y / 16) % 4][(x / 16) % 4] / 16 >= t * 0.9) continue
-      if (!onSlab && x + 8 > 192) continue
-      const r = document.createElementNS(ns, 'rect')
-      r.setAttribute('class', onSlab ? 'cut' : 'dot')
-      r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', 8); r.setAttribute('height', 8)
-      dots.appendChild(r)
-    }
-  }
+  // Before/after comparisons: each range input sets where its after image starts.
+  document.querySelectorAll('.compare').forEach((c) => {
+    const range = c.querySelector('input')
+    const sync = () => c.style.setProperty('--pos', range.value + '%')
+    range.addEventListener('input', sync)
+    sync()
+  })
 
   // Dark / Light switch, remembered in this browser.
   const toggle = document.getElementById('theme')
@@ -307,6 +370,109 @@ footer .logo{margin-right:auto;font-size:14px}
     sync()
   })
   sync()
+</script>
+
+<dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-title">
+  <div class="window-bar">
+    <span class="window-title" id="lightbox-title"></span>
+    <span class="count" id="lightbox-count"></span>
+    <span class="nav" id="lightbox-nav">
+      <button class="winbtn" type="button" id="lightbox-prev" aria-label="Previous image"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M8.5 3L4.5 7l4 4"/></svg></button>
+      <button class="winbtn" type="button" id="lightbox-next" aria-label="Next image"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M5.5 3l4 4-4 4"/></svg></button>
+    </span>
+    <button class="winbtn" type="button" id="lightbox-close" aria-label="Close"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg></button>
+  </div>
+  <div class="body" id="lightbox-body"></div>
+</dialog>
+
+<script>
+  // Full-screen viewer for the gallery and the before/after comparisons.
+  const box = document.getElementById('lightbox')
+  const body = document.getElementById('lightbox-body')
+  const title = document.getElementById('lightbox-title')
+  const count = document.getElementById('lightbox-count')
+  const nav = document.getElementById('lightbox-nav')
+  const gallery = [...document.querySelectorAll('.gallery img')]
+  let index = -1          // position in the gallery, or -1
+  let borrowed = null     // the comparison while it's shown here: { node, parent, next }
+
+  // Largest size with the content's aspect ratio that fits the window, bar included.
+  function fit() {
+    const el = body.firstElementChild
+    if (!el) return
+    const img = el.naturalWidth ? el : el.querySelector('img')
+    const aspect = img && img.naturalWidth ? img.naturalWidth / img.naturalHeight : 1
+    const maxW = innerWidth * 0.94 - 4, maxH = innerHeight * 0.94 - 40
+    const w = Math.floor(Math.min(maxW, maxH * aspect))
+    el.style.width = w + 'px'
+    el.style.height = el.naturalWidth ? Math.floor(w / aspect) + 'px' : ''
+  }
+
+  function giveBack() {
+    if (!borrowed) return
+    borrowed.node.style.width = ''
+    borrowed.parent.insertBefore(borrowed.node, borrowed.next)
+    borrowed = null
+  }
+
+  function showImage(img, name, i) {
+    giveBack()
+    index = i
+    const big = new Image()
+    big.src = img.currentSrc || img.src
+    big.alt = img.alt
+    big.onload = fit
+    body.replaceChildren(big)
+    title.textContent = name
+    nav.hidden = i < 0
+    count.textContent = i < 0 ? '' : `${i + 1} / ${gallery.length}`
+    if (!box.open) box.showModal()
+    fit()
+  }
+
+  function showGallery(i) {
+    i = (i + gallery.length) % gallery.length
+    const cap = gallery[i].closest('figure').querySelector('figcaption')
+    showImage(gallery[i], cap.firstChild.textContent.trim(), i)
+  }
+
+  function showCompare(node, name) {
+    borrowed = { node, parent: node.parentNode, next: node.nextSibling }
+    index = -1
+    body.replaceChildren(node)
+    title.textContent = name
+    nav.hidden = true
+    count.textContent = ''
+    box.showModal()
+    fit()
+    node.querySelector('input').focus()
+  }
+
+  function zoomable(img, open) {
+    img.classList.add('zoomable')
+    img.tabIndex = 0
+    img.setAttribute('role', 'button')
+    img.setAttribute('aria-label', `${img.alt} (view full screen)`)
+    img.addEventListener('click', open)
+    img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } })
+  }
+
+  gallery.forEach((img, i) => zoomable(img, () => showGallery(i)))
+  document.querySelectorAll('[data-expand]').forEach((b) => b.addEventListener('click', () => {
+    showCompare(document.querySelector(b.dataset.expand), b.dataset.title)
+  }))
+
+  document.getElementById('lightbox-close').addEventListener('click', () => box.close())
+  document.getElementById('lightbox-prev').addEventListener('click', () => showGallery(index - 1))
+  document.getElementById('lightbox-next').addEventListener('click', () => showGallery(index + 1))
+  box.addEventListener('click', (e) => { if (e.target === box) box.close() })  // the backdrop
+  box.addEventListener('keydown', (e) => {
+    if (index < 0) return
+    if (e.key === 'ArrowLeft') showGallery(index - 1)
+    if (e.key === 'ArrowRight') showGallery(index + 1)
+  })
+  box.addEventListener('close', () => { giveBack(); body.replaceChildren() })
+  addEventListener('resize', () => { if (box.open) fit() })
 </script>
 </body>
 </html>

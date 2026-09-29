@@ -53,7 +53,42 @@ export interface UserSettings {
   view3d: View3dSettings
   /** Map baking: resolution, which maps, and their settings. */
   bake: BakeSettings
+  /** How the mouse wheel reaches sliders and dropdowns. */
+  wheel: WheelSettings
+  /** Keyboard shortcuts changed from the defaults: an accelerator per command, '' = none. */
+  keybinds: Keybinds
+  /** Which GPU WebGPU asks for (applied at the next start). */
+  gpu: GpuPreference
+  /** Interface zoom (1 = 100%). */
+  uiScale: number
+  /** Wheel up zooms out in the viewer and the 3D view. */
+  invertZoom: boolean
 }
+
+/**
+ * Mouse wheel over sliders and dropdowns. `hover`: it changes the value once the pointer has
+ * rested on the control for `delay` ms (or it was pressed), and scrolls the panel until then;
+ * `click`: only after the control was pressed; `always`: right away; `off`: never.
+ */
+export const WHEEL_MODES = ['hover', 'click', 'always', 'off'] as const
+export type WheelMode = (typeof WHEEL_MODES)[number]
+export interface WheelSettings {
+  mode: WheelMode
+  /** Rest time before the wheel arms in `hover` mode (ms). */
+  delay: number
+}
+export const WHEEL_DELAY = { min: 100, max: 3000 } as const
+
+export type Keybinds = Partial<Record<MenuCommand, string>>
+
+/**
+ * `auto` asks WebGPU for its high-performance adapter; the other two also tell Chromium which GPU
+ * to run on where a machine has two (laptops with integrated + discrete graphics).
+ */
+export const GPU_PREFERENCES = ['auto', 'high-performance', 'low-power'] as const
+export type GpuPreference = (typeof GPU_PREFERENCES)[number]
+
+export const UI_SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const
 
 export interface SavedWorkspace {
   name: string
@@ -72,6 +107,15 @@ export type Theme = (typeof THEMES)[number]
 
 /** Names shown in the theme pickers (menu and toolbar), in THEMES order. */
 export const THEME_NAMES: Record<Theme, string> = { dark: 'Dark', night: 'Night', light: 'Light', matrix: 'Matrix', retro: 'Retro' }
+
+/** One-line descriptions shown with the theme names (toolbar dropdown, Settings). */
+export const THEME_HINTS: Record<Theme, string> = {
+  dark: 'Plum with purple and magenta accents',
+  night: 'Neutral greyscale, for dim rooms and judging colors',
+  light: 'Daylight: pale lilac surfaces, dark text',
+  matrix: 'Green phosphor on black',
+  retro: 'Classic silver-grey desktop, navy title bars, square corners'
+}
 
 /**
  * Title-bar ground (also the window background before the renderer has loaded its tokens) and the
@@ -120,7 +164,12 @@ export const DEFAULT_SETTINGS: UserSettings = {
   viewMode: '2d',
   viewSplit: 0.5,
   view3d: DEFAULT_VIEW3D,
-  bake: DEFAULT_BAKE
+  bake: DEFAULT_BAKE,
+  wheel: { mode: 'hover', delay: 1000 },
+  keybinds: {},
+  gpu: 'auto',
+  uiScale: 1,
+  invertZoom: false
 }
 
 const isObject = (v: unknown): v is object => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -138,10 +187,39 @@ function normalizeWorkspaces(raw: unknown): SavedWorkspace[] {
   return [...byName.values()].slice(-MAX_WORKSPACES)
 }
 
+function normalizeWheel(raw: unknown): WheelSettings {
+  const r = (isObject(raw) ? raw : {}) as Record<string, unknown>
+  const delay = typeof r.delay === 'number' && Number.isFinite(r.delay) ? Math.round(r.delay) : DEFAULT_SETTINGS.wheel.delay
+  return {
+    mode: WHEEL_MODES.includes(r.mode as WheelMode) ? (r.mode as WheelMode) : DEFAULT_SETTINGS.wheel.mode,
+    delay: Math.min(Math.max(delay, WHEEL_DELAY.min), WHEEL_DELAY.max)
+  }
+}
+
+/** Accelerator strings as Electron writes them ("CmdOrCtrl+Shift+P", "F5", "Alt+num1"). */
+const ACCELERATOR = /^[A-Za-z0-9+=\-[\];',./\\`]{1,64}$/
+
+function normalizeKeybinds(raw: unknown): Keybinds {
+  if (!isObject(raw)) return {}
+  const out: Keybinds = {}
+  for (const [command, accelerator] of Object.entries(raw)) {
+    if (!MENU_COMMANDS.includes(command as MenuCommand) || typeof accelerator !== 'string') continue
+    if (accelerator === '' || ACCELERATOR.test(accelerator)) out[command as MenuCommand] = accelerator
+  }
+  return out
+}
+
+function normalizeScale(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_SETTINGS.uiScale
+  // The nearest offered step.
+  return UI_SCALES.reduce((best, s) => (Math.abs(s - raw) < Math.abs(best - raw) ? s : best), DEFAULT_SETTINGS.uiScale)
+}
+
 /** Settings from disk with missing or invalid fields replaced by defaults (old files keep working). */
 export function normalizeSettings(raw: unknown): UserSettings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const bool = (key: 'grid' | 'split' | 'tile' | 'liveReload' | 'psxCheck'): boolean => (typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key])
+  const bool = (key: 'grid' | 'split' | 'tile' | 'liveReload' | 'psxCheck' | 'invertZoom'): boolean =>
+    typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key]
   return {
     grid: bool('grid'),
     split: bool('split'),
@@ -159,7 +237,12 @@ export function normalizeSettings(raw: unknown): UserSettings {
         ? Math.min(Math.max(r.viewSplit, MIN_VIEW_SPLIT), 1 - MIN_VIEW_SPLIT)
         : DEFAULT_SETTINGS.viewSplit,
     view3d: normalizeView3d(r.view3d),
-    bake: normalizeBake(r.bake)
+    bake: normalizeBake(r.bake),
+    wheel: normalizeWheel(r.wheel),
+    keybinds: normalizeKeybinds(r.keybinds),
+    gpu: GPU_PREFERENCES.includes(r.gpu as GpuPreference) ? (r.gpu as GpuPreference) : DEFAULT_SETTINGS.gpu,
+    uiScale: normalizeScale(r.uiScale),
+    invertZoom: bool('invertZoom')
   }
 }
 
@@ -168,6 +251,8 @@ export interface MainGpuInfo {
   arch: string
   versions: { electron: string; chrome: string; node: string }
   commandLineFlags: string[]
+  /** The GPU preference this run started with (a changed one applies after a restart). */
+  gpuPreference: GpuPreference
   featureStatus: Record<string, string>
   gpuInfo: unknown
 }
@@ -183,26 +268,35 @@ export interface RendererGpuReport {
   smokeTest?: { ok: boolean; detail: string }
 }
 
-export type MenuCommand =
-  | 'open'
-  | 'open-model'
-  | 'export'
-  | 'import-palette'
-  | 'presets'
-  | 'import-preset'
-  | 'toggle-live-reload'
-  | 'undo'
-  | 'redo'
-  | 'zoom-fit'
-  | 'zoom-actual'
-  | 'zoom-in'
-  | 'zoom-out'
-  | 'toggle-grid'
-  | 'toggle-split'
-  | 'toggle-tile'
-  | `theme-${Theme}`
-  | `view-${ViewMode}`
-  | 'gpu-diagnostics'
+const PLAIN_COMMANDS = [
+  'open',
+  'open-model',
+  'export',
+  'import-palette',
+  'presets',
+  'import-preset',
+  'toggle-live-reload',
+  'undo',
+  'redo',
+  'settings',
+  'zoom-fit',
+  'zoom-actual',
+  'zoom-in',
+  'zoom-out',
+  'toggle-grid',
+  'toggle-split',
+  'toggle-tile',
+  'gpu-diagnostics'
+] as const
+
+export type MenuCommand = (typeof PLAIN_COMMANDS)[number] | `theme-${Theme}` | `view-${ViewMode}`
+
+/** Every menu command (keybinds are checked against it). */
+export const MENU_COMMANDS: readonly MenuCommand[] = [
+  ...PLAIN_COMMANDS,
+  ...THEMES.map((t) => `theme-${t}` as const),
+  ...VIEW_MODES.map((m) => `view-${m}` as const)
+]
 
 export interface FxApi {
   platform: string
@@ -243,6 +337,14 @@ export interface FxApi {
   runMenuRole(role: MenuRole): void
   /** Restyles the native window buttons drawn over the custom title bar (Windows/Linux). */
   setTitleBarOverlay(overlay: TitleBarOverlay): void
+  /** Zooms the whole interface (1 = 100%). */
+  setUiScale(scale: number): void
+  /** Restarts the app (settings that apply at startup, such as the GPU). */
+  relaunch(): void
+  /** Opens the folder holding settings.json and the presets. */
+  showUserDataFolder(): Promise<void>
+  /** Turns the menu's keyboard shortcuts off (true) while Settings records a new one, and back on. */
+  suspendShortcuts(suspend: boolean): void
 }
 
 export const IPC = {
@@ -266,7 +368,10 @@ export const IPC = {
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
   menuRole: 'menu:role',
-  titleBarOverlay: 'window:title-bar-overlay'
+  titleBarOverlay: 'window:title-bar-overlay',
+  relaunch: 'app:relaunch',
+  userDataShow: 'app:show-user-data',
+  suspendShortcuts: 'menu:suspend-shortcuts'
 } as const
 
 /** Colors (CSS color strings) and height (CSS px) of the native window buttons over the custom title bar. */

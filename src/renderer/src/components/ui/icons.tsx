@@ -67,6 +67,15 @@ export const PlusIcon = ({ className }: P) => (
   </Icon>
 )
 
+/** Settings: two slider tracks with their knobs. */
+export const SettingsIcon = ({ className }: P) => (
+  <Icon className={className}>
+    <path d="M1 4h12M1 10h12" />
+    <rect x="3" y="1" width="3" height="6" fill="currentColor" stroke="none" />
+    <rect x="8" y="7" width="3" height="6" fill="currentColor" stroke="none" />
+  </Icon>
+)
+
 export const MinusIcon = ({ className }: P) => (
   <Icon className={className}>
     <path d="M2.5 7h9" />

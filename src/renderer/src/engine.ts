@@ -64,7 +64,7 @@ export class Engine {
   }
 
   static async create(): Promise<Engine> {
-    return new Engine(await initGpu())
+    return new Engine(await initGpu(window.fx.settings.gpu === 'low-power' ? 'low-power' : 'high-performance'))
   }
 
   attachCanvas(canvas: HTMLCanvasElement): ViewerRenderer {

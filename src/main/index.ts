@@ -15,7 +15,9 @@ const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL
 
 // FXELIZER_USER_DATA=<dir>: keep settings and presets there (automated runs leave the real ones alone).
 if (process.env.FXELIZER_USER_DATA) app.setPath('userData', resolve(process.env.FXELIZER_USER_DATA))
-const gpuFlags = applyGpuFlags()
+// Read before the app is ready: the GPU switches only apply at startup.
+const gpuPreference = getSettings().gpu
+const gpuFlags = applyGpuFlags(gpuPreference)
 
 // `--gpu-report[=path]` (or FXELIZER_GPU_REPORT=1|path): open a hidden window, collect WebGPU
 // diagnostics, write them as JSON, print them to stdout and quit. Used to verify each OS/driver.
@@ -42,6 +44,7 @@ async function getGpuInfo(): Promise<MainGpuInfo> {
       node: process.versions.node
     },
     commandLineFlags: gpuFlags,
+    gpuPreference,
     featureStatus: app.getGPUFeatureStatus() as unknown as Record<string, string>,
     gpuInfo: await app.getGPUInfo('basic').catch((e: Error) => ({ error: e.message }))
   }
@@ -115,6 +118,13 @@ function watcherFor(contents: Electron.WebContents): FileWatcher {
   return watcher
 }
 
+/** Settings is recording a shortcut: the menu's own shortcuts must not run meanwhile. */
+let shortcutsSuspended = false
+
+function refreshMenu(win: BrowserWindow): void {
+  Menu.setApplicationMenu(buildMenu(win, isDev, getSettings().keybinds, !shortcutsSuspended))
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.openImage, (event) =>
     openFile(BrowserWindow.fromWebContents(event.sender)!, [{ name: 'Images', extensions: IMAGE_EXTENSIONS }])
@@ -181,7 +191,25 @@ function registerIpc(): void {
   ipcMain.on(IPC.settingsLoad, (event) => {
     event.returnValue = getSettings()
   })
-  ipcMain.on(IPC.settingsSave, (_event, patch: unknown) => updateSettings(patch))
+  ipcMain.on(IPC.settingsSave, (event, patch: unknown) => {
+    updateSettings(patch)
+    // Changed shortcuts: rebuild the native menu, which provides them.
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && typeof patch === 'object' && patch !== null && 'keybinds' in patch) refreshMenu(win)
+  })
+  ipcMain.on(IPC.suspendShortcuts, (event, suspend: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    shortcutsSuspended = suspend === true
+    if (win) refreshMenu(win)
+  })
+  ipcMain.on(IPC.relaunch, () => {
+    app.relaunch()
+    app.quit()
+  })
+  ipcMain.handle(IPC.userDataShow, async () => {
+    const error = await shell.openPath(app.getPath('userData'))
+    if (error) throw new Error(error)
+  })
 
   ipcMain.handle(IPC.gpuInfo, getGpuInfo)
 
@@ -264,7 +292,7 @@ function createWindow(): void {
       win.show()
     })
     trackWindow(win)
-    Menu.setApplicationMenu(buildMenu(win, isDev))
+    refreshMenu(win)
   }
 
   // Keep the app on its own page; send external links to the system browser.

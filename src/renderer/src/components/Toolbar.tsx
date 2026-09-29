@@ -1,24 +1,14 @@
-import { THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type Theme, type ViewMode } from '@shared/api'
-import { formatAccelerator } from '@shared/menu'
+import { THEME_HINTS, THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type ViewMode } from '@shared/api'
 import { openImage, redo, undo } from '@/actions'
+import { useSavedSettings, withShortcut } from '@/settings'
 import { useApp } from '@/store'
 import { PresetsMenu } from './Presets'
 import { Button } from './ui/button'
 import { Segmented } from './ui/controls'
-import { MinusIcon, PlusIcon, RedoIcon, UndoIcon } from './ui/icons'
+import { MinusIcon, PlusIcon, RedoIcon, SettingsIcon, UndoIcon } from './ui/icons'
 import { Lcd } from './ui/retro'
 import { Select } from './ui/select'
 import { WorkspaceMenu } from './Workspace'
-
-const mod = window.fx.platform === 'darwin' ? '⌘' : 'Ctrl+'
-
-const THEME_HINTS: Record<Theme, string> = {
-  dark: 'Plum with purple and magenta accents',
-  night: 'Neutral greyscale, for dim rooms and judging colors',
-  light: 'Daylight: pale lilac surfaces, dark text',
-  matrix: 'Green phosphor on black',
-  retro: 'Classic silver-grey desktop, navy title bars, square corners'
-}
 
 const VIEW_MODE_HINTS: Record<ViewMode, string> = {
   '2d': 'The texture only',
@@ -41,52 +31,54 @@ export function Toolbar() {
   const viewMode = useApp((s) => s.viewMode)
   const canUndo = useApp((s) => s.past.length > 0)
   const canRedo = useApp((s) => s.future.length > 0)
-  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setTheme, setViewMode, setExportOpen } = useApp.getState()
-  const redoKey = window.fx.platform === 'darwin' ? '⇧⌘Z' : 'Ctrl+Y'
+  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setTheme, setViewMode, setExportOpen, setSettingsOpen } = useApp.getState()
+  // Tooltips show the shortcuts as the user set them.
+  const settings = useSavedSettings()
+  const tip = (text: string, command: Parameters<typeof withShortcut>[1]): string => withShortcut(text, command, settings)
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-1 overflow-hidden border-b-px border-edge bg-panel px-2 shadow-[inset_0_var(--px)_0_var(--fx-bevel-light)]">
-      <Button onClick={openImage} disabled={gpu.status !== 'ready'} title={`Open image (${mod}O)`}>
+      <Button onClick={openImage} disabled={gpu.status !== 'ready'} title={tip('Open image', 'open')}>
         Open…
       </Button>
-      <Button variant="primary" onClick={() => setExportOpen(true)} disabled={!hasImage} title={`Export PNG, TGA or BMP (${mod}E)`}>
+      <Button variant="primary" onClick={() => setExportOpen(true)} disabled={!hasImage} title={tip('Export PNG, TGA or BMP', 'export')}>
         Export…
       </Button>
       <PresetsMenu />
 
       <Separator />
-      <Button size="icon" onClick={undo} disabled={!canUndo} title={`Undo (${mod}Z)`} aria-label="Undo">
+      <Button size="icon" onClick={undo} disabled={!canUndo} title={tip('Undo', 'undo')} aria-label="Undo">
         <UndoIcon />
       </Button>
-      <Button size="icon" onClick={redo} disabled={!canRedo} title={`Redo (${redoKey})`} aria-label="Redo">
+      <Button size="icon" onClick={redo} disabled={!canRedo} title={tip('Redo', 'redo')} aria-label="Redo">
         <RedoIcon />
       </Button>
 
       <Separator />
-      <Button size="icon" onClick={() => zoomStep(-1)} disabled={!hasImage} title={`Zoom out (${mod}-)`} aria-label="Zoom out">
+      <Button size="icon" onClick={() => zoomStep(-1)} disabled={!hasImage} title={tip('Zoom out', 'zoom-out')} aria-label="Zoom out">
         <MinusIcon />
       </Button>
       <Lcd className="w-16" title="Zoom (100% = one image pixel per screen pixel)">
         {hasImage ? `${Math.round(zoom * 100)}%` : '—'}
       </Lcd>
-      <Button size="icon" onClick={() => zoomStep(1)} disabled={!hasImage} title={`Zoom in (${mod}=)`} aria-label="Zoom in">
+      <Button size="icon" onClick={() => zoomStep(1)} disabled={!hasImage} title={tip('Zoom in', 'zoom-in')} aria-label="Zoom in">
         <PlusIcon />
       </Button>
-      <Button onClick={zoomFit} disabled={!hasImage} title={`Fit to window (${mod}0)`}>
+      <Button onClick={zoomFit} disabled={!hasImage} title={tip('Fit to window', 'zoom-fit')}>
         Fit
       </Button>
-      <Button onClick={zoomActual} disabled={!hasImage} title={`Actual pixels (${mod}1)`}>
+      <Button onClick={zoomActual} disabled={!hasImage} title={tip('Actual pixels', 'zoom-actual')}>
         1:1
       </Button>
 
       <Separator />
-      <Button aria-pressed={grid} onClick={toggleGrid} title={`Pixel grid (${mod}G)`}>
+      <Button aria-pressed={grid} onClick={toggleGrid} title={tip('Pixel grid', 'toggle-grid')}>
         Grid
       </Button>
-      <Button aria-pressed={split} onClick={toggleSplit} title={`Before/after split (${mod}\\)`}>
+      <Button aria-pressed={split} onClick={toggleSplit} title={tip('Before/after split', 'toggle-split')}>
         Split
       </Button>
-      <Button aria-pressed={tile} onClick={toggleTile} title={`Tiling view: copies around the texture to check its seams (${mod}T)`}>
+      <Button aria-pressed={tile} onClick={toggleTile} title={tip('Tiling view: copies around the texture to check its seams', 'toggle-tile')}>
         Tile
       </Button>
 
@@ -95,7 +87,7 @@ export function Toolbar() {
         className="shrink-0 flex-nowrap"
         value={viewMode}
         onChange={setViewMode}
-        options={VIEW_MODES.map((m, i) => ({ value: m, label: VIEW_MODE_NAMES[m], hint: `${VIEW_MODE_HINTS[m]} (${formatAccelerator(`CmdOrCtrl+Shift+${i + 1}`, window.fx.platform)})` }))}
+        options={VIEW_MODES.map((m) => ({ value: m, label: VIEW_MODE_NAMES[m], hint: tip(VIEW_MODE_HINTS[m], `view-${m}`) }))}
       />
 
       <div className="flex-1" />
@@ -107,6 +99,9 @@ export function Toolbar() {
         onValueChange={setTheme}
         options={THEMES.map((t) => ({ value: t, label: THEME_NAMES[t], hint: THEME_HINTS[t] }))}
       />
+      <Button size="icon" onClick={() => setSettingsOpen(true)} title={tip('Settings', 'settings')} aria-label="Settings">
+        <SettingsIcon />
+      </Button>
     </header>
   )
 }

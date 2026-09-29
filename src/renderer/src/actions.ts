@@ -575,5 +575,6 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'view-3d':
       return app.setViewMode(command.slice('view-'.length) as ViewMode)
     case 'gpu-diagnostics': return app.setDiagnosticsOpen(true)
+    case 'settings': return app.setSettingsOpen(true)
   }
 }
