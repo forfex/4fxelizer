@@ -15,12 +15,14 @@ import {
   compareVersions,
   CHECKSUMS_ASSET,
   LATEST_RELEASE_URL,
+  MAX_WHATS_NEW,
   parseRelease,
   pickAsset,
   RELEASES_PAGE,
   type InstallKind,
   type Release,
-  type UpdateState
+  type UpdateState,
+  WHATS_NEW_ASSET
 } from '@shared/update'
 import { getSettings } from './settings'
 
@@ -71,6 +73,9 @@ async function fetchLatest(): Promise<Release> {
   if (!response.ok) throw new Error(`GitHub answered ${response.status}.`)
   const release = parseRelease(await response.json())
   if (!release) throw new Error('The latest release could not be read.')
+  // The short list the update window shows; without it the window links to the release page only.
+  const whatsNew = release.assets.find((a) => a.name === WHATS_NEW_ASSET)
+  if (whatsNew) release.notes = await fetchText(whatsNew.url).then((t) => t.slice(0, MAX_WHATS_NEW), () => '')
   return release
 }
 

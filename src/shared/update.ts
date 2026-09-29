@@ -6,6 +6,13 @@ export const LATEST_RELEASE_URL = `https://api.github.com/repos/${RELEASES_REPO}
 export const RELEASES_PAGE = `https://github.com/${RELEASES_REPO}/releases`
 /** The release asset listing every file's SHA-256 (made by the release workflow). */
 export const CHECKSUMS_ASSET = 'SHA256SUMS.txt'
+/**
+ * The release asset with the short "What's new" list the update window shows (WHATSNEW.md in the
+ * repo, uploaded by the release workflow). The GitHub release text is not shown in the app.
+ */
+export const WHATS_NEW_ASSET = 'WHATSNEW.md'
+/** Longest "What's new" text read (characters). */
+export const MAX_WHATS_NEW = 16 * 1024
 
 export interface ReleaseAsset {
   name: string
@@ -17,7 +24,7 @@ export interface Release {
   /** "1.2.0" (the tag without its "v"). */
   version: string
   name: string
-  /** Release notes (markdown). */
+  /** The short "What's new" list (markdown, from WHATS_NEW_ASSET); '' when the release has none. */
   notes: string
   /** The release's page on GitHub. */
   page: string
@@ -83,7 +90,10 @@ export function compareVersions(a: string, b: string): number {
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
-/** A release from GitHub's releases API; null for drafts, pre-releases or anything unexpected. */
+/**
+ * A release from GitHub's releases API; null for drafts, pre-releases or anything unexpected.
+ * `notes` stays empty: it is read from WHATS_NEW_ASSET afterwards.
+ */
 export function parseRelease(json: unknown): Release | null {
   if (!isObject(json) || json.draft === true || json.prerelease === true) return null
   const tag = str(json.tag_name)
@@ -101,7 +111,7 @@ export function parseRelease(json: unknown): Release | null {
   return {
     version: tag.replace(/^v/, ''),
     name: str(json.name) || tag,
-    notes: str(json.body),
+    notes: '',
     page: page.startsWith('https://github.com/') ? page : RELEASES_PAGE,
     assets
   }

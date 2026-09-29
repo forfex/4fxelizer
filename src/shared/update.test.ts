@@ -50,11 +50,11 @@ describe('parseRelease', () => {
     ]
   }
 
-  it('reads version, notes, page and https assets', () => {
+  it('reads version, page and https assets, not the release text', () => {
     expect(parseRelease(json)).toEqual({
       version: '1.2.0',
       name: '4FXELIZER v1.2.0',
-      notes: 'Notes',
+      notes: '',
       page: 'https://github.com/forfex/4fxelizer/releases/tag/v1.2.0',
       assets: [{ name: 'a.exe', url: 'https://github.com/x/a.exe', size: 10 }]
     })

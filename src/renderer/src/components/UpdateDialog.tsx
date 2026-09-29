@@ -145,6 +145,11 @@ export function UpdateDialog() {
               <ReleaseNotes markdown={release.notes} />
             </div>
           )}
+          {release && (
+            <a href={release.page} target="_blank" rel="noreferrer" className="self-start text-small text-accent-hi underline">
+              Full release notes on GitHub
+            </a>
+          )}
           {offered && (
             <p className="text-small text-dim">
               {state.installable
