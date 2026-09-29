@@ -9,14 +9,19 @@ import { loadModelFile } from './modelActions'
 import { useApp } from './store'
 import { changedRoles, watchedPaths } from './watchedFiles'
 
-async function reload(path: string): Promise<void> {
-  const roles = changedRoles(useApp.getState(), path)
-  if (!roles.texture && !roles.map && !roles.model) return
-  const file = await window.fx.readWatchedFile(path)
-  if (!file) return
-  if (roles.texture) await reloadImageFile(file)
-  if (roles.map) await reloadMapFile(file)
-  if (roles.model) await reloadModel()
+/** A model reload is queued and hasn't started: more changes to its files (an export writes the model and its .mtl or .bin) join it. */
+let modelQueued = false
+
+async function reload(path: string, roles: ReturnType<typeof changedRoles>): Promise<void> {
+  if (roles.texture || roles.map) {
+    const file = await window.fx.readWatchedFile(path)
+    if (file && roles.texture) await reloadImageFile(file)
+    if (file && roles.map) await reloadMapFile(file)
+  }
+  if (roles.model) {
+    modelQueued = false
+    await reloadModel()
+  }
 }
 
 /** Reads the model file again (also when one of its buffers or material libraries changed). */
@@ -39,7 +44,11 @@ export function startLiveReload(): () => void {
   // One reload at a time, in the order the changes came in.
   let queue = Promise.resolve()
   const offChange = window.fx.onFileChanged((path) => {
-    queue = queue.then(() => reload(path)).catch((e) => console.warn('Live reload failed:', e))
+    const roles = changedRoles(useApp.getState(), path)
+    if (roles.model && modelQueued) roles.model = false
+    if (!roles.texture && !roles.map && !roles.model) return
+    if (roles.model) modelQueued = true
+    queue = queue.then(() => reload(path, roles)).catch((e) => console.warn('Live reload failed:', e))
   })
   const unsubscribe = useApp.subscribe((s, prev) => {
     if (s.liveReload !== prev.liveReload || s.image !== prev.image || s.maps !== prev.maps || s.model !== prev.model) sync()
