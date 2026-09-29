@@ -11,7 +11,9 @@ import { newId, type Doc, type PaletteParams } from './doc'
 
 export const PRESET_FORMAT = '4fxelizer-preset'
 export const PRESET_VERSION = 1
-export const PRESET_EXTENSION = '4fxpreset'
+export const PRESET_EXTENSION = 'pxlook'
+/** Extension presets had before; such files still load. */
+export const LEGACY_PRESET_EXTENSION = '4fxpreset'
 
 export interface PresetFile extends Doc {
   format: typeof PRESET_FORMAT

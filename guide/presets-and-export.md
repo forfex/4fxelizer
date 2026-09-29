@@ -5,7 +5,7 @@
 **Presets** (toolbar › Presets, Ctrl+Shift+P) save the whole stack to reuse on other textures. Built-ins: PSX 8bpp,
 PSX 4bpp, PSX 15-bit, N64, NES-ish, Game Boy and Crunchy.
 
-Presets are small `.4fxpreset` files you can share; load one with **File › Import Preset…**.
+Presets are small `.pxlook` files (older `.4fxpreset` files still load) you can share; load one with **File › Import Preset…**.
 
 ## Export
 

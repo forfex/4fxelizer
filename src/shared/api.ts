@@ -19,7 +19,7 @@ export interface OpenedFile {
 export interface PresetEntry {
   /** Display name (from the file's "name" field). */
   name: string
-  /** File name inside the presets folder, e.g. "PSX look.4fxpreset". */
+  /** File name inside the presets folder, e.g. "PSX look.pxlook". */
   file: string
 }
 

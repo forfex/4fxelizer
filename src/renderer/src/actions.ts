@@ -15,7 +15,7 @@ import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/pal
 import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
 import { loadModelFile, openModel } from '@/modelActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
-import { parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
+import { LEGACY_PRESET_EXTENSION, parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
 import { useApp, type MapInfo } from '@/store'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
@@ -84,7 +84,7 @@ export async function openDroppedFiles(files: OpenedFile[]): Promise<void> {
   for (const file of files) {
     const ext = extensionOf(file.name)
     if (file === model || isModelFile(file.name)) continue
-    if (ext === PRESET_EXTENSION) loadPresetJson(new TextDecoder().decode(file.bytes), file.name)
+    if (ext === PRESET_EXTENSION || ext === LEGACY_PRESET_EXTENSION) loadPresetJson(new TextDecoder().decode(file.bytes), file.name)
     else if (PALETTE_EXTENSIONS.includes(ext) && ext !== 'txt') importPaletteBytes(file.name, file.bytes)
     else images.push(file)
   }
@@ -451,7 +451,9 @@ export async function pickColor(side: 'before' | 'after', uv: { u: number; v: nu
 
 // ── Presets ────────────────────────────────────────────────────────────────
 
-const PRESET_FILTERS: FileFilter[] = [{ name: '4FXELIZER preset', extensions: [PRESET_EXTENSION] }]
+const PRESET_FILTERS: FileFilter[] = [{ name: '4FXELIZER preset', extensions: [PRESET_EXTENSION, LEGACY_PRESET_EXTENSION] }]
+/** Saving offers only the current extension. */
+const PRESET_SAVE_FILTERS: FileFilter[] = [{ name: '4FXELIZER preset', extensions: [PRESET_EXTENSION] }]
 
 function applyPreset({ name, doc, warnings }: ParsedPreset): void {
   const app = useApp.getState()
@@ -521,7 +523,7 @@ export async function exportPresetFile(): Promise<void> {
   const app = useApp.getState()
   const name = app.presetName ?? `${baseName()} look`
   const bytes = new TextEncoder().encode(serializePreset(app, name))
-  const path = await window.fx.saveFile(presetFileName(name), bytes, PRESET_FILTERS)
+  const path = await window.fx.saveFile(presetFileName(name), bytes, PRESET_SAVE_FILTERS)
   if (path) app.setMessage({ kind: 'info', text: `Saved ${path}` })
 }
 

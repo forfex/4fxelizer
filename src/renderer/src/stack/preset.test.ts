@@ -120,8 +120,8 @@ describe('presets', () => {
   })
 
   it('makes safe file names', () => {
-    expect(presetFileName('PSX: 8bpp / test?')).toBe('PSX_ 8bpp _ test_.4fxpreset')
-    expect(presetFileName('  ...  ')).toBe('preset.4fxpreset')
+    expect(presetFileName('PSX: 8bpp / test?')).toBe('PSX_ 8bpp _ test_.pxlook')
+    expect(presetFileName('  ...  ')).toBe('preset.pxlook')
   })
 
   it('switching a stage to a project palette survives a round trip', () => {
