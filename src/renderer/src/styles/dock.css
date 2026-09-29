@@ -177,3 +177,19 @@
 .dockview-theme-fx .dv-groupview:has(.fx-texture-tabs) {
   --dv-tabs-and-actions-container-height: var(--fx-texture-tabs-height);
 }
+/* A texture tab: the dock tab's label font (not uppercased: file names), square, no accent line. */
+.dockview-theme-fx .fx-texture-tab {
+  height: calc(var(--fx-dock-tab-height) - 3px);
+  font-family: var(--fx-font-display);
+  font-size: var(--fx-font-size-small);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border: var(--px) solid transparent;
+  border-bottom: 0;
+  border-radius: 0;
+}
+.dockview-theme-fx .fx-texture-tab[aria-selected='true'] {
+  background: var(--fx-panel);
+  border-color: var(--fx-edge);
+  box-shadow: inset var(--px) var(--px) 0 var(--fx-bevel-light);
+}

@@ -50,10 +50,8 @@ export function TextureTabs({ fallback }: { fallback: ReactNode }) {
               if (e.key === 'Delete') closeTexture(t.id)
             }}
             className={cn(
-              'group/tab flex h-[calc(var(--fx-dock-tab-height)-3px)] max-w-52 min-w-0 shrink-0 cursor-default items-center gap-2 rounded-t-fx-md border-px border-b-0 pr-1.5 pl-3 text-small',
-              selected
-                ? 'relative z-1 border-edge bg-panel text-text shadow-[inset_0_calc(2*var(--px))_0_var(--fx-accent),inset_var(--px)_0_0_var(--fx-bevel-light)]'
-                : 'border-transparent text-dim hover:text-text'
+              'fx-texture-tab group/tab flex max-w-52 min-w-0 shrink-0 cursor-default items-center gap-2 pr-1.5 pl-3',
+              selected ? 'relative z-1 text-text' : 'text-dim hover:text-text'
             )}
           >
             {separate[t.id] && <span className="size-1.5 shrink-0 rounded-[1px] bg-magenta" title="Separate stack" />}
