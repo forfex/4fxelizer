@@ -1,0 +1,3 @@
+- Added auto-update: the app tells you when a new version is out and installs it for you (no more downloading from GitHub every time)
+- Settings › Updates: check for updates, or turn on automatic updates at launch
+- Help › Check for Updates…
