@@ -92,7 +92,6 @@ nav .wrap{display:flex;align-items:center;gap:20px;height:56px}
 
 /* Hero */
 .hero{padding:64px 0 32px}
-.hero-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:40px;align-items:center}
 .label{font:600 12px/16px var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--fx-text-dim)}
 h1{margin:12px 0 0;font:700 clamp(44px,9vw,92px)/.92 var(--font-display);letter-spacing:.02em;overflow-wrap:anywhere}
 .tag{margin:20px 0 28px;max-width:520px;font-size:clamp(17px,2.3vw,20px);line-height:1.5;color:var(--fx-text-dim)}
@@ -100,9 +99,6 @@ h1{margin:12px 0 0;font:700 clamp(44px,9vw,92px)/.92 var(--font-display);letter-
 .btns{display:flex;gap:14px;flex-wrap:wrap}
 .meta{display:flex;align-items:center;gap:8px;margin-top:18px;font-size:14px;color:var(--fx-text-dim)}
 .led{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--fx-led-green);box-shadow:0 0 6px var(--fx-led-green);flex-shrink:0}
-.art{width:100%;height:auto;display:block}
-.art .deep{fill:var(--fx-drop)}.art .brand{fill:var(--fx-accent)}.art .hot{fill:var(--fx-magenta)}.art .cream{fill:var(--fx-text)}
-.art .dot{fill:var(--fx-accent)}.art .cut{fill:var(--fx-bg)}
 
 /* A floating window: 2px ink outline, the large corner, the hard offset shadow, a dither-ramp title strip. */
 .window{background:var(--fx-panel);border:2px solid var(--fx-edge);border-radius:var(--fx-radius-lg);box-shadow:var(--fx-shadow-window);overflow:hidden}
@@ -155,8 +151,6 @@ footer .logo{margin-right:auto;font-size:14px}
 
 @media(max-width:860px){
   .gallery{--cols:3}
-  .hero-grid{grid-template-columns:1fr}
-  .art{max-width:520px}
 }
 @media(max-width:640px){
   .gallery{--cols:2}
@@ -181,25 +175,15 @@ footer .logo{margin-right:auto;font-size:14px}
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <div class="hero-grid">
-    <div>
-      <div class="label">Make your models retro</div>
-      <h1>4FXELIZER</h1>
-      <p class="tag">Big textures in. <b>Small, palettized, dithered out.</b> A desktop app for artists that turns high-res textures into crunchy PSX-era ones, live on the GPU.</p>
-      <div class="btns">
-        <a class="btn primary" href="https://github.com/forfex/4fxelizer/releases/latest">Download</a>
-        <a class="btn" href="https://github.com/forfex/4fxelizer">View on GitHub</a>
-      </div>
-      <p class="meta"><span class="led" aria-hidden="true"></span>Windows · macOS · Linux · free and open source</p>
+  <div>
+    <div class="label">Make your models retro</div>
+    <h1>4FXELIZER</h1>
+    <p class="tag">Big textures in. <b>Small, palettized, dithered out.</b> A desktop app for artists that turns high-res textures into crunchy PSX-era ones, live on the GPU.</p>
+    <div class="btns">
+      <a class="btn primary" href="https://github.com/forfex/4fxelizer/releases/latest">Download</a>
+      <a class="btn" href="https://github.com/forfex/4fxelizer">View on GitHub</a>
     </div>
-    <!-- The design system's cover art: a window slab and its hard shadow, dithered by a 4x4 Bayer matrix. -->
-    <svg class="art" viewBox="0 0 480 288" aria-hidden="true">
-      <rect class="deep" x="16" y="0" width="176" height="224" rx="10"/>
-      <rect class="brand" x="208" y="40" width="128" height="248" rx="10"/>
-      <rect class="hot" x="352" y="24" width="112" height="112" rx="6"/>
-      <rect class="cream" x="352" y="152" width="112" height="56" rx="6"/>
-      <g id="dots"></g>
-    </svg>
+    <p class="meta"><span class="led" aria-hidden="true"></span>Windows · macOS · Linux · free and open source</p>
   </div>
 
   <div class="window shot">
@@ -273,25 +257,6 @@ footer .logo{margin-right:auto;font-size:14px}
 </footer>
 
 <script>
-  // Cover art dither: 8px squares on a 16px pitch, placed by a 4x4 Bayer matrix. Density rises toward
-  // the purple slab, then continues as holes cut into it.
-  const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
-  const dots = document.getElementById('dots')
-  const ns = 'http://www.w3.org/2000/svg'
-  for (let y = 16; y < 224; y += 16) {
-    for (let x = 32; x < 336; x += 16) {
-      const onSlab = x >= 208
-      if (onSlab && y < 48) continue
-      const t = onSlab ? 1 - (x - 208) / 128 : (x - 32) / 160
-      if (BAYER[(y / 16) % 4][(x / 16) % 4] / 16 >= t * 0.9) continue
-      if (!onSlab && x + 8 > 192) continue
-      const r = document.createElementNS(ns, 'rect')
-      r.setAttribute('class', onSlab ? 'cut' : 'dot')
-      r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', 8); r.setAttribute('height', 8)
-      dots.appendChild(r)
-    }
-  }
-
   // Dark / Light switch, remembered in this browser.
   const toggle = document.getElementById('theme')
   const sync = () => {
