@@ -121,10 +121,11 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'left', 300)
       addTool(api, 'palettes', 'stack', 'within')
-      addTool(api, 'view3d', VIEWER, 'right', Math.max(api.width * 0.35, 320))
-      addTool(api, 'bake', 'view3d', 'right', 300)
+      addTool(api, 'bake', null, 'right', 300)
       addTool(api, 'maps', 'bake', 'below')
       addTool(api, 'generate', 'maps', 'within')
+      // The texture and the model share what's left.
+      addTool(api, 'view3d', VIEWER, 'right', Math.max((api.width - 600) / 2, 320))
     }
   },
   {
