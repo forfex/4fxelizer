@@ -239,13 +239,17 @@ fn sourceAlpha(p: vec2u, size: vec2u) -> f32 {
   return textureSampleLevel(sourceTex, linearSampler, (vec2f(p) + 0.5) / vec2f(size), 0.0).a;
 }
 
-/** Color of the visible texels around q, for texels the color filter left transparent. */
-fn nearbyColor(q: vec2i, fallback: vec3f) -> vec3f {
+/**
+ * Color of the visible texels around q, for texels the color filter left transparent. With none
+ * visible, q's own color: a Downscale alpha cutout keeps the color of blocks it cleared, so thin
+ * parts the original alpha brings back don't turn black.
+ */
+fn nearbyColor(q: vec2i) -> vec3f {
   var acc = vec4f(0.0);
   for (var j = -1; j <= 1; j++) {
     for (var i = -1; i <= 1; i++) { acc += premul(texel(q + vec2i(i, j))); }
   }
-  if (acc.a <= 1.0 / 512.0) { return fallback; }
+  if (acc.a <= 1.0 / 512.0) { return texel(q).rgb; }
   return clamp(acc.rgb / acc.a, vec3f(0.0), vec3f(1.0));
 }
 
@@ -267,7 +271,7 @@ fn run(p: vec2u, size: vec2u) -> vec4f {
     if (params.alphaMode == 3u) { a = select(0.0, 1.0, a >= max(params.alphaThreshold, 1.0 / 512.0)); }
   }
   var rgb = c.rgb;
-  if (c.a <= 1.0 / 512.0 && a > 0.0) { rgb = nearbyColor(q, rgb); }
+  if (c.a <= 1.0 / 512.0 && a > 0.0) { rgb = nearbyColor(q); }
   return vec4f(rgb, clamp(a, 0.0, 1.0));
 }
 `,
