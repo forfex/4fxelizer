@@ -172,7 +172,11 @@ export interface AppState extends Doc {
   closeTexture(id: string): void
   /** Gives a texture its own stack (a copy of the shared one) or puts it back on the shared stack. Undoable. */
   setTextureStack(id: string, stack: 'shared' | 'separate'): void
-  updateTexture(id: string, patch: Partial<Pick<TextureEntry, 'thumbnail' | 'materials'>>): void
+  updateTexture(id: string, patch: Partial<Pick<TextureEntry, 'thumbnail'>>): void
+  /** Draws model materials with a texture (they leave any other texture); [] unbinds it. */
+  assignMaterials(textureId: string, materials: number[]): void
+  /** Forgets which textures the materials use (another model opened). */
+  clearMaterials(): void
   /**
    * Stores generated colors for a palette (no undo step): of one texture (null = the palette's
    * colors for every texture on its stack).
@@ -287,7 +291,9 @@ function showTexture(s: AppState, id: string | null, docs: Docs, textures: Textu
     maskUid: null,
     selectedColor: null,
     picking: false,
-    selectedPaletteId: paletteSelection(doc, s.selectedPaletteId)
+    selectedPaletteId: paletteSelection(doc, s.selectedPaletteId),
+    // The texture set follows a texture drawn on a material.
+    ...(entry?.materials.length ? { modelMaterial: entry.materials[0] } : {})
   }
 }
 
@@ -379,6 +385,13 @@ export const useApp = create<AppState>()((set, get) => ({
     const s = get()
     set({ textures: tex.updateTexture(s.textures, id, patch) })
   },
+  assignMaterials: (textureId, materials) => {
+    const s = get()
+    const textures = tex.assignMaterials(s.textures, textureId, materials)
+    const active = textures.find((t) => t.id === s.activeTextureId)
+    set({ textures, ...(active?.materials.length ? { modelMaterial: active.materials[0] } : {}) })
+  },
+  clearMaterials: () => set({ textures: get().textures.map((t) => (t.materials.length ? { ...t, materials: [] } : t)) }),
   setGeneratedColors: (textureId, paletteId, colors, generatedFor) => {
     const s = get()
     const docs = tex.setGenerated(s.docs, textureId, paletteId, colors, generatedFor, s.activeTextureId)

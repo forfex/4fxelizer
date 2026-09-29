@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { useApp } from '@/store'
 import { initialDoc } from './doc'
 import {
+  activeMaterials,
+  assignMaterials,
   changedDocKeys,
   closeTexture,
   docAt,
@@ -11,6 +13,7 @@ import {
   makeSeparate,
   makeShared,
   neighborOf,
+  partTextures,
   SHARED,
   textureForDoc,
   type Docs,
@@ -63,6 +66,25 @@ describe('texture documents', () => {
     expect(neighborOf(textures, 'b')).toBe('c')
     expect(neighborOf(textures, 'c')).toBe('b')
     expect(neighborOf([entry('a')], 'a')).toBeNull()
+  })
+})
+
+describe('model materials', () => {
+  it('draws a material with one texture at a time', () => {
+    let textures = assignMaterials([entry('a'), entry('b')], 'a', [0, 2])
+    textures = assignMaterials(textures, 'b', [2, 1])
+    expect(textures.map((t) => t.materials)).toEqual([[0], [1, 2]])
+    expect(partTextures(3, textures, 'a', 0)).toEqual(['a', 'b', 'b'])
+    expect(activeMaterials(3, textures, 'b', 0)).toEqual([1, 2])
+  })
+
+  it('shows an unbound active texture on the chosen texture set, and any texture on a one-material model', () => {
+    const textures = [entry('a'), { ...entry('b'), materials: [1] }]
+    expect(partTextures(3, textures, 'a', 2)).toEqual([null, 'b', 'a'])
+    expect(partTextures(3, textures, 'b', 2)).toEqual([null, 'b', null])
+    expect(activeMaterials(3, textures, 'a', 2)).toEqual([2])
+    expect(partTextures(1, textures, 'b', 0)).toEqual(['b'])
+    expect(activeMaterials(1, textures, 'b', 0)).toEqual([0])
   })
 })
 

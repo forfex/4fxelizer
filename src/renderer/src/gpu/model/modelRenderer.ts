@@ -1,7 +1,8 @@
 // Draws the model in the 3D view: a shadow map from the key light (lit styles), then the model
 // into an offscreen framebuffer (low-res for the console looks, multisampled when antialiased),
-// then that framebuffer scaled up to the canvas. Textures are the engine's own (the processed
-// result, the source or a map), so the view shows every change without reading anything back.
+// then that framebuffer scaled up to the canvas. Each material is drawn with its own texture's
+// GPU textures (the processed result, the source or a map) and maps, so the view shows every
+// change without reading anything back.
 
 import { VIEW3D_DITHERS, VIEW3D_FILTERS, VIEW3D_SHADINGS, VIEW3D_SURFACES, VIEW3D_WIREFRAMES, type View3dStyle } from '@shared/view3d'
 import { basis, eye, lightProjection, normalize, viewProjection, type OrbitCamera, type Vec3 } from '@/viewer3d/camera'
@@ -18,16 +19,20 @@ export interface FrameMap {
   channel: number
 }
 
+/** What a material is drawn with: a texture of the engine, and the maps of the same texture. */
+export interface PartTexture {
+  texture: GPUTexture
+  /** 0 = the texture's colors; 1 + map channel index = that channel in gray (map views). */
+  view: number
+  /** Maps the per-pixel shading reads (when the style uses maps). */
+  maps: { ao?: FrameMap; roughness?: FrameMap; metallic?: FrameMap }
+}
+
 export interface ModelFrame {
   model: ModelGpu | null
   uvSet: number
-  /** Material (texture set) drawn with `texture`; the others get their flat base color. */
-  material: number
-  texture: GPUTexture | null
-  /** 0 = the texture's colors; 1 + map channel index = that channel in gray (map views). */
-  textureView: number
-  /** Maps the per-pixel shading reads (when the style uses maps). */
-  maps: { ao?: FrameMap; roughness?: FrameMap; metallic?: FrameMap }
+  /** Per material: its texture, or null for its flat base color. */
+  parts: (PartTexture | null)[]
   camera: OrbitCamera
   style: View3dStyle
   background: Rgba
@@ -42,7 +47,8 @@ export interface ModelFrame {
 const PART_STRIDE = 256
 const FRAME_FORMAT: GPUTextureFormat = 'rgba8unorm'
 const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus'
-const FRAME_UNIFORM_BYTES = 304
+const FRAME_UNIFORM_BYTES = 288
+const PART_BYTES = 48
 const SHADOW_SIZE = 2048
 const MSAA_SAMPLES = 4
 /** Line count vertices snap to when the view renders at full resolution. */
@@ -66,6 +72,7 @@ export class ModelRenderer {
   private readonly layout: GPUPipelineLayout
   private readonly frameLayout: GPUBindGroupLayout
   private readonly partLayout: GPUBindGroupLayout
+  private readonly textureLayout: GPUBindGroupLayout
   private readonly pipelines = new Map<string, GPURenderPipeline>()
   private readonly shadowPipeline: GPURenderPipeline
   private readonly blitPipeline: GPURenderPipeline
@@ -96,22 +103,19 @@ export class ModelRenderer {
       label: '3d frame',
       entries: [
         { binding: 0, visibility: both, buffer: {} },
-        texture(1),
-        texture(2),
-        texture(3),
-        texture(4),
-        { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
-        { binding: 6, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'comparison' } },
-        { binding: 7, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-        { binding: 8, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'comparison' } },
+        { binding: 3, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+        { binding: 4, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }
       ]
     })
     this.partLayout = device.createBindGroupLayout({
       label: '3d part',
-      entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { hasDynamicOffset: true, minBindingSize: 32 } }]
+      entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { hasDynamicOffset: true, minBindingSize: PART_BYTES } }]
     })
+    this.textureLayout = device.createBindGroupLayout({ label: '3d textures', entries: [texture(0), texture(1), texture(2), texture(3)] })
     this.module = device.createShaderModule({ label: '3d view', code: shader })
-    this.layout = device.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.partLayout] })
+    this.layout = device.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.partLayout, this.textureLayout] })
     this.shadowPipeline = device.createRenderPipeline({
       label: '3d shadow map',
       layout: this.layout,
@@ -198,20 +202,38 @@ export class ModelRenderer {
   }
 
   private frameGroup(frame: ModelFrame, model: ModelGpu, shadowMap: GPUTexture): GPUBindGroup {
-    const view = (t: GPUTexture | null | undefined): GPUTextureView => (t ?? this.placeholder).createView()
     return this.device.createBindGroup({
       layout: this.frameLayout,
       entries: [
         { binding: 0, resource: { buffer: this.frameUniform } },
-        { binding: 1, resource: view(frame.texture) },
-        { binding: 2, resource: view(frame.maps.ao?.texture) },
-        { binding: 3, resource: view(frame.maps.roughness?.texture) },
-        { binding: 4, resource: view(frame.maps.metallic?.texture) },
-        { binding: 5, resource: shadowMap.createView() },
-        { binding: 6, resource: this.shadowSampler },
-        { binding: 7, resource: { buffer: model.vertexBuffer(frame.uvSet) } },
-        { binding: 8, resource: { buffer: model.index } }
+        { binding: 1, resource: shadowMap.createView() },
+        { binding: 2, resource: this.shadowSampler },
+        { binding: 3, resource: { buffer: model.vertexBuffer(frame.uvSet) } },
+        { binding: 4, resource: { buffer: model.index } }
       ]
+    })
+  }
+
+  /** Texture bind groups per material (materials drawn with the same texture share one). */
+  private textureGroups(frame: ModelFrame, count: number): GPUBindGroup[] {
+    const view = (t: GPUTexture | null | undefined): GPUTextureView => (t ?? this.placeholder).createView()
+    const groups = new Map<PartTexture | null, GPUBindGroup>()
+    return Array.from({ length: count }, (_, i) => {
+      const part = frame.parts[i] ?? null
+      let group = groups.get(part)
+      if (!group) {
+        group = this.device.createBindGroup({
+          layout: this.textureLayout,
+          entries: [
+            { binding: 0, resource: view(part?.texture) },
+            { binding: 1, resource: view(part?.maps.ao?.texture) },
+            { binding: 2, resource: view(part?.maps.roughness?.texture) },
+            { binding: 3, resource: view(part?.maps.metallic?.texture) }
+          ]
+        })
+        groups.set(part, group)
+      }
+      return group
     })
   }
 
@@ -223,15 +245,20 @@ export class ModelRenderer {
       this.partUniform = this.device.createBuffer({ label: '3d parts', size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
       this.partGroup = this.device.createBindGroup({
         layout: this.partLayout,
-        entries: [{ binding: 0, resource: { buffer: this.partUniform, size: 32 } }]
+        entries: [{ binding: 0, resource: { buffer: this.partUniform, size: PART_BYTES } }]
       })
     }
-    const data = new Float32Array(size / 4)
+    const buffer = new ArrayBuffer(size)
+    const f = new Float32Array(buffer)
+    const u = new Uint32Array(buffer)
+    const mapSlot = (m: FrameMap | undefined): number => (m && frame.style.maps ? 1 + m.channel : 0)
     model.data.materials.forEach((m, i) => {
-      const textured = !!frame.texture && i === frame.material
-      data.set([...m.color, 1, textured ? 1 : 0, 0, 0, 0], (i * PART_STRIDE) / 4)
+      const part = frame.parts[i]
+      const o = (i * PART_STRIDE) / 4
+      f.set([...m.color, 1, part ? 1 : 0, part?.view ?? 0, 0, 0], o)
+      u.set([mapSlot(part?.maps.ao), mapSlot(part?.maps.roughness), mapSlot(part?.maps.metallic), 0], o + 8)
     })
-    this.device.queue.writeBuffer(this.partUniform, 0, data)
+    this.device.queue.writeBuffer(this.partUniform, 0, buffer)
   }
 
   private writeFrame(frame: ModelFrame, model: ModelGpu, lit: { key: Vec3; lightViewProj: Float32Array; shadowTexel: number; shadows: boolean }): void {
@@ -245,7 +272,6 @@ export class ModelRenderer {
     const wireWidth = s.resolution === 'full' ? Math.max(1, frame.pixelRatio) : 1
     const fogStart = frame.camera.distance - radius * 0.5
     const lookup = <T>(list: readonly T[], v: T): number => Math.max(list.indexOf(v), 0)
-    const mapSlot = (m: FrameMap | undefined): number => (m && s.maps ? 1 + m.channel : 0)
 
     const buffer = new ArrayBuffer(FRAME_UNIFORM_BYTES)
     const f = new Float32Array(buffer)
@@ -261,16 +287,16 @@ export class ModelRenderer {
     f.set([fogStart, fogStart + radius * 2, s.fog, lit.shadowTexel], 52)
     f.set(frame.background, 56)
     f.set(frame.wireColor, 60)
-    u.set([lookup(VIEW3D_SHADINGS, s.shading), lookup(VIEW3D_SURFACES, s.surface), frame.textureView, lookup(VIEW3D_FILTERS, s.filter)], 64)
+    u.set([lookup(VIEW3D_SHADINGS, s.shading), lookup(VIEW3D_SURFACES, s.surface), 0, lookup(VIEW3D_FILTERS, s.filter)], 64)
     u.set([lookup(VIEW3D_WIREFRAMES, s.wireframe), s.colorDepth === 'rgb555' ? 1 : 0, lookup(VIEW3D_DITHERS, s.dither), lit.shadows ? 1 : 0], 68)
-    u.set([mapSlot(frame.maps.ao), mapSlot(frame.maps.roughness), mapSlot(frame.maps.metallic), 0], 72)
     this.device.queue.writeBuffer(this.frameUniform, 0, buffer)
   }
 
-  private drawParts(pass: GPURenderPassEncoder, model: ModelGpu): void {
+  private drawParts(pass: GPURenderPassEncoder, model: ModelGpu, textures: GPUBindGroup[]): void {
     model.data.parts.forEach((part, i) => {
       if (!part.count) return
       pass.setBindGroup(1, this.partGroup!, [i * PART_STRIDE])
+      pass.setBindGroup(2, textures[i]!)
       pass.draw(part.count * 3, 1, part.first * 3)
     })
   }
@@ -286,7 +312,9 @@ export class ModelRenderer {
     const encoder = this.device.createCommandEncoder({ label: '3d view' })
 
     let group: GPUBindGroup | null = null
+    let textures: GPUBindGroup[] = []
     if (model) {
+      textures = this.textureGroups(frame, model.data.parts.length)
       const { min, max } = model.data.bounds
       const center: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]
       const radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2 || 1
@@ -315,7 +343,7 @@ export class ModelRenderer {
         pass.setPipeline(this.shadowPipeline)
         // The shadow map can't be read while it's drawn: this pass binds a placeholder.
         pass.setBindGroup(0, this.frameGroup(frame, model, this.placeholderDepth))
-        this.drawParts(pass, model)
+        this.drawParts(pass, model, textures)
         pass.end()
       }
       group = this.frameGroup(frame, model, shadows ? this.shadowMap! : this.placeholderDepth)
@@ -337,7 +365,7 @@ export class ModelRenderer {
     if (model && group) {
       pass.setPipeline(this.pipeline(samples, !s.backfaces))
       pass.setBindGroup(0, group)
-      this.drawParts(pass, model)
+      this.drawParts(pass, model, textures)
     }
     pass.end()
 

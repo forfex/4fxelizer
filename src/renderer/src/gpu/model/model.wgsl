@@ -25,30 +25,31 @@ struct Frame {
   fog: vec4f,
   background: vec4f,
   wire: vec4f,
-  /** x: shading; y: surface; z: texture view (0 = color, 1 + map channel = grayscale channel); w: filter. */
+  /** x: shading; y: surface; z: unused; w: filter. */
   mode: vec4u,
   /** x: wireframe; y: 5 bits per channel; z: dither; w: shadows. */
   mode2: vec4u,
-  /** 1 + channel of the AO, roughness and metallic maps (0 = none). */
+}
+
+/** One material, drawn with its own texture (and that texture's maps) or its flat color. */
+struct Part {
+  color: vec4f,
+  /** x: 1 = read the texture, 0 = flat color; y: texture view (0 = color, 1 + map channel = grayscale channel). */
+  textured: vec4f,
+  /** 1 + channel of the texture's AO, roughness and metallic maps (0 = none). */
   maps: vec4u,
 }
 
-struct Part {
-  color: vec4f,
-  /** x: 1 = read the texture, 0 = flat color. */
-  textured: vec4f,
-}
-
 @group(0) @binding(0) var<uniform> frame: Frame;
-@group(0) @binding(1) var tex: texture_2d<f32>;
-@group(0) @binding(2) var aoTex: texture_2d<f32>;
-@group(0) @binding(3) var roughTex: texture_2d<f32>;
-@group(0) @binding(4) var metalTex: texture_2d<f32>;
-@group(0) @binding(5) var shadowMap: texture_depth_2d;
-@group(0) @binding(6) var shadowSampler: sampler_comparison;
-@group(0) @binding(7) var<storage, read> vertices: array<f32>;
-@group(0) @binding(8) var<storage, read> indices: array<u32>;
+@group(0) @binding(1) var shadowMap: texture_depth_2d;
+@group(0) @binding(2) var shadowSampler: sampler_comparison;
+@group(0) @binding(3) var<storage, read> vertices: array<f32>;
+@group(0) @binding(4) var<storage, read> indices: array<u32>;
 @group(1) @binding(0) var<uniform> part: Part;
+@group(2) @binding(0) var tex: texture_2d<f32>;
+@group(2) @binding(1) var aoTex: texture_2d<f32>;
+@group(2) @binding(2) var roughTex: texture_2d<f32>;
+@group(2) @binding(3) var metalTex: texture_2d<f32>;
 
 const SHADING_UNLIT = 0u;
 const SHADING_VERTEX = 1u;
@@ -210,9 +211,9 @@ fn tonemap(x: vec3f) -> vec3f {
 fn litColor(albedoSrgb: vec3f, n: vec3f, world: vec3f, uv: vec2f) -> vec3f {
   let albedo = pow(max(albedoSrgb, vec3f(0.0)), vec3f(2.2));
   let v = safeNormalize(frame.eye.xyz - world);
-  let ao = mapValue(aoTex, uv, frame.maps.x, 1.0);
-  let roughness = clamp(mapValue(roughTex, uv, frame.maps.y, 0.7), 0.08, 1.0);
-  let metallic = mapValue(metalTex, uv, frame.maps.z, 0.0);
+  let ao = mapValue(aoTex, uv, part.maps.x, 1.0);
+  let roughness = clamp(mapValue(roughTex, uv, part.maps.y, 0.7), 0.08, 1.0);
+  let metallic = mapValue(metalTex, uv, part.maps.z, 0.0);
   let f0 = mix(vec3f(0.04), albedo, metallic);
   let diffuse = albedo * (1.0 - metallic);
 
@@ -261,7 +262,7 @@ fn fs(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
   if (part.textured.x > 0.5) {
     let texel = sampleTexture(tex, uv, frame.mode.w);
     base = texel;
-    let view = frame.mode.z;
+    let view = u32(part.textured.y);
     if (view > 0u) { base = vec4f(vec3f(channelOf(texel, view - 1u)), 1.0); }
   }
   // Binary transparency, like the consoles'.
@@ -308,7 +309,7 @@ fn vsShadow(@builtin(vertex_index) i: u32) -> ShadowOut {
 
 @fragment
 fn fsShadow(in: ShadowOut) {
-  if (part.textured.x > 0.5 && frame.mode.y == SURFACE_TEXTURE && frame.mode.z == 0u) {
+  if (part.textured.x > 0.5 && frame.mode.y == SURFACE_TEXTURE && part.textured.y < 0.5) {
     if (sampleTexture(tex, in.uv, FILTER_NEAREST).a < 0.5) { discard; }
   }
 }

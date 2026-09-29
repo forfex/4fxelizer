@@ -9,9 +9,10 @@ import { MAP_CHANNELS, MAP_SLOTS, type MapSlot } from '@shared/maps'
 import { VIEW3D_SHAPE_NAMES, VIEW3D_SHAPES, view3dStyle, type View3dShape } from '@shared/view3d'
 import { getEngine } from '@/engine'
 import { ModelGpu } from '@/gpu/model/modelGpu'
-import { ModelRenderer, type FrameMap } from '@/gpu/model/modelRenderer'
+import { ModelRenderer, type FrameMap, type PartTexture } from '@/gpu/model/modelRenderer'
 import type { ModelData } from '@/model/model'
 import { shapeModel } from '@/model/shapes'
+import { partTextures } from '@/stack/textures'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
 import { openModel } from '@/modelActions'
@@ -83,21 +84,45 @@ export function View3d() {
         camera.current = gpuModel ? frameBounds(gpuModel.data.bounds, aspect) : null
       }
       const show = s.view3dShow
-      const map = show !== 'result' && show !== 'source' ? s.maps[show] : undefined
-      const texture = show === 'result' ? engine.shownTexture : show === 'source' ? engine.sourceTexture : map ? engine.mapTexture(show as keyof typeof s.maps) : null
-      const textureView = map ? 1 + MAP_CHANNELS.findIndex((c) => c.id === map.channel) : 0
-      const frameMap = (slot: MapSlot): FrameMap | undefined => {
-        const info = s.maps[slot]
-        const t = info ? engine.mapTexture(slot) : null
-        return info && t ? { texture: t, channel: MAP_CHANNELS.findIndex((c) => c.id === info.channel) } : undefined
+      const channelIndex = (channel: string): number => MAP_CHANNELS.findIndex((c) => c.id === channel)
+      // What a texture puts on the materials drawn with it: its result (the active one as the
+      // viewer shows it), its source or one of its maps, plus its maps for the lit style.
+      const partOf = (id: string | null): PartTexture | null => {
+        const entry = id ? s.textures.find((t) => t.id === id) : undefined
+        if (!entry) return null
+        const map = show !== 'result' && show !== 'source' ? entry.maps[show] : undefined
+        const texture =
+          show === 'result'
+            ? entry.id === s.activeTextureId
+              ? engine.shownTexture
+              : engine.outputOf(entry.id)
+            : show === 'source'
+              ? engine.sourceOf(entry.id)
+              : map
+                ? engine.mapTexture(show as MapSlot, entry.id)
+                : null
+        if (!texture) return null
+        const frameMap = (slot: MapSlot): FrameMap | undefined => {
+          const info = entry.maps[slot]
+          const t = info ? engine.mapTexture(slot, entry.id) : null
+          return info && t ? { texture: t, channel: channelIndex(info.channel) } : undefined
+        }
+        return {
+          texture,
+          view: map ? 1 + channelIndex(map.channel) : 0,
+          maps: { ao: frameMap('ao'), roughness: frameMap('roughness'), metallic: frameMap('metallic') }
+        }
       }
+      const ids = isShape ? [s.activeTextureId] : partTextures(gpuModel?.data.materials.length ?? 0, s.textures, s.activeTextureId, s.modelMaterial)
+      const byTexture = new Map<string | null, PartTexture | null>()
+      const parts = ids.map((id) => {
+        if (!byTexture.has(id)) byTexture.set(id, partOf(id))
+        return byTexture.get(id)!
+      })
       renderer.draw({
         model: gpuModel,
         uvSet: isShape ? 0 : s.modelUvSet,
-        material: isShape ? 0 : s.modelMaterial,
-        texture,
-        textureView,
-        maps: { ao: frameMap('ao'), roughness: frameMap('roughness'), metallic: frameMap('metallic') },
+        parts,
         camera: camera.current ?? { target: [0, 0, 0], yaw: 0, pitch: 0, distance: 1 },
         style: view3dStyle(s.view3d),
         background,
@@ -133,6 +158,8 @@ export function View3d() {
         s.view3dShow !== prev.view3dShow ||
         s.maps !== prev.maps ||
         s.image !== prev.image ||
+        s.textures !== prev.textures ||
+        s.activeTextureId !== prev.activeTextureId ||
         s.theme !== prev.theme
       ) {
         schedule()

@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { saveSettings, useSavedSettings } from '@/settings'
 import { closeModel, openModel, openTextureOf, startBake, stopBake } from '@/modelActions'
 import { useApp } from '@/store'
+import { activeMaterials } from '@/stack/textures'
 import { Button } from './ui/button'
 import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
 import { GroupBox, Led, PanelBody } from './ui/retro'
@@ -64,7 +65,8 @@ export function BakePanel() {
 
 function ModelBox() {
   const model = useApp((s) => s.model)!
-  const material = useApp((s) => s.modelMaterial)
+  // The texture set the active texture is drawn on.
+  const material = useApp((s) => activeMaterials(s.model?.materials.length ?? 0, s.textures, s.activeTextureId, s.modelMaterial)[0]!)
   const uvSet = useApp((s) => s.modelUvSet)
   const image = useApp((s) => s.image?.name)
   const { setModelMaterial, setModelUvSet } = useApp.getState()
@@ -84,11 +86,17 @@ function ModelBox() {
           {model.triangles.toLocaleString('en-US')} triangles · {model.vertices.toLocaleString('en-US')} vertices · {model.materials.length}{' '}
           {model.materials.length === 1 ? 'material' : 'materials'}
         </span>
-        <Field label="Texture set" hint="The material the open texture belongs to: the 3D view puts the texture on it, and bakes use its UVs.">
+        <Field label="Texture set" hint="The material being worked on: picking one shows the texture drawn on it. Bakes use its UVs, and the maps go to its texture.">
           <Select
             className="min-w-0 flex-1"
             value={String(material)}
-            onValueChange={(v) => setModelMaterial(Number(v))}
+            onValueChange={(v) => {
+              // Work on that material: its texture, when one is drawn on it.
+              const m = Number(v)
+              const bound = useApp.getState().textures.find((t) => t.materials.includes(m))
+              if (bound) useApp.getState().selectTexture(bound.id)
+              else setModelMaterial(m)
+            }}
             options={model.materials.map((m, i) => ({
               value: String(i),
               label: `${m.name} · ${m.triangles.toLocaleString('en-US')} tris`,

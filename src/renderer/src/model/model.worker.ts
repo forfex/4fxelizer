@@ -7,7 +7,8 @@ import type { ModelData } from './model'
 import { rasterizeUv, type GBuffer } from './raster'
 
 export interface GBufferRequest {
-  material: number
+  /** Materials (texture sets) drawn: the ones sharing the texture baked for. */
+  materials: number[]
   uvSet: number
   width: number
   height: number
@@ -34,11 +35,11 @@ async function handle(request: ModelRequest): Promise<void> {
   }
   if (!current) throw new Error('No model is loaded.')
   const { model, leafIndex } = current
-  const part = model.parts[request.material]
+  const ranges = request.materials.map((m) => model.parts[m])
   const uv = model.uvSets[request.uvSet]
-  if (!part || !uv) throw new Error('That material or UV set isn’t in the model.')
+  if (!ranges.length || ranges.some((r) => !r) || !uv) throw new Error('That material or UV set isn’t in the model.')
   const gbuffer = rasterizeUv(
-    { positions: model.positions, normals: model.normals, uv, indices: model.indices, first: part.first, count: part.count, leafIndex },
+    { positions: model.positions, normals: model.normals, uv, indices: model.indices, first: 0, count: 0, ranges: ranges as { first: number; count: number }[], leafIndex },
     request.width,
     request.height,
     request.padding

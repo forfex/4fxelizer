@@ -14,9 +14,11 @@ export interface GBufferInput {
   /** The UV set baked into, 2 floats per vertex (v down). */
   uv: Float32Array
   indices: Uint32Array
-  /** Triangle range drawn (one material's triangles). */
+  /** Triangle range drawn (one material's triangles)... */
   first: number
   count: number
+  /** ...or several ranges (materials sharing a texture); used instead of first/count when set. */
+  ranges?: { first: number; count: number }[]
   /** Leaf-order index (see Bvh) of each triangle, stored per texel for the shaders. */
   leafIndex: Uint32Array
 }
@@ -77,7 +79,7 @@ export function rasterizeUv(input: GBufferInput, width: number, height: number, 
     positionBits[idx * 4 + 3] = leafIndex[t]!
   }
 
-  for (let t = input.first; t < input.first + input.count; t++) {
+  for (const range of input.ranges ?? [input]) for (let t = range.first; t < range.first + range.count; t++) {
     const a = indices[t * 3]!
     const b = indices[t * 3 + 1]!
     const c = indices[t * 3 + 2]!

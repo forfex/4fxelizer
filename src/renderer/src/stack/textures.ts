@@ -160,6 +160,37 @@ export function updateTexture(textures: readonly TextureEntry[], id: string, pat
   return textures.map((t) => (t.id === id ? { ...t, ...patch } : t))
 }
 
+/** Binds materials to a texture (a material is drawn with one texture: other textures lose it). */
+export function assignMaterials(textures: readonly TextureEntry[], id: string, materials: readonly number[]): TextureEntry[] {
+  return textures.map((t) => {
+    if (t.id === id) return { ...t, materials: [...new Set(materials)].sort((a, b) => a - b) }
+    const kept = t.materials.filter((m) => !materials.includes(m))
+    return kept.length === t.materials.length ? t : { ...t, materials: kept }
+  })
+}
+
+/**
+ * The texture each material of a model is drawn with: the one bound to it; a one-material model
+ * shows the active texture; otherwise an active texture bound to no material shows on the
+ * `fallback` material (the texture set picked for it).
+ */
+export function partTextures(materialCount: number, textures: readonly TextureEntry[], active: string | null, fallback: number): (string | null)[] {
+  const activeEntry = textures.find((t) => t.id === active)
+  return Array.from({ length: materialCount }, (_, m) => {
+    if (materialCount === 1) return active
+    const bound = textures.find((t) => t.materials.includes(m))
+    if (bound) return bound.id
+    return activeEntry && !activeEntry.materials.length && m === fallback ? activeEntry.id : null
+  })
+}
+
+/** The materials the active texture is drawn on (and baked from). */
+export function activeMaterials(materialCount: number, textures: readonly TextureEntry[], active: string | null, fallback: number): number[] {
+  if (materialCount <= 1) return [0]
+  const bound = textures.find((t) => t.id === active)?.materials
+  return bound?.length ? bound : [Math.min(Math.max(fallback, 0), materialCount - 1)]
+}
+
 /** The textures on the shared stack. */
 export function sharedTextures(textures: readonly TextureEntry[], docs: Docs): TextureEntry[] {
   return textures.filter((t) => !docs.separate[t.id])

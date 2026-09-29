@@ -3,7 +3,7 @@
 
 import { BAKE_MAPS, type BakeMap } from '@shared/bake'
 import { modelFormat } from '@shared/model'
-import { clearMaps, loadImageFile, nextMapVersion, reloadImageFile, thumbnail } from '@/actions'
+import { addBlankTexture, clearMaps, loadImageFile, nextMapVersion, reloadImageFile, thumbnail } from '@/actions'
 import { getEngine } from '@/engine'
 import { Baker } from '@/gpu/bake/baker'
 import { readTextureRgba8 } from '@/gpu/textureIO'
@@ -11,6 +11,7 @@ import { gbufferAsync, loadModelAsync } from '@/model/modelAsync'
 import type { ModelData, TextureRef } from '@/model/model'
 import { objMaterialLibraries } from '@/model/mtl'
 import { useApp, type ModelInfo } from '@/store'
+import { activeMaterials } from '@/stack/textures'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 const fileName = (path: string): string => path.split(/[\\/]/).pop() ?? path
@@ -55,24 +56,41 @@ async function readResources(
   return { resources, paths, missing }
 }
 
-/** The material a texture file belongs to, matched by file name; -1 = none. */
-function materialOfTexture(model: ModelData, texture: string): number {
-  const name = texture.toLowerCase()
-  return model.materials.findIndex((m) => textureName(m.texture)?.toLowerCase() === name)
+/** Materials grouped by the texture file they use (lowercase name → materials), in material order. */
+function materialsByTexture(model: ModelData): Map<string, number[]> {
+  const groups = new Map<string, number[]>()
+  model.materials.forEach((m, i) => {
+    const name = textureName(m.texture)?.toLowerCase()
+    if (name) groups.set(name, [...(groups.get(name) ?? []), i])
+  })
+  return groups
 }
 
-/** Reads a material's base color texture and opens it. Returns its name, or null when it couldn't. */
-async function openMaterialTexture(model: ModelData, material: number, path: string | undefined): Promise<string | null> {
+/** The open texture with a file name, if any. */
+function openTextureNamed(name: string): string | null {
+  const lower = name.toLowerCase()
+  return useApp.getState().textures.find((t) => t.image.name.toLowerCase() === lower)?.id ?? null
+}
+
+/**
+ * Reads a material's base color texture and opens it (a tab of its own), drawn on `bind`
+ * materials. Returns its texture id, or null when it couldn't.
+ */
+async function openMaterialTexture(model: ModelData, material: number, path: string | undefined, bind: number[]): Promise<string | null> {
   const ref = model.materials[material]?.texture
   if (!ref) return null
-  if (ref.kind === 'embedded') {
-    await loadImageFile(ref.name, ref.bytes)
-    return useApp.getState().image?.name === ref.name ? ref.name : null
+  // Already open (by name): work on it.
+  const open = openTextureNamed(textureName(ref)!)
+  if (open) {
+    useApp.getState().selectTexture(open)
+    if (bind.length) useApp.getState().assignMaterials(open, bind)
+    return open
   }
-  const file = path ? await window.fx.readModelFile(path, ref.reference).catch(() => null) : null
+  const file = ref.kind === 'embedded' ? { name: ref.name, bytes: ref.bytes, path: undefined } : path ? await window.fx.readModelFile(path, ref.reference).catch(() => null) : null
   if (!file) return null
-  await loadImageFile(file.name, file.bytes, file.path)
-  return useApp.getState().image?.name === file.name ? file.name : null
+  const id = await loadImageFile(file.name, file.bytes, file.path, { materials: bind })
+  if (id && bind.length) useApp.getState().assignMaterials(id, bind)
+  return id
 }
 
 function summary(model: ModelData, path: string | undefined, resources: string[]): Omit<ModelInfo, 'version'> {
@@ -91,10 +109,11 @@ function summary(model: ModelData, path: string | undefined, resources: string[]
 let loading = 0
 
 /**
- * Opens a model in the 3D view. The texture set shown with the open texture is the one using that
- * texture; otherwise the model's first textured material, whose texture is then opened.
- * `reload`: the open model's file changed on disk; the texture set, UV set and view mode stay, and
- * a texture embedded in the model is loaded again.
+ * Opens a model in the 3D view. Each texture its materials use opens in a tab of its own (an open
+ * texture with the same name is used instead) and, when the model has several materials, is drawn
+ * on the materials using it. `reload`: the open model's file changed on disk; the texture
+ * bindings, UV set and view mode stay, and textures embedded in the model are loaded again.
+ * `restore`: a project's model, whose textures the project opens.
  */
 export async function loadModelFile(
   name: string,
@@ -115,32 +134,41 @@ export async function loadModelFile(
     if (missing.length) model.warnings.push(`Missing files: ${missing.join(', ')}.`)
     if (opts.reload) stopBake()
     engine.setModel(model, bvh)
-    clearMaps({ onlyBaked: true })
+    const multi = model.materials.length > 1
+    if (!opts.reload) {
+      // Baked maps and material bindings belong to the previous model.
+      for (const t of useApp.getState().textures) clearMaps({ onlyBaked: true, textureId: t.id })
+      useApp.getState().clearMaterials()
+    }
 
-    // The open texture may already be this model's; else open the first texture it has.
-    const image = useApp.getState().image
-    let material = image ? materialOfTexture(model, image.name) : -1
-    let opened: string | null = null
-    let failed: string | null = null
-    if (previous && material < 0 && previous.material < model.materials.length) material = previous.material
-    // A project names the texture set; its texture is the project's (already open).
-    if (opts.restore) material = opts.restore.material < model.materials.length ? opts.restore.material : Math.max(material, 0)
-    // A texture embedded in the model changes with it.
-    const ref = material >= 0 ? model.materials[material]!.texture : null
-    if (previous && ref?.kind === 'embedded' && image && !image.path && image.name === ref.name) {
-      await reloadImageFile({ name: ref.name, bytes: ref.bytes })
-    }
-    if (material < 0) {
-      const textured = model.materials.findIndex((m) => m.texture)
-      if (textured >= 0) {
-        material = textured
-        opened = await openMaterialTexture(model, textured, path).catch(() => null)
-        if (!opened) failed = textureName(model.materials[textured]!.texture)
-      } else {
-        // Untextured: the material with the most triangles.
-        material = model.parts.reduce((best, p, i) => (p.count > model.parts[best]!.count ? i : best), 0)
+    const opened: string[] = []
+    const failed: string[] = []
+    let first: string | null = null
+    for (const [, materials] of materialsByTexture(model)) {
+      const ref = model.materials[materials[0]!]!.texture!
+      const open = openTextureNamed(textureName(ref)!)
+      if (open) {
+        // A texture embedded in the model changes with it.
+        const entry = useApp.getState().textures.find((t) => t.id === open)
+        if (opts.reload && ref.kind === 'embedded' && !entry?.image.path) await reloadImageFile({ name: ref.name, bytes: ref.bytes }, open)
+        if (multi && !opts.reload) useApp.getState().assignMaterials(open, materials)
+        first ??= open
+        continue
       }
+      if (opts.reload || opts.restore) continue
+      const id = await openMaterialTexture(model, materials[0]!, path, multi ? materials : []).catch(() => null)
+      if (job !== loading) return
+      if (id) {
+        opened.push(textureName(ref)!)
+        first ??= id
+      } else failed.push(textureName(ref)!)
     }
+    // Work on the model's first texture; with none, the texture set is the largest material.
+    if (first && !opts.reload && !opts.restore) useApp.getState().selectTexture(first)
+    const bound = useApp.getState().textures.find((t) => t.id === useApp.getState().activeTextureId)?.materials[0]
+    let material = bound ?? model.parts.reduce((best, p, i) => (p.count > model.parts[best]!.count ? i : best), 0)
+    if (previous && bound === undefined && previous.material < model.materials.length) material = previous.material
+    if (opts.restore && opts.restore.material < model.materials.length) material = opts.restore.material
     if (job !== loading) return
     useApp.getState().setModel(summary(model, path, paths), material)
     if (opts.restore && opts.restore.uvSet < model.uvSets.length) useApp.getState().setModelUvSet(opts.restore.uvSet)
@@ -154,9 +182,11 @@ export async function loadModelFile(
     // Show the model: the 2D viewer alone switches to 2D and 3D side by side.
     if (useApp.getState().viewMode === '2d') useApp.getState().setViewMode('split')
 
-    const detail = opened ? ` with its texture ${opened}` : failed ? `; its texture ${failed} couldn’t be opened` : ''
+    const detail =
+      (opened.length ? ` with ${opened.length === 1 ? 'its texture' : 'its textures'} ${opened.join(', ')}` : '') +
+      (failed.length ? `; couldn’t open ${failed.join(', ')}` : '')
     const warn = model.warnings.length ? ` ${model.warnings.join(' ')}` : ''
-    useApp.getState().setMessage({ kind: failed || warn ? 'error' : 'info', text: `Loaded ${name} (${tris})${detail}.${warn}` })
+    useApp.getState().setMessage({ kind: failed.length || warn ? 'error' : 'info', text: `Loaded ${name} (${tris})${detail}.${warn}` })
   } catch (e) {
     if (job === loading) useApp.getState().setMessage({ kind: 'error', text: `Couldn’t open ${name}: ${errorText(e)}` })
   }
@@ -170,20 +200,32 @@ export async function openModel(): Promise<void> {
 export function closeModel(): void {
   stopBake()
   getEngine()?.setModel(null, null)
-  clearMaps({ onlyBaked: true })
+  for (const t of useApp.getState().textures) clearMaps({ onlyBaked: true, textureId: t.id })
+  useApp.getState().clearMaterials()
   useApp.getState().setModel(null)
 }
 
-/** Opens the base color texture of a texture set (Bake panel). */
+/** Opens the base color texture a material refers to, drawn on that material. */
 export async function openTextureOf(material: number): Promise<void> {
   const model = getEngine()?.model?.data
   const info = useApp.getState().model
   if (!model || !info) return
-  const name = await openMaterialTexture(model, material, info.path).catch(() => null)
-  if (!name) {
+  const bind = model.materials.length > 1 ? [material] : []
+  const id = await openMaterialTexture(model, material, info.path, bind).catch(() => null)
+  if (!id) {
     const texture = textureName(model.materials[material]?.texture ?? null)
     useApp.getState().setMessage({ kind: 'error', text: texture ? `Couldn’t find or open ${texture}.` : 'That material has no texture.' })
   }
+}
+
+/** Opens a texture file for a material (Textures panel) and draws that material with it. */
+export async function importTextureFor(material: number): Promise<void> {
+  const files = await window.fx.openImages()
+  const file = files[0]
+  if (!file) return
+  const multi = (useApp.getState().model?.materials.length ?? 0) > 1
+  const id = await loadImageFile(file.name, file.bytes, file.path, { materials: multi ? [material] : [] })
+  if (id && multi) useApp.getState().assignMaterials(id, [material])
 }
 
 // ── Baking ─────────────────────────────────────────────────────────────────
@@ -216,9 +258,14 @@ export async function startBake(): Promise<void> {
   const setJob = useApp.getState().setBakeJob
   setJob({ status: 'running', progress: 0, label: 'Preparing' })
   let baker: Baker | null = null
+  let bakedInto: string | null = null
   try {
     if (!BAKE_MAPS.some((m) => settings.maps[m])) throw new Error('Choose at least one map to bake.')
-    const gbuffer = await gbufferAsync({ material: s.modelMaterial, uvSet: s.modelUvSet, width: size, height: size, padding: settings.padding })
+    const materials = activeMaterials(model.data.materials.length, s.textures, s.activeTextureId, s.modelMaterial)
+    // Maps belong to a texture: with none open, a blank one named after the texture set holds them.
+    const textureId = s.activeTextureId ?? (await addBlankTexture(`${model.data.materials[materials[0]!]?.name ?? model.data.name}.png`, size))
+    bakedInto = textureId
+    const gbuffer = await gbufferAsync({ materials, uvSet: s.modelUvSet, width: size, height: size, padding: settings.padding })
     if (engine.model !== model) return
     if (!gbuffer.covered) throw new Error('That texture set has no UVs to bake into.')
     baker = new Baker(engine.gpu.device, model, gbuffer, settings)
@@ -226,23 +273,23 @@ export async function startBake(): Promise<void> {
 
     // Maps handed to the slots so far. One the user replaced or cleared since is left alone.
     const published = new Set<BakeMap>()
-    const ours = (map: BakeMap, texture: GPUTexture): boolean => !published.has(map) || engine.mapTexture(map) === texture
+    const ours = (map: BakeMap, texture: GPUTexture): boolean => !published.has(map) || engine.mapTexture(map, textureId) === texture
     const publish = (thumbnails: Map<BakeMap, string | null> = new Map()): void => {
       b.resolve(ours)
       for (const { map, texture } of b.outputs) {
         if (!ours(map, texture)) continue
         const version = nextMapVersion()
         published.add(map)
-        engine.setMapTexture(map, texture, version)
+        engine.setMapTexture(map, texture, version, textureId)
         useApp.getState().setMap(map, {
           name: `Baked ${MAP_NAMES[map]}`,
           width: b.width,
           height: b.height,
           channel: 'luma',
           version,
-          thumbnail: thumbnails.get(map) ?? useApp.getState().maps[map]?.thumbnail ?? null,
+          thumbnail: thumbnails.get(map) ?? useApp.getState().textures.find((t) => t.id === textureId)?.maps[map]?.thumbnail ?? null,
           baked: true
-        })
+        }, textureId)
       }
     }
 
@@ -285,7 +332,7 @@ export async function startBake(): Promise<void> {
     useApp.getState().setMessage({ kind: 'error', text: `Baking failed: ${errorText(e)}` })
   } finally {
     // Textures that never reached their slot (an abandoned bake) belong to no one else.
-    for (const { map, texture } of baker?.outputs ?? []) if (engine.mapTexture(map) !== texture) texture.destroy()
+    for (const { map, texture } of baker?.outputs ?? []) if (!bakedInto || engine.mapTexture(map, bakedInto) !== texture) texture.destroy()
     baker?.dispose()
     if (bakeRun === run) bakeRun = null
     if (useApp.getState().bakeJob?.status === 'running') setJob(null)

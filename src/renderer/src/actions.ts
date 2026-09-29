@@ -98,6 +98,22 @@ export async function reloadImageFile(file: OpenedFile, textureId?: string): Pro
   }
 }
 
+/** Opens a plain white texture (to hold maps baked from a model when no texture is open). Returns its id. */
+export async function addBlankTexture(name: string, size: number): Promise<string> {
+  const engine = getEngine()
+  if (!engine) throw new Error('The GPU is not ready.')
+  const canvas = new OffscreenCanvas(size, size)
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, size, size)
+  const bitmap = await createImageBitmap(canvas)
+  const id = newId('tex')
+  engine.loadBitmap(bitmap, id)
+  useApp.getState().addTexture({ id, image: { name, width: size, height: size }, thumbnail: thumbnail(bitmap, TEXTURE_THUMBNAIL) })
+  bitmap.close()
+  return id
+}
+
 /** Opens textures from a file dialog (several at once), each in a tab of its own. */
 export async function openImage(): Promise<void> {
   const files = await window.fx.openImages()
