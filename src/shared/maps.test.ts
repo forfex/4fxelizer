@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectMap, siblingMaps, textureBase } from './maps'
+import { detectMap, MAP_SLOTS, mapFileName, siblingMaps, textureBase } from './maps'
 
 describe('map files', () => {
   it('recognizes map suffixes in common naming styles', () => {
@@ -36,5 +36,18 @@ describe('map files', () => {
     const files = ['rock_albedo.png', 'rock_ao.png', 'rock_ORM.tga', 'rock_ao.txt', 'rocky_ao.png', 'rock_normal.png', 'moss_ao.png']
     expect(siblingMaps('rock_albedo.png', files)).toEqual(['rock_ao.png', 'rock_ORM.tga'])
     expect(siblingMaps('rock.png', files)).toEqual(['rock_ao.png', 'rock_ORM.tga'])
+  })
+})
+
+describe('mapFileName', () => {
+  it('names saved maps so they load with their texture', () => {
+    for (const texture of ['Rock_Albedo.png', 'rock.png', 'mesh.002_Female_BaseMap.png', 'Hero-BaseColor.tga']) {
+      for (const slot of MAP_SLOTS.map((m) => m.id)) {
+        const name = mapFileName(texture, slot)
+        expect(siblingMaps(texture, [name])).toEqual([name])
+        expect(detectMap(name)?.maps).toEqual([{ slot, channel: 'luma' }])
+      }
+    }
+    expect(mapFileName('Rock_Albedo.png', 'ao')).toBe('rock_ao.png')
   })
 })

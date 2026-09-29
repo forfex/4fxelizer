@@ -2,7 +2,7 @@
 // each slot can also be filled or cleared by hand, and packed maps pick the channel they read.
 
 import { MAP_CHANNELS, MAP_SLOTS, type MapSlot } from '@shared/maps'
-import { clearMap, clearMaps, openMapFile } from '@/actions'
+import { clearMap, clearMaps, openMapFile, saveMap } from '@/actions'
 import { useApp, type MapInfo } from '@/store'
 import { Button } from './ui/button'
 import { Segmented } from './ui/controls'
@@ -16,8 +16,8 @@ export function MapsPanel() {
     <PanelBody>
       <GroupBox title="Maps">
         <p className="mb-2 text-small text-dim">
-          Grayscale maps for dither masks (Dither › Mask). Maps named like the texture, such as rock_ao.png or rock_orm.png next to
-          rock.png, load with it. You can also drop map files on the window.
+          Grayscale maps for dither masks (Dither › Mask) and Adjust's shading. Maps named like the texture, such as rock_ao.png or
+          rock_orm.png next to rock.png, load with it. You can also drop map files on the window, or bake them from a model (Bake panel).
         </p>
         <div className="flex flex-col gap-1.5">
           {MAP_SLOTS.map((slot) => (
@@ -53,6 +53,11 @@ function MapRow({ slot, map, disabled }: { slot: (typeof MAP_SLOTS)[number]; map
           <Button size="sm" disabled={disabled} onClick={() => void openMapFile(id)} title={`Load a ${slot.label.toLowerCase()} map`}>
             Load…
           </Button>
+          {map?.baked && (
+            <Button size="sm" onClick={() => void saveMap(id)} title="Save as a PNG named so it loads with the texture next time">
+              Save…
+            </Button>
+          )}
           {map && (
             <Button size="sm" onClick={() => clearMap(id)} title="Remove this map">
               ✕
@@ -64,11 +69,13 @@ function MapRow({ slot, map, disabled }: { slot: (typeof MAP_SLOTS)[number]; map
             <span className="truncate text-small text-dim" title={`${map.name} (${map.width}×${map.height})`}>
               {map.name} · {map.width}×{map.height}
             </span>
-            <Segmented
-              value={map.channel}
-              onChange={(channel) => useApp.getState().setMapChannel(id, channel)}
-              options={MAP_CHANNELS.map((c) => ({ value: c.id, label: c.label, hint: `Read the mask from: ${c.hint}` }))}
-            />
+            {!map.baked && (
+              <Segmented
+                value={map.channel}
+                onChange={(channel) => useApp.getState().setMapChannel(id, channel)}
+                options={MAP_CHANNELS.map((c) => ({ value: c.id, label: c.label, hint: `Read the mask from: ${c.hint}` }))}
+              />
+            )}
           </>
         ) : (
           <span className="text-small text-dim">Not loaded</span>

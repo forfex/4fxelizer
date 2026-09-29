@@ -1,9 +1,10 @@
 import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme } from '@shared/api'
-import { detectMap, MAP_IMAGE_EXTENSIONS, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
+import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
 import { encodePattern, patternFromRgba } from '@/dither/customPattern'
 import { getEngine } from '@/engine'
 import type { DitherParams } from '@/gpu/passes/dither'
+import { readTextureRgba8 } from '@/gpu/textureIO'
 import { decodeImage } from '@/image/decode'
 import { bmpBitDepth, encodeBmp, encodeIndexedBmp } from '@/image/bmp'
 import { countColors, hasTranslucency, hasTransparency, toIndexed } from '@/image/indexed'
@@ -113,7 +114,7 @@ const mapLabel = (slot: MapSlot): string => MAP_SLOTS.find((m) => m.id === slot)
 const mapList = (slots: MapSlot[]): string => [...new Set(slots)].map(mapLabel).join(', ')
 
 /** A small preview of a map for the Maps panel. */
-function thumbnail(bitmap: ImageBitmap, side = 48): string | null {
+export function thumbnail(bitmap: ImageBitmap, side = 48): string | null {
   const canvas = document.createElement('canvas')
   const scale = side / Math.max(bitmap.width, bitmap.height)
   canvas.width = Math.max(1, Math.round(bitmap.width * scale))
@@ -201,6 +202,22 @@ export function clearMaps(opts: { keepBaked?: boolean; onlyBaked?: boolean } = {
     if ((opts.keepBaked && map.baked) || (opts.onlyBaked && !map.baked)) continue
     getEngine()?.loadMap(slot, null, ++mapVersion)
     setMap(slot, null)
+  }
+}
+
+/** Saves a map as a grayscale PNG named so it loads with the texture next time (rock_ao.png). */
+export async function saveMap(slot: MapSlot): Promise<void> {
+  const engine = getEngine()
+  const { image, model, setMessage } = useApp.getState()
+  const texture = engine?.mapTexture(slot)
+  if (!engine || !texture) return
+  try {
+    const rgba = await readTextureRgba8(engine.gpu.device, texture)
+    const name = mapFileName(image?.name ?? model?.name ?? 'texture', slot)
+    const path = await window.fx.saveFile(name, await encodePng(rgba), [ENCODERS.png.filter])
+    if (path) setMessage({ kind: 'info', text: `Saved ${path}` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't save the ${mapLabel(slot)} map: ${errorText(e)}` })
   }
 }
 

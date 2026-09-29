@@ -111,3 +111,21 @@ export function siblingMaps(textureName: string, fileNames: string[]): string[] 
     return !!map && map.base === base
   })
 }
+
+/** The file name suffix each slot is saved with (one detectMap reads back as that slot). */
+const SAVE_SUFFIX: Record<MapSlot, string> = {
+  ao: 'ao',
+  cavity: 'cavity',
+  curvature: 'curvature',
+  edge: 'edge',
+  thickness: 'thickness',
+  height: 'height',
+  roughness: 'roughness',
+  metallic: 'metallic',
+  up: 'upfacing'
+}
+
+/** File name to save a map as, so it loads with the texture next time: "Rock_Albedo.png" → "rock_ao.png". */
+export function mapFileName(textureName: string, slot: MapSlot): string {
+  return `${textureBase(textureName) || 'texture'}_${SAVE_SUFFIX[slot]}.png`
+}

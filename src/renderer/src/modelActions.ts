@@ -1,10 +1,13 @@
 // Connects the UI to 3D models: opening one (with the files it refers to and its base color
-// texture) and choosing the texture set shown with the open texture.
+// texture), choosing the texture set shown with the open texture, and baking maps from it.
 
+import { BAKE_MAPS, type BakeMap } from '@shared/bake'
 import { modelFormat } from '@shared/model'
-import { clearMaps, loadImageFile } from '@/actions'
+import { clearMaps, loadImageFile, nextMapVersion, thumbnail } from '@/actions'
 import { getEngine } from '@/engine'
-import { loadModelAsync } from '@/model/modelAsync'
+import { Baker } from '@/gpu/bake/baker'
+import { readTextureRgba8 } from '@/gpu/textureIO'
+import { gbufferAsync, loadModelAsync } from '@/model/modelAsync'
 import type { ModelData, TextureRef } from '@/model/model'
 import { objMaterialLibraries } from '@/model/mtl'
 import { useApp, type ModelInfo } from '@/store'
@@ -133,6 +136,7 @@ export async function openModel(): Promise<void> {
 }
 
 export function closeModel(): void {
+  stopBake()
   getEngine()?.setModel(null, null)
   clearMaps({ onlyBaked: true })
   useApp.getState().setModel(null)
@@ -148,4 +152,113 @@ export async function openTextureOf(material: number): Promise<void> {
     const texture = textureName(model.materials[material]?.texture ?? null)
     useApp.getState().setMessage({ kind: 'error', text: texture ? `Couldn’t find or open ${texture}.` : 'That material has no texture.' })
   }
+}
+
+// ── Baking ─────────────────────────────────────────────────────────────────
+
+/** How often (ms) a running bake writes its maps, so masks and the 3D view follow it. */
+const PUBLISH_MS = 500
+
+let bakeRun: { stop: boolean } | null = null
+
+const MAP_NAMES: Record<BakeMap, string> = {
+  ao: 'AO',
+  cavity: 'cavity',
+  curvature: 'curvature',
+  edge: 'edge',
+  thickness: 'thickness',
+  height: 'height',
+  up: 'up-facing'
+}
+
+/** Bakes the chosen maps from the model into the map slots, refining them step by step. */
+export async function startBake(): Promise<void> {
+  const engine = getEngine()
+  const s = useApp.getState()
+  const model = engine?.model
+  if (!engine || !model || !s.model || bakeRun) return
+  const run = { stop: false }
+  bakeRun = run
+  const settings = s.bake
+  const size = settings.size
+  const setJob = useApp.getState().setBakeJob
+  setJob({ status: 'running', progress: 0, label: 'Preparing' })
+  let baker: Baker | null = null
+  try {
+    if (!BAKE_MAPS.some((m) => settings.maps[m])) throw new Error('Choose at least one map to bake.')
+    const gbuffer = await gbufferAsync({ material: s.modelMaterial, uvSet: s.modelUvSet, width: size, height: size, padding: settings.padding })
+    if (engine.model !== model) return
+    if (!gbuffer.covered) throw new Error('That texture set has no UVs to bake into.')
+    baker = new Baker(engine.gpu.device, model, gbuffer, settings)
+    const b = baker
+
+    // Maps handed to the slots so far. One the user replaced or cleared since is left alone.
+    const published = new Set<BakeMap>()
+    const ours = (map: BakeMap, texture: GPUTexture): boolean => !published.has(map) || engine.mapTexture(map) === texture
+    const publish = (thumbnails: Map<BakeMap, string | null> = new Map()): void => {
+      b.resolve(ours)
+      for (const { map, texture } of b.outputs) {
+        if (!ours(map, texture)) continue
+        const version = nextMapVersion()
+        published.add(map)
+        engine.setMapTexture(map, texture, version)
+        useApp.getState().setMap(map, {
+          name: `Baked ${MAP_NAMES[map]}`,
+          width: b.width,
+          height: b.height,
+          channel: 'luma',
+          version,
+          thumbnail: thumbnails.get(map) ?? useApp.getState().maps[map]?.thumbnail ?? null,
+          baked: true
+        })
+      }
+    }
+
+    let lastPublish = performance.now()
+    while (!b.finished && !run.stop && engine.model === model) {
+      await b.step()
+      const { done, total, label } = b.progress
+      setJob({ status: 'running', progress: total ? done / total : 1, label })
+      if (performance.now() - lastPublish > PUBLISH_MS) {
+        publish()
+        lastPublish = performance.now()
+      }
+      // Let the UI draw between steps.
+      await new Promise((r) => setTimeout(r, 0))
+    }
+    if (engine.model !== model) return
+
+    publish()
+    const thumbnails = new Map<BakeMap, string | null>()
+    for (const { map, texture } of b.outputs) {
+      if (!ours(map, texture)) continue
+      const rgba = await readTextureRgba8(engine.gpu.device, texture)
+      const bitmap = await createImageBitmap(new ImageData(new Uint8ClampedArray(rgba.data.buffer as ArrayBuffer, rgba.data.byteOffset, rgba.data.length), rgba.width, rgba.height))
+      thumbnails.set(map, thumbnail(bitmap))
+      bitmap.close()
+    }
+    publish(thumbnails)
+
+    const maps = b.outputs.map((o) => MAP_NAMES[o.map]).join(', ')
+    const overlap = gbuffer.overlapping / gbuffer.covered
+    const note =
+      overlap > 0.01
+        ? ` ${Math.round(overlap * 100)}% of the texels have more than one triangle on them (mirrored or overlapping UVs); each shows one of them.`
+        : ''
+    setJob({ status: 'done', label: `${run.stop ? 'Stopped' : 'Baked'} ${maps} at ${size}×${size}.` })
+    // Mirrored UVs are normal on symmetric models, so the overlap note is information, not an error.
+    useApp.getState().setMessage({ kind: 'info', text: `${run.stop ? 'Stopped baking' : 'Baked'} ${maps} (${size}×${size}).${note}` })
+  } catch (e) {
+    setJob(null)
+    useApp.getState().setMessage({ kind: 'error', text: `Baking failed: ${errorText(e)}` })
+  } finally {
+    baker?.dispose()
+    if (bakeRun === run) bakeRun = null
+    if (useApp.getState().bakeJob?.status === 'running') setJob(null)
+  }
+}
+
+/** Stops a running bake; the maps keep the samples taken so far. */
+export function stopBake(): void {
+  if (bakeRun) bakeRun.stop = true
 }
