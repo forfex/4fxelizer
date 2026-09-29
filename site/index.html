@@ -113,6 +113,20 @@ h1{margin:12px 0 0;font:700 clamp(44px,9vw,92px)/.92 var(--font-display);letter-
 .shot{margin-top:48px}
 .shot img{display:block;width:100%;height:auto;background:var(--fx-bg)}
 
+/* 3D before/after: two stacked renders, the after one clipped at --pos. A transparent range input on top
+   does the dragging, so the keyboard and screen readers get a real slider. */
+.compare-win{max-width:720px;margin:0 auto}
+.compare{position:relative;--pos:50%;background:#000;touch-action:pan-y}
+.compare img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+.compare .after{position:absolute;inset:0;height:100%;clip-path:inset(0 0 0 var(--pos));image-rendering:pixelated}
+.compare .divider{position:absolute;top:0;bottom:0;left:var(--pos);width:2px;margin-left:-1px;background:var(--fx-accent);pointer-events:none}
+.compare .handle{position:absolute;top:50%;left:50%;display:grid;place-items:center;width:32px;height:32px;margin:-16px 0 0 -16px;background:var(--fx-panel-hi);border:2px solid var(--fx-edge);border-radius:var(--fx-radius);box-shadow:var(--bevel-raised),var(--fx-shadow-hard);color:var(--fx-text)}
+.compare .handle svg{width:14px;height:14px}
+.compare .chip{position:absolute;top:12px;padding:2px 8px;background:var(--fx-lcd-bg);border-radius:2px;font:500 12px/18px var(--font-mono);color:var(--fx-lcd-text);text-shadow:var(--lcd-glow);pointer-events:none}
+.compare .chip.l{left:12px}.compare .chip.r{right:12px}
+.compare input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize}
+.compare:has(input:focus-visible) .handle{outline:2px solid var(--fx-magenta);outline-offset:2px}
+
 /* Sections */
 section{padding:64px 0}
 h2{margin:8px 0 10px;font:700 clamp(28px,4vw,38px)/1.1 var(--font-display);letter-spacing:.02em}
@@ -133,7 +147,8 @@ h2{margin:8px 0 10px;font:700 clamp(28px,4vw,38px)/1.1 var(--font-display);lette
 .gallery figcaption{display:flex;justify-content:space-between;gap:8px;margin-top:6px;padding:4px 8px;background:var(--fx-lcd-bg);border-radius:2px;
   font:400 12px/18px var(--font-mono);color:var(--fx-lcd-text);text-shadow:var(--lcd-glow)}
 .gallery figcaption span{color:var(--fx-text-dim);text-shadow:none}
-.credit{margin:16px 0 0;font-size:13px;color:var(--fx-text-dim);text-align:center;opacity:.3}
+.credit{margin:16px 0 0;font-size:13px;color:var(--fx-text-dim);text-align:center;opacity:.3;transition:opacity .15s}
+.credit:hover,.credit:focus-within{opacity:1}
 
 /* Steps */
 .steps{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:14px}
@@ -168,6 +183,7 @@ footer .logo{margin-right:auto;font-size:14px}
   <a class="logo" href="#"><img src="icon.svg" alt="">4FXELIZER</a>
   <a class="navlink" href="#features">Features</a>
   <a class="navlink" href="#gallery">Gallery</a>
+  <a class="navlink" href="#model">3D</a>
   <a class="navlink" href="#start">Get started</a>
   <a class="navlink" href="https://github.com/forfex/4fxelizer">GitHub</a>
   <button class="switch" id="theme" type="button" role="switch" aria-checked="false" aria-label="Light theme">
@@ -232,6 +248,26 @@ footer .logo{margin-right:auto;font-size:14px}
   <p class="credit">* Texture: <a href="https://ambientcg.com/a/PavingStones116">PavingStones116</a> by ambientCG (CC0).</p>
 </div></section>
 
+<section id="model"><div class="wrap">
+  <div class="label">3D view</div>
+  <h2>See it on your model</h2>
+  <p class="sub">Open a glTF, GLB, FBX or OBJ model and the PSX look follows every tweak: wobbling vertices, warped textures, dithered color. Drag to compare.</p>
+  <div class="window compare-win">
+    <div class="window-bar">
+      <span class="window-title">3D view</span>
+      <span class="ramp"><span></span><span class="d25"></span><span class="d50"></span><span class="d75"></span><span></span></span>
+      <span class="winbtn" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg></span>
+    </div>
+    <div class="compare" id="compare">
+      <img src="images/3d-before.png" width="1024" height="1024" alt="A scanned stone statue rendered with its original texture" loading="lazy">
+      <img class="after" src="images/3d-after.png" width="1024" height="1024" alt="The same statue in the PSX-style 3D view, with a dithered low-color texture" loading="lazy">
+      <span class="chip l">Before</span><span class="chip r">After</span>
+      <span class="divider"><span class="handle"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M5 3.5L1.5 7 5 10.5M9 3.5L12.5 7 9 10.5"/></svg></span></span>
+      <input type="range" min="0" max="100" value="50" step="0.1" aria-label="Before and after divider position">
+    </div>
+  </div>
+</div></section>
+
 <section id="start"><div class="wrap">
   <div class="label">Get started</div>
   <h2>Three steps</h2>
@@ -260,6 +296,11 @@ footer .logo{margin-right:auto;font-size:14px}
 </footer>
 
 <script>
+  // 3D before/after: the range input sets where the after render starts.
+  const compare = document.getElementById('compare')
+  const range = compare.querySelector('input')
+  range.addEventListener('input', () => compare.style.setProperty('--pos', range.value + '%'))
+
   // Dark / Light switch, remembered in this browser.
   const toggle = document.getElementById('theme')
   const sync = () => {
