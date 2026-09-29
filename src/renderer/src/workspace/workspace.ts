@@ -24,7 +24,8 @@ export const PANELS: PanelDef[] = [
   { id: 'palettes', title: 'Palettes', minWidth: 220 },
   { id: 'generate', title: 'Generate', minWidth: 220 },
   { id: 'maps', title: 'Maps', minWidth: 240 },
-  { id: 'bake', title: 'Bake', minWidth: 240 }
+  { id: 'bake', title: 'Bake', minWidth: 240 },
+  { id: 'textures', title: 'Textures', minWidth: 220 }
 ]
 
 /**
@@ -96,6 +97,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'generate', 'palettes', 'below', 330)
       addTool(api, 'maps', 'generate', 'within')
       addTool(api, 'bake', 'generate', 'within')
+      addTool(api, 'textures', 'palettes', 'within')
     }
   },
   {
@@ -109,6 +111,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'generate', 'palettes', 'within')
       addTool(api, 'maps', 'palettes', 'within')
       addTool(api, 'bake', 'palettes', 'within')
+      addTool(api, 'textures', 'palettes', 'within')
     }
   },
   {
@@ -121,6 +124,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'generate', 'stack', 'within')
       addTool(api, 'maps', 'stack', 'within')
       addTool(api, 'bake', 'stack', 'within')
+      addTool(api, 'textures', 'stack', 'within')
       addTool(api, 'palettes', VIEWER, 'right', 400)
     }
   },
@@ -135,6 +139,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'bake', null, 'right', 300)
       addTool(api, 'maps', 'bake', 'below')
       addTool(api, 'generate', 'maps', 'within')
+      addTool(api, 'textures', 'bake', 'within')
       // The texture and the model share the main view.
       const app = useApp.getState()
       if (app.viewMode === '2d') app.setViewMode('split')
@@ -155,6 +160,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       float('generate', Math.max(width - 312, 344), 356, 300, 330)
       addTool(api, 'maps', 'generate', 'within')
       addTool(api, 'bake', 'generate', 'within')
+      addTool(api, 'textures', 'generate', 'within')
     }
   }
 ]

@@ -38,6 +38,7 @@ import { Menu, MENU_MARK_CLASS, MenuContent, MenuItem, MenuLabel, MenuSeparator,
 import { CaretIcon } from './ui/icons'
 import { MainView } from './MainView'
 import { TextureTabs } from './TextureTabs'
+import { TexturesPanel } from './TexturesPanel'
 
 /** dockview theme whose CSS variables map onto our --fx-* tokens (styles/dock.css). */
 const THEME: DockviewTheme = {
@@ -57,6 +58,7 @@ const COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   generate: GeneratePanel,
   maps: MapsPanel,
   bake: BakePanel,
+  textures: TexturesPanel,
   // The 3D view used to be a panel; layouts that still have one close it on load (see workspace.ts).
   [LEGACY_VIEW3D]: () => null
 }
