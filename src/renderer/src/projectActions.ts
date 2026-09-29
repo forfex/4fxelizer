@@ -123,13 +123,16 @@ export function answerUnsaved(choice: 'save' | 'discard' | 'cancel'): void {
  * Before the open project is replaced or closed: asks whether to save its changes. Resolves true
  * when it's fine to go on (nothing to save, saved, or discarded).
  */
-export async function confirmDiscard(before: string): Promise<boolean> {
+export async function confirmDiscard(before: string, opts: { unsavedWork?: boolean } = {}): Promise<boolean> {
   const state = useApp.getState()
-  if (!projectDirty(state)) return true
+  // Without a project file, work that would be thrown away (opt-in: closing the window never
+  // asked before projects existed) also asks, offering to save it as a project.
+  const unsaved = !state.project && !!opts.unsavedWork && (state.textures.length > 0 || !!state.model)
+  if (!projectDirty(state) && !unsaved) return true
   answer?.('cancel')
   const choice = await new Promise<'save' | 'discard' | 'cancel'>((resolve) => {
     answer = resolve
-    state.setUnsavedPrompt(`Save the changes to ${state.project!.name} before ${before}?`)
+    state.setUnsavedPrompt(state.project ? `Save the changes to ${state.project.name} before ${before}?` : `Save your work as a project before ${before}?`)
   })
   if (choice === 'cancel') return false
   return choice === 'discard' || (await saveProject())
@@ -168,7 +171,7 @@ export function startProjectGuard(): () => void {
 
 /** Starts over: no textures, no model, the default stack, no project file, fresh undo history. */
 export async function newProject(): Promise<void> {
-  if (!(await confirmDiscard('starting a new project'))) return
+  if (!(await confirmDiscard('starting a new project', { unsavedWork: true }))) return
   stopBake()
   const app = useApp.getState()
   for (const t of app.textures) useApp.getState().closeTexture(t.id)
@@ -183,7 +186,7 @@ export async function newProject(): Promise<void> {
 // ── Opening ────────────────────────────────────────────────────────────────
 
 export async function openProject(): Promise<void> {
-  if (!(await confirmDiscard('opening another project'))) return
+  if (!(await confirmDiscard('opening another project', { unsavedWork: true }))) return
   const file = await window.fx.openProject()
   if (file) await openProjectFile(file, { confirmed: true })
 }
@@ -207,7 +210,7 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
     app.setMessage({ kind: 'error', text: `Couldn't open ${file.name}: ${errorText(e)}` })
     return
   }
-  if (!opts.confirmed && !(await confirmDiscard('opening another project'))) return
+  if (!opts.confirmed && !(await confirmDiscard('opening another project', { unsavedWork: true }))) return
   const { project, warnings } = parsed
   const missing: string[] = []
   const read = (ref: Parameters<typeof window.fx.readProjectFile>[1]): Promise<OpenedFile | null> =>

@@ -171,6 +171,14 @@ function watcherFor(contents: Electron.WebContents): FileWatcher {
 /** Windows whose project has unsaved changes, and ones closing after the user answered. */
 const edited = new WeakSet<BrowserWindow>()
 const closing = new WeakSet<BrowserWindow>()
+const hung = new WeakSet<BrowserWindow>()
+
+/**
+ * Why the app is quitting ('relaunch': Settings' Restart now). A close held back for unsaved
+ * changes cancels the quit, so the window remembers it and closeWindow quits once answered.
+ */
+let quitIntent: 'quit' | 'relaunch' | null = null
+const pendingQuit = new WeakMap<BrowserWindow, 'quit' | 'relaunch' | null>()
 
 /**
  * Closing a window with unsaved project changes (also by quitting) is held back; the renderer
@@ -178,10 +186,15 @@ const closing = new WeakSet<BrowserWindow>()
  */
 function guardClose(win: BrowserWindow): void {
   win.on('close', (event) => {
-    if (!edited.has(win) || closing.has(win) || win.webContents.isDestroyed()) return
+    if (!edited.has(win) || closing.has(win) || win.webContents.isDestroyed() || win.webContents.isCrashed() || hung.has(win)) return
     event.preventDefault()
+    pendingQuit.set(win, quitIntent)
+    quitIntent = null
     win.webContents.send(IPC.closeRequested)
   })
+  // While the page is hung nobody would answer the question: closing must still work.
+  win.on('unresponsive', () => hung.add(win))
+  win.on('responsive', () => hung.delete(win))
 }
 
 /** Settings is recording a shortcut: the menu's own shortcuts must not run meanwhile. */
@@ -210,7 +223,8 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.watchFiles, (event, paths: unknown) => void watcherFor(event.sender).set(paths))
   ipcMain.handle(IPC.readWatchedFile, async (event, path: unknown) => {
-    if (!watchers.get(event.sender)?.has(path)) return null
+    // Only the kinds of files the app opens (images, models and their resources).
+    if (!watchers.get(event.sender)?.has(path) || !(isModelFile(path as string) || isModelResource(path as string))) return null
     const file = resolve(path as string)
     try {
       const info = await stat(file)
@@ -253,8 +267,22 @@ function registerIpc(): void {
     const win = BrowserWindow.fromWebContents(event.sender)!
     const result = await dialog.showSaveDialog(win, { defaultPath: typeof defaultName === 'string' ? defaultName : undefined, filters: PROJECT_FILTERS })
     if (result.canceled || !result.filePath) return null
-    // Some platforms don't add the extension from the filter.
-    return isProjectFile(result.filePath) ? result.filePath : `${result.filePath}.${PROJECT_EXTENSION}`
+    if (isProjectFile(result.filePath)) return result.filePath
+    // Some platforms don't add the extension from the filter; the dialog then never asked about
+    // replacing the file with it.
+    const path = `${result.filePath}.${PROJECT_EXTENSION}`
+    const exists = await stat(path).then(() => true, () => false)
+    if (exists) {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question',
+        buttons: ['Replace', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        message: `${basename(path)} already exists. Replace it?`
+      })
+      if (response !== 0) return null
+    }
+    return path
   })
   ipcMain.handle(IPC.projectWrite, (_e, path: unknown, json: unknown) => writeProject(path, json))
   ipcMain.handle(IPC.projectReadFile, (_e, projectPath: unknown, ref: unknown) => readProjectFile(projectPath, ref))
@@ -270,7 +298,12 @@ function registerIpc(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     closing.add(win)
-    win.close()
+    const intent = pendingQuit.get(win) ?? null
+    pendingQuit.delete(win)
+    if (intent) {
+      quitIntent = intent
+      app.quit()
+    } else win.close()
   })
 
   ipcMain.handle(IPC.presetsList, async (): Promise<PresetEntry[]> => {
@@ -312,8 +345,9 @@ function registerIpc(): void {
     shortcutsSuspended = suspend === true
     if (win) refreshMenu(win)
   })
+  // Relaunched from will-quit, so a quit cancelled at the unsaved-changes question leaves nothing pending.
   ipcMain.on(IPC.relaunch, () => {
-    app.relaunch()
+    quitIntent = 'relaunch'
     app.quit()
   })
   ipcMain.handle(IPC.userDataShow, async () => {
@@ -424,7 +458,14 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('will-quit', flushSettings)
+app.on('before-quit', () => {
+  quitIntent ??= 'quit'
+})
+
+app.on('will-quit', () => {
+  flushSettings()
+  if (quitIntent === 'relaunch') app.relaunch()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
