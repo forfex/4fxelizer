@@ -21,8 +21,8 @@ Five themes, in **View › Theme**, the toolbar's theme menu or **Settings › A
 **Edit › Settings…** (Ctrl+,) or the toolbar's settings button. Pick a category on the left, or **All** to see
 everything; the search box finds a setting in any category.
 
-- **General**: interface scale (80–150%), live reload of changed files, the settings folder, and restoring the
-  default settings.
+- **General**: interface scale (80–150%), live reload of changed files, updates (see below), the settings folder,
+  and restoring the default settings.
 - **Appearance**: the theme.
 - **Mouse**: how the mouse wheel reaches sliders and dropdowns: once the pointer has rested on one (and for how
   long), only after you click it, always, or never. A test slider and dropdown show how it feels.
@@ -33,6 +33,19 @@ everything; the search box finds a setting in any category.
 - **GPU**: the GPU in use and, on computers with two (a laptop with integrated and discrete graphics), which one
   to prefer. The choice applies after a restart; **Restart now** closes the open image, so export or save a
   preset first.
+
+## Updates
+
+When the app starts it looks for a new version on GitHub (turn this off in **Settings › General › Updates**). If
+there is one, a window shows what's new: **Update and restart** downloads it, checks it and restarts into it;
+**Skip this version** stops asking until the next one; **Later** asks again next time. **Help › Check for
+Updates…** or **Check for updates** in Settings looks right away.
+
+**Update automatically** (off by default) installs a new version at startup and restarts into it without asking.
+Either way, unsaved project changes are asked about before the app restarts.
+
+The Windows installer build and the Linux AppImage update themselves. On macOS and with the `.deb` package the
+update window opens the release page, to download the new version there.
 
 ## Good to know
 
