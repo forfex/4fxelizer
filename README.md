@@ -14,7 +14,7 @@
 
 [**Download**](https://github.com/forfex/4fxelizer/releases/latest) · [**Guide**](guide/README.md) · [Website](https://forfex.github.io/4fxelizer/) · [Report a bug](https://github.com/forfex/4fxelizer/issues)
 
-<img src="site/images/app.png" alt="4FXELIZER showing a brick texture before and after" width="900">
+<img src="site/images/customize-a.png" alt="4FXELIZER with a statue model: its texture before and after a PSX preset, and the 3D view" width="900">
 
 </div>
 
