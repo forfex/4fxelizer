@@ -151,6 +151,7 @@ export interface RendererGpuReport {
 
 export type MenuCommand =
   | 'open'
+  | 'open-model'
   | 'export'
   | 'import-palette'
   | 'presets'
@@ -174,6 +175,13 @@ export interface FxApi {
   /** Stores changed settings (written to disk shortly after). */
   saveSettings(patch: Partial<UserSettings>): void
   openImage(): Promise<OpenedFile | null>
+  /** Asks for a 3D model file (glTF, GLB, FBX, OBJ). */
+  openModel(): Promise<OpenedFile | null>
+  /**
+   * A file a model refers to (glTF buffer, OBJ material library, texture), looked up relative to
+   * the model's folder and then by name (see referenceCandidates in @shared/model); null = not found.
+   */
+  readModelFile(modelPath: string, reference: string): Promise<OpenedFile | null>
   openFile(filters: FileFilter[]): Promise<OpenedFile | null>
   saveFile(defaultName: string, bytes: Uint8Array, filters: FileFilter[]): Promise<string | null>
   /** Map files (AO, cavity, …) next to a texture, recognized by name (see @shared/maps). */
@@ -197,6 +205,8 @@ export interface FxApi {
 
 export const IPC = {
   openImage: 'image:open',
+  openModel: 'model:open',
+  readModelFile: 'model:read-file',
   openFile: 'file:open',
   saveFile: 'file:save',
   findMaps: 'maps:find',

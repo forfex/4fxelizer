@@ -1,8 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
-import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { IPC, THEME_WINDOW_COLORS, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
 import { siblingMaps } from '@shared/maps'
+import { isModelResource, MODEL_EXTENSIONS, referenceCandidates } from '@shared/model'
 import type { MenuRole } from '@shared/menu'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
@@ -67,10 +68,40 @@ async function findMaps(texturePath: string) {
   return read.filter((f) => f !== null)
 }
 
+/** Largest file a model may pull in (a texture or a glTF buffer). */
+const MAX_MODEL_FILE = 512 * 1024 * 1024
+
+/**
+ * A file a model refers to, looked up next to the model (see referenceCandidates). Only buffers,
+ * material libraries and images are read.
+ */
+async function readModelFile(modelPath: string, reference: string) {
+  if (typeof modelPath !== 'string' || typeof reference !== 'string' || !isAbsolute(modelPath)) return null
+  const dir = dirname(modelPath)
+  for (const candidate of referenceCandidates(reference)) {
+    if (!isModelResource(candidate)) continue
+    const path = resolve(dir, candidate)
+    try {
+      const info = await stat(path)
+      if (!info.isFile() || info.size > MAX_MODEL_FILE) continue
+      return { name: basename(path), bytes: new Uint8Array(await readFile(path)), path }
+    } catch {
+      // Not there: try the next place.
+    }
+  }
+  return null
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.openImage, (event) =>
     openFile(BrowserWindow.fromWebContents(event.sender)!, [{ name: 'Images', extensions: IMAGE_EXTENSIONS }])
   )
+
+  ipcMain.handle(IPC.openModel, (event) =>
+    openFile(BrowserWindow.fromWebContents(event.sender)!, [{ name: '3D models', extensions: [...MODEL_EXTENSIONS] }])
+  )
+
+  ipcMain.handle(IPC.readModelFile, (_e, modelPath: string, reference: string) => readModelFile(modelPath, reference))
 
   ipcMain.handle(IPC.openFile, (event, filters: FileFilter[]) =>
     openFile(BrowserWindow.fromWebContents(event.sender)!, filters)

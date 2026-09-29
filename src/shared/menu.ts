@@ -28,6 +28,7 @@ export function appMenu(platform: string, isDev: boolean): MenuSection[] {
       label: 'File',
       items: [
         command('Open Image…', 'open', 'CmdOrCtrl+O'),
+        command('Open Model…', 'open-model', 'CmdOrCtrl+Shift+O'),
         command('Export…', 'export', 'CmdOrCtrl+E'),
         separator,
         command('Import Palette…', 'import-palette'),
