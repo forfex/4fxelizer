@@ -37,6 +37,7 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { Menu, MENU_MARK_CLASS, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { CaretIcon } from './ui/icons'
 import { MainView } from './MainView'
+import { TextureTabs } from './TextureTabs'
 
 /** dockview theme whose CSS variables map onto our --fx-* tokens (styles/dock.css). */
 const THEME: DockviewTheme = {
@@ -61,11 +62,15 @@ const COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
 }
 
 const TAB_COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelHeaderProps>> = {
-  // The viewer can't be closed, and its tab shows the file name as written.
+  // The viewer can't be closed; its tab holds the open textures' tabs (or its title when none is open).
   [VIEWER]: (props) => (
-    <span className="flex h-full normal-case">
-      <DockviewDefaultTab {...props} hideClose />
-    </span>
+    <TextureTabs
+      fallback={
+        <span className="flex h-full normal-case">
+          <DockviewDefaultTab {...props} hideClose />
+        </span>
+      }
+    />
   )
 }
 

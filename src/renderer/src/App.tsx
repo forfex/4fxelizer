@@ -26,6 +26,23 @@ export function App() {
       .then((engine) => {
         if (cancelled) return
         stopController = startPaletteController(engine)
+        // The engine keeps a slot per open texture and shows the active one.
+        const follow = (): void => {
+          const s = useApp.getState()
+          engine.syncTextures(
+            s.textures.map((t) => t.id),
+            s.activeTextureId
+          )
+        }
+        follow()
+        const unfollow = useApp.subscribe((s, prev) => {
+          if (s.textures !== prev.textures || s.activeTextureId !== prev.activeTextureId) follow()
+        })
+        const stopPalettes = stopController
+        stopController = () => {
+          stopPalettes()
+          unfollow()
+        }
         setGpu({ status: 'ready', adapter: adapterLabel(engine.gpu.adapter) })
         engine.gpu.device.lost.then((info) => {
           setGpu({ status: 'error', message: `GPU device lost (${info.reason}): ${info.message}` })

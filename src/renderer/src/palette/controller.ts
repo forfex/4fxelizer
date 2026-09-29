@@ -93,7 +93,9 @@ export function startPaletteController(engine: Engine): () => void {
     )
   }
 
-  return engine.onPlan((plan, sourceKey) => {
+  return engine.onPlan((plan, sourceKey, textureId) => {
+    // Palettes are generated from the texture being worked on.
+    if (textureId !== useApp.getState().activeTextureId) return
     const { palettes, paletteJobs, setPaletteJob } = useApp.getState()
     const { stages } = useApp.getState()
     for (const palette of palettes) {

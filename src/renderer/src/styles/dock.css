@@ -152,3 +152,25 @@
 .dockview-theme-fx .dv-tabs-overflow-container .dv-tab:hover {
   background: var(--fx-accent-soft);
 }
+
+/*
+ * The viewer's tab holding the texture tabs (TextureTabs): it spans the header and draws nothing
+ * itself; the texture tabs inside look like dock tabs.
+ */
+.dockview-theme-fx .dv-tab:has(.fx-texture-tabs) {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--fx-font-ui);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.dockview-theme-fx .dv-tabs-container:has(.fx-texture-tabs) {
+  flex: 1 1 auto;
+  min-width: 0;
+}

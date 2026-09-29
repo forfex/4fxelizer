@@ -7,7 +7,7 @@ import { appMenu, type MenuEntry, type MenuSection } from './menu'
 
 export interface BindableCommand {
   command: MenuCommand
-  /** "Open Image", "Theme: Dark". */
+  /** "Open Textures", "Theme: Dark". */
   label: string
   /** Menu it sits in ("File", "View", …). */
   group: string

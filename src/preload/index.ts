@@ -6,7 +6,7 @@ const api: FxApi = {
   // Synchronous so the first render already uses the saved settings (the file is tiny).
   settings: ipcRenderer.sendSync(IPC.settingsLoad),
   saveSettings: (patch) => ipcRenderer.send(IPC.settingsSave, patch),
-  openImage: () => ipcRenderer.invoke(IPC.openImage),
+  openImages: () => ipcRenderer.invoke(IPC.openImages),
   openModel: () => ipcRenderer.invoke(IPC.openModel),
   readModelFile: (modelPath, reference) => ipcRenderer.invoke(IPC.readModelFile, modelPath, reference),
   openFile: (filters) => ipcRenderer.invoke(IPC.openFile, filters),

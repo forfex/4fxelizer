@@ -201,6 +201,8 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
     window.fx.readProjectFile(projectPath, ref).catch(() => null)
 
   stopBake()
+  // A project replaces every open texture.
+  for (const t of useApp.getState().textures) useApp.getState().closeTexture(t.id)
   // The stack first, so the texture is processed with it right away.
   app.loadDoc(project.doc)
   app.clearHistory()

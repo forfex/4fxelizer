@@ -21,7 +21,7 @@ describe('keybinds', () => {
       expect([...commands].sort()).toEqual([...MENU_COMMANDS].sort())
     }
     const open = bindableCommands('win32').find((c) => c.command === 'open')!
-    expect(open).toEqual({ command: 'open', label: 'Open Image', group: 'File', defaultAccelerator: 'CmdOrCtrl+O' })
+    expect(open).toEqual({ command: 'open', label: 'Open Textures', group: 'File', defaultAccelerator: 'CmdOrCtrl+O' })
     expect(bindableCommands('win32').find((c) => c.command === 'theme-dark')!.label).toBe('Theme: Dark')
   })
 

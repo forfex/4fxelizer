@@ -7,6 +7,8 @@ import type { StageSpec } from '@/gpu/plan'
 import type { Palette } from '@/palette/palette'
 import * as docOps from '@/stack/doc'
 import type { Doc } from '@/stack/doc'
+import * as tex from '@/stack/textures'
+import type { Docs, TextureEntry, TextureMaps } from '@/stack/textures'
 import {
   centered,
   fitView,
@@ -97,6 +99,13 @@ const HISTORY_LIMIT = 200
 
 export interface AppState extends Doc {
   gpu: GpuState
+  /** Open textures, in tab order. */
+  textures: TextureEntry[]
+  /** The texture being worked on (null = none open). `image`, `maps` and the document fields mirror it. */
+  activeTextureId: string | null
+  /** The shared stack and the separate stacks; the document fields mirror the active texture's. */
+  docs: Docs
+  /** The active texture (mirror of its entry). */
   image: ImageInfo | null
   view: View
   /** Viewer canvas size in device pixels. */
@@ -130,8 +139,8 @@ export interface AppState extends Doc {
   picking: boolean
   /** Auto/manual palette generation status by palette id (absent = idle). */
   paletteJobs: Record<string, PaletteJob>
-  /** Imported maps by slot. They belong to the loaded texture, not to the (undoable) document. */
-  maps: Partial<Record<MapSlot, MapInfo>>
+  /** Maps of the active texture by slot (mirror of its entry). Not part of the (undoable) document. */
+  maps: TextureMaps
   model: ModelInfo | null
   /** Material (texture set) the open texture belongs to: drawn with it in 3D and baked into. */
   modelMaterial: number
@@ -151,13 +160,24 @@ export interface AppState extends Doc {
   /** Question of the "unsaved changes" dialog while it's open. */
   unsavedPrompt: string | null
 
-  past: Doc[]
-  future: Doc[]
+  /** Undo history: every document (shared and separate stacks) at each step. */
+  past: Docs[]
+  future: Docs[]
   lastEdit: { key: string; at: number } | null
 
   setGpu(gpu: GpuState): void
-  /** A new image; `keepView` keeps the zoom and pan when its size didn't change (a reload). */
-  setImage(image: Omit<ImageInfo, 'version'>, opts?: { keepView?: boolean }): void
+  /** Opens a texture as a new tab and selects it. */
+  addTexture(texture: { id: string; image: Omit<ImageInfo, 'version'>; thumbnail: string | null; materials?: number[] }): void
+  selectTexture(id: string): void
+  closeTexture(id: string): void
+  /** Gives a texture its own stack (a copy of the shared one) or puts it back on the shared stack. Undoable. */
+  setTextureStack(id: string, stack: 'shared' | 'separate'): void
+  updateTexture(id: string, patch: Partial<Pick<TextureEntry, 'thumbnail' | 'materials'>>): void
+  /**
+   * New pixels for a texture (the active one by default); `keepView` keeps the zoom and pan when its
+   * size didn't change (a reload).
+   */
+  setImage(image: Omit<ImageInfo, 'version'>, opts?: { keepView?: boolean; textureId?: string }): void
   setView(view: View): void
   setCanvasSize(size: Size): void
   zoomFit(): void
@@ -184,9 +204,10 @@ export interface AppState extends Doc {
   selectColor(selection: { paletteId: string; index: number } | null): void
   setPicking(picking: boolean): void
   setPaletteJob(id: string, job: PaletteJob | null): void
-  setMap(slot: MapSlot, map: MapInfo | null): void
+  /** Sets a map of a texture (the active one by default). */
+  setMap(slot: MapSlot, map: MapInfo | null, textureId?: string): void
   setMapChannel(slot: MapSlot, channel: MapChannel): void
-  clearMaps(): void
+  clearMaps(textureId?: string): void
   setModel(model: Omit<ModelInfo, 'version'> | null, material?: number): void
   setModelMaterial(material: number): void
   setModelUvSet(uvSet: number): void
@@ -235,9 +256,57 @@ const snapshot = (s: Doc): Doc => ({ stages: s.stages, palettes: s.palettes, out
 
 const doc0 = docOps.initialDoc()
 
+/** The palette to keep selected when the shown document changes. */
+function paletteSelection(doc: Doc, selected: string | null): string | null {
+  if (selected && doc.palettes.some((p) => p.id === selected)) return selected
+  return (doc.palettes.find((p) => p.ownerUid) ?? doc.palettes[0])?.id ?? null
+}
+
+/**
+ * State that shows texture `id` (or none): its image, maps, view and document in the mirror
+ * fields. The outgoing texture keeps its view.
+ */
+function showTexture(s: AppState, id: string | null, docs: Docs, textures: TextureEntry[] = s.textures): Partial<AppState> {
+  const kept = s.activeTextureId ? tex.updateTexture(textures, s.activeTextureId, { view: s.view }) : textures
+  const entry = id ? kept.find((t) => t.id === id) : undefined
+  const doc = tex.docAt(docs, tex.docKeyOf(docs, entry ? entry.id : null))
+  return {
+    textures: kept,
+    activeTextureId: entry?.id ?? null,
+    image: entry?.image ?? null,
+    maps: entry?.maps ?? {},
+    view: entry ? (entry.view ?? fitView(entry.image, s.canvasSize, undefined, tilesOf(s))) : s.view,
+    ...doc,
+    previewUid: null,
+    maskUid: null,
+    selectedColor: null,
+    picking: false,
+    selectedPaletteId: paletteSelection(doc, s.selectedPaletteId)
+  }
+}
+
+/**
+ * State with the documents of an undo step: when the change is in a stack the active texture
+ * doesn't use, a texture that uses it is shown.
+ */
+function restoreDocs(s: AppState, docs: Docs): Partial<AppState> {
+  const changed = tex.changedDocKeys(s.docs, docs)[0]
+  const target = changed === undefined ? null : tex.textureForDoc(s.textures, docs, changed, s.activeTextureId)
+  if (target && target !== s.activeTextureId) return { docs, ...showTexture(s, target, docs) }
+  const doc = tex.docAt(docs, tex.docKeyOf(docs, s.activeTextureId))
+  return { docs, ...doc, selectedPaletteId: paletteSelection(doc, s.selectedPaletteId) }
+}
+
+/** The active texture's entry with a patch (the mirror fields are set by the caller). */
+const patchActive = (s: AppState, patch: Partial<TextureEntry>): TextureEntry[] =>
+  s.activeTextureId ? tex.updateTexture(s.textures, s.activeTextureId, patch) : s.textures
+
 export const useApp = create<AppState>()((set, get) => ({
   ...doc0,
   gpu: { status: 'loading' },
+  textures: [],
+  activeTextureId: null,
+  docs: { shared: doc0, separate: {} },
   image: null,
   view: { zoom: 1, x: 0, y: 0 },
   canvasSize: { width: 0, height: 0 },
@@ -278,12 +347,47 @@ export const useApp = create<AppState>()((set, get) => ({
   lastEdit: null,
 
   setGpu: (gpu) => set({ gpu }),
+  addTexture: ({ id, image, thumbnail, materials = [] }) => {
+    const s = get()
+    const entry: TextureEntry = { id, image: { ...image, version: 1 }, maps: {}, thumbnail, materials, view: null }
+    set(showTexture(s, id, s.docs, [...s.textures, entry]))
+  },
+  selectTexture: (id) => {
+    const s = get()
+    if (id !== s.activeTextureId && s.textures.some((t) => t.id === id)) set(showTexture(s, id, s.docs))
+  },
+  closeTexture: (id) => {
+    const s = get()
+    const { textures, docs } = tex.closeTexture(s.textures, s.docs, id)
+    if (id !== s.activeTextureId) set({ textures, docs })
+    else set({ docs, ...showTexture({ ...s, activeTextureId: null }, tex.neighborOf(s.textures, id), docs, textures) })
+  },
+  setTextureStack: (id, stack) => {
+    const s = get()
+    const docs = stack === 'separate' ? tex.makeSeparate(s.docs, id) : tex.makeShared(s.docs, id)
+    if (docs === s.docs) return
+    const shown = id === s.activeTextureId ? tex.docAt(docs, tex.docKeyOf(docs, id)) : {}
+    set({ docs, ...shown, past: [...s.past, s.docs].slice(-HISTORY_LIMIT), future: [], lastEdit: null })
+  },
+  updateTexture: (id, patch) => {
+    const s = get()
+    set({ textures: tex.updateTexture(s.textures, id, patch) })
+  },
   setImage: (image, opts = {}) => {
-    const prev = get().image
-    const version = (prev?.version ?? 0) + 1
-    const sameSize = prev?.width === image.width && prev.height === image.height
-    const view = opts.keepView && sameSize ? get().view : fitView(image, get().canvasSize, undefined, tilesOf(get()))
-    set({ image: { ...image, version }, view })
+    const s = get()
+    const id = opts.textureId ?? s.activeTextureId
+    const entry = s.textures.find((t) => t.id === id)
+    if (!entry || !id) return
+    const next = { ...image, version: entry.image.version + 1 }
+    const textures = tex.updateTexture(s.textures, id, { image: next })
+    if (id !== s.activeTextureId) {
+      const sameSize = entry.image.width === image.width && entry.image.height === image.height
+      set({ textures: sameSize ? textures : tex.updateTexture(textures, id, { view: null }) })
+      return
+    }
+    const sameSize = entry.image.width === image.width && entry.image.height === image.height
+    const view = opts.keepView && sameSize ? s.view : fitView(image, s.canvasSize, undefined, tilesOf(s))
+    set({ textures, image: next, view })
   },
   setView: (view) => set({ view }),
   setCanvasSize: (canvasSize) => {
@@ -355,17 +459,29 @@ export const useApp = create<AppState>()((set, get) => ({
     set({ paletteJobs: jobs })
   },
 
-  setMap: (slot, map) => {
-    const maps = { ...get().maps }
+  setMap: (slot, map, textureId) => {
+    const s = get()
+    const id = textureId ?? s.activeTextureId
+    const entry = s.textures.find((t) => t.id === id)
+    const maps = { ...(id === s.activeTextureId ? s.maps : (entry?.maps ?? {})) }
     if (map) maps[slot] = map
     else delete maps[slot]
-    set({ maps })
+    if (!entry) set({ maps }) // no texture open: maps wait for one in the mirror
+    else if (id === s.activeTextureId) set({ maps, textures: patchActive(s, { maps }) })
+    else set({ textures: tex.updateTexture(s.textures, entry.id, { maps }) })
   },
   setMapChannel: (slot, channel) => {
-    const map = get().maps[slot]
-    if (map) set({ maps: { ...get().maps, [slot]: { ...map, channel } } })
+    const s = get()
+    const map = s.maps[slot]
+    if (!map) return
+    const maps = { ...s.maps, [slot]: { ...map, channel } }
+    set({ maps, textures: patchActive(s, { maps }) })
   },
-  clearMaps: () => set({ maps: {} }),
+  clearMaps: (textureId) => {
+    const s = get()
+    if (!textureId || textureId === s.activeTextureId) set({ maps: {}, textures: patchActive(s, { maps: {} }) })
+    else set({ textures: tex.updateTexture(s.textures, textureId, { maps: {} }) })
+  },
   setModel: (model, material = 0) => {
     const version = (get().model?.version ?? 0) + 1
     set({ model: model && { ...model, version }, modelMaterial: material, modelUvSet: 0, bakeJob: null })
@@ -387,15 +503,18 @@ export const useApp = create<AppState>()((set, get) => ({
   edit: (change, opts = {}) => {
     const s = get()
     const patch = change(snapshot(s))
+    // The edit lands in the document the active texture uses.
+    const docs = tex.withDoc(s.docs, tex.docKeyOf(s.docs, s.activeTextureId), snapshot({ ...snapshot(s), ...patch }))
     if (opts.silent) {
-      set(patch)
+      set({ ...patch, docs })
       return
     }
     const now = performance.now()
     const merge = opts.coalesce && s.lastEdit?.key === opts.coalesce && now - s.lastEdit.at < COALESCE_MS
     set({
       ...patch,
-      past: merge ? s.past : [...s.past, snapshot(s)].slice(-HISTORY_LIMIT),
+      docs,
+      past: merge ? s.past : [...s.past, s.docs].slice(-HISTORY_LIMIT),
       future: [],
       lastEdit: opts.coalesce ? { key: opts.coalesce, at: now } : null
     })
@@ -404,13 +523,13 @@ export const useApp = create<AppState>()((set, get) => ({
     const s = get()
     const prev = s.past[s.past.length - 1]
     if (!prev) return
-    set({ ...prev, past: s.past.slice(0, -1), future: [snapshot(s), ...s.future], lastEdit: null })
+    set({ ...restoreDocs(s, prev), past: s.past.slice(0, -1), future: [s.docs, ...s.future], lastEdit: null })
   },
   redo: () => {
     const s = get()
     const next = s.future[0]
     if (!next) return
-    set({ ...next, past: [...s.past, snapshot(s)], future: s.future.slice(1), lastEdit: null })
+    set({ ...restoreDocs(s, next), past: [...s.past, s.docs], future: s.future.slice(1), lastEdit: null })
   },
 
   addStage: (passId, index) => {

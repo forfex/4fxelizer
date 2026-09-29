@@ -58,6 +58,13 @@ async function openFile(win: BrowserWindow, filters: FileFilter[]) {
   return { name: basename(path), bytes: new Uint8Array(await readFile(path)), path }
 }
 
+/** Asks for several files; empty when cancelled. */
+async function openFiles(win: BrowserWindow, filters: FileFilter[]) {
+  const result = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters })
+  if (result.canceled) return []
+  return Promise.all(result.filePaths.map(async (path) => ({ name: basename(path), bytes: new Uint8Array(await readFile(path)), path })))
+}
+
 /** Most map files read for one texture. */
 const MAX_MAP_FILES = 16
 
@@ -184,8 +191,8 @@ function refreshMenu(win: BrowserWindow): void {
 }
 
 function registerIpc(): void {
-  ipcMain.handle(IPC.openImage, (event) =>
-    openFile(BrowserWindow.fromWebContents(event.sender)!, [{ name: 'Images', extensions: IMAGE_EXTENSIONS }])
+  ipcMain.handle(IPC.openImages, (event) =>
+    openFiles(BrowserWindow.fromWebContents(event.sender)!, [{ name: 'Images', extensions: IMAGE_EXTENSIONS }])
   )
 
   ipcMain.handle(IPC.openModel, (event) =>

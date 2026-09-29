@@ -53,7 +53,7 @@ export function Viewer() {
         theme = s.theme
         colors = readColors()
       }
-      const inputs = [s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid, s.maps]
+      const inputs = [s.activeTextureId, s.image?.version, s.stages, s.palettes, s.outputLock, s.previewUid, s.maskUid, s.maps]
       if (s.image && (!processed || inputs.some((v, i) => v !== processed![i]))) {
         processed = inputs
         try {
@@ -290,7 +290,7 @@ function EmptyState() {
         <>
           <p>Drop an image here, or</p>
           <Button variant="primary" onClick={openImage} disabled={gpu.status !== 'ready'}>
-            Open Image…
+            Open Textures…
           </Button>
           <p className="text-small">PNG · JPG · WebP · BMP · GIF · TGA</p>
         </>

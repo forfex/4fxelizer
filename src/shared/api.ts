@@ -279,6 +279,9 @@ const PLAIN_COMMANDS = [
   'save-project',
   'save-project-as',
   'open',
+  'close-texture',
+  'next-texture',
+  'previous-texture',
   'open-model',
   'export',
   'import-palette',
@@ -317,7 +320,8 @@ export interface FxApi {
   settings: UserSettings
   /** Stores changed settings (written to disk shortly after). */
   saveSettings(patch: Partial<UserSettings>): void
-  openImage(): Promise<OpenedFile | null>
+  /** Asks for textures (several can be picked); empty = cancelled. */
+  openImages(): Promise<OpenedFile[]>
   /** Asks for a 3D model file (glTF, GLB, FBX, OBJ). */
   openModel(): Promise<OpenedFile | null>
   /**
@@ -378,7 +382,7 @@ export interface FxApi {
 }
 
 export const IPC = {
-  openImage: 'image:open',
+  openImages: 'image:open',
   openModel: 'model:open',
   readModelFile: 'model:read-file',
   openFile: 'file:open',
