@@ -7,14 +7,24 @@ function sample(): ProjectData {
   const doc = initialDoc()
   doc.palettes[0]!.colors = [{ hex: '#102030' }, { hex: '#405060', locked: true }]
   doc.palettes[0]!.generatedFor = 'key'
+  const separate = initialDoc()
+  separate.stages = separate.stages.slice(0, 1)
   return {
     doc,
     presetName: 'PSX 8bpp',
-    texture: { name: 'wall.png', file: { path: 'C:/art/wall.png', relative: 'wall.png' } },
-    maps: [
-      { slot: 'ao', channel: 'r', name: 'wall_orm.png', file: { path: 'C:/art/wall_orm.png', relative: 'wall_orm.png' } },
-      { slot: 'cavity', channel: 'luma', name: 'Baked cavity', baked: true, png: 'iVBORw0KGgo=' }
+    textures: [
+      {
+        name: 'wall.png',
+        file: { path: 'C:/art/wall.png', relative: 'wall.png' },
+        maps: [
+          { slot: 'ao', channel: 'r', name: 'wall_orm.png', file: { path: 'C:/art/wall_orm.png', relative: 'wall_orm.png' } },
+          { slot: 'cavity', channel: 'luma', name: 'Baked cavity', baked: true, png: 'iVBORw0KGgo=' }
+        ],
+        materials: [0, 2]
+      },
+      { name: 'roof.png', png: 'iVBORw0KGgo=', maps: [], doc: separate, materials: [1] }
     ],
+    active: 1,
     model: { name: 'castle.glb', file: { path: 'C:/art/castle.glb' }, material: 2, uvSet: 1 }
   }
 }
@@ -24,8 +34,10 @@ describe('projects', () => {
     const data = sample()
     const { project, warnings } = parseProject(serializeProject(data))
     expect(warnings).toEqual([])
-    expect(project.texture).toEqual(data.texture)
-    expect(project.maps).toEqual(data.maps)
+    expect(project.textures.map(({ doc: _doc, ...t }) => t)).toEqual(data.textures.map(({ doc: _doc, ...t }) => t))
+    expect(project.textures[0]!.doc).toBeUndefined()
+    expect(project.textures[1]!.doc!.stages.map((s) => s.passId)).toEqual(data.textures[1]!.doc!.stages.map((s) => s.passId))
+    expect(project.active).toBe(1)
     expect(project.model).toEqual(data.model)
     expect(project.presetName).toBe('PSX 8bpp')
     expect(project.doc.stages.map((s) => s.passId)).toEqual(data.doc.stages.map((s) => s.passId))
@@ -47,8 +59,11 @@ describe('projects', () => {
       model: { name: 'm.obj' }
     })
     const { project, warnings } = parseProject(json)
-    expect(project.texture).toEqual({ name: 'tex.png', png: 'AAAA' })
-    expect(project.maps).toEqual([{ slot: 'ao', channel: 'luma', name: 'ao', file: { path: 'x.png' } }])
+    // A version 1 file: one texture with the maps.
+    expect(project.textures).toEqual([
+      { name: 'tex.png', png: 'AAAA', maps: [{ slot: 'ao', channel: 'luma', name: 'ao', file: { path: 'x.png' } }], materials: [] }
+    ])
+    expect(project.active).toBe(0)
     expect(project.model).toBeNull()
     expect(warnings).toHaveLength(2)
   })
@@ -59,23 +74,26 @@ describe('projects', () => {
     expect(() => parseProject('{"format":"4fxelizer-project","version":99}')).toThrow(/newer version/)
   })
 
-  it('signature ignores regenerated colors but not edits, files or maps', () => {
+  it('signature ignores regenerated colors and the active texture but not edits, files, maps or stacks', () => {
     const doc = initialDoc()
+    const texture = (id: string, path: string) => ({ id, image: { name: `${id}.png`, path, version: 1 }, maps: {}, materials: [] as number[] })
     const state: ProjectState = {
-      ...doc,
-      image: { name: 'wall.png', path: 'C:/wall.png', version: 1 },
-      maps: { ao: { name: 'Baked AO', channel: 'luma', baked: true, version: 3 } },
+      docs: { shared: doc, separate: {} },
+      textures: [{ ...texture('wall', 'C:/wall.png'), maps: { ao: { name: 'Baked AO', channel: 'luma', baked: true, version: 3 } } }, texture('roof', 'C:/roof.png')],
       model: null,
       modelMaterial: 0,
       modelUvSet: 0
     }
     const base = projectSignature(state)
-    const regenerated = doc.palettes.map((p) => ({ ...p, colors: [{ hex: '#abcdef' }], generatedFor: 'k' }))
-    expect(projectSignature({ ...state, palettes: regenerated })).toBe(base)
-    expect(projectSignature({ ...state, image: { ...state.image!, version: 2 } })).toBe(base) // reloaded from its file
-    expect(projectSignature({ ...state, stages: doc.stages.slice(1) })).not.toBe(base)
-    expect(projectSignature({ ...state, maps: { ao: { ...state.maps.ao!, version: 4 } } })).not.toBe(base)
-    expect(projectSignature({ ...state, image: { name: 'x.png', path: 'C:/x.png', version: 1 } })).not.toBe(base)
+    const regenerated = doc.palettes.map((p) => ({ ...p, colors: [{ hex: '#abcdef' }], generatedFor: 'k', variants: { wall: { colors: [{ hex: '#123456' }] } } }))
+    expect(projectSignature({ ...state, docs: { shared: { ...doc, palettes: regenerated }, separate: {} } })).toBe(base)
+    const [wall, roof] = state.textures
+    expect(projectSignature({ ...state, textures: [{ ...wall!, image: { ...wall!.image, version: 2 } }, roof!] })).toBe(base) // reloaded from its file
+    expect(projectSignature({ ...state, docs: { shared: { ...doc, stages: doc.stages.slice(1) }, separate: {} } })).not.toBe(base)
+    expect(projectSignature({ ...state, docs: { shared: doc, separate: { roof: doc } } })).not.toBe(base)
+    expect(projectSignature({ ...state, textures: [{ ...wall!, maps: { ao: { ...wall!.maps.ao!, version: 4 } } }, roof!] })).not.toBe(base)
+    expect(projectSignature({ ...state, textures: [wall!, { ...roof!, materials: [1] }] })).not.toBe(base)
+    expect(projectSignature({ ...state, textures: [wall!] })).not.toBe(base)
   })
 
   it('encodes bytes as base64 and back', () => {

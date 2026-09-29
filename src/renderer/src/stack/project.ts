@@ -1,7 +1,8 @@
-// Project files: the document (like a preset, but with every palette color) plus the texture, the
-// imported maps and the model it was made with, referenced by path (see @shared/project). Maps
-// baked from the model, and a texture or map that has no file of its own (a texture embedded in a
-// model), are stored in the project as PNG.
+// Project files: the shared stack (like a preset, but with every palette color) plus the open
+// textures (each with its maps, its separate stack if it has one, and the model materials drawn
+// with it) and the model, referenced by path (see @shared/project). Maps baked from the model, and
+// a texture or map that has no file of its own (a texture embedded in a model), are stored in the
+// project as PNG. Version 1 files (one texture) still open.
 
 import { MAP_CHANNELS, MAP_SLOTS, type MapChannel, type MapSlot } from '@shared/maps'
 import type { ProjectFileRef } from '@shared/project'
@@ -9,10 +10,13 @@ import type { Doc } from './doc'
 import { parseDoc } from './preset'
 
 export const PROJECT_FORMAT = '4fxelizer-project'
-export const PROJECT_VERSION = 1
+export const PROJECT_VERSION = 2
 
-/** The texture: a file, or (when it has none) its pixels as a base64 PNG. */
-export type ProjectTexture = { name: string; file: ProjectFileRef } | { name: string; png: string }
+/** A texture's pixels: a file, or (when it has none) a base64 PNG. */
+export type ProjectImage = { name: string; file: ProjectFileRef } | { name: string; png: string }
+
+/** An open texture: its image, its maps, its separate stack (none = the shared one) and the materials drawn with it. */
+export type ProjectTexture = ProjectImage & { maps: ProjectMap[]; doc?: Doc; materials: number[] }
 
 /** An imported map (by file, or as PNG when it has none) or one baked from the model (as PNG). */
 export type ProjectMap = { slot: MapSlot; channel: MapChannel; name: string } & ({ file: ProjectFileRef } | { png: string; baked?: true })
@@ -20,31 +24,38 @@ export type ProjectMap = { slot: MapSlot; channel: MapChannel; name: string } & 
 export interface ProjectModel {
   name: string
   file: ProjectFileRef
-  /** Texture set (material index) the texture belongs to. */
+  /** Texture set (material index) an active texture drawn on no material shows on. */
   material: number
   uvSet: number
 }
 
 export interface ProjectData {
+  /** The shared stack. */
   doc: Doc
   presetName: string | null
-  texture: ProjectTexture | null
-  maps: ProjectMap[]
+  textures: ProjectTexture[]
+  /** Index of the texture being worked on. */
+  active: number
   model: ProjectModel | null
 }
 
 export class ProjectError extends Error {}
 
+// All colors, so the palettes are right even before they regenerate (or when the texture is missing).
+const docJson = (doc: Doc): Doc => ({
+  stages: doc.stages,
+  palettes: doc.palettes.map(({ generatedFor: _generatedFor, variants: _variants, ...p }) => p),
+  outputLock: doc.outputLock
+})
+
 export function serializeProject(project: ProjectData): string {
-  const { doc } = project
   const file = {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
-    // All colors, so the palettes are right even before they regenerate (or when the texture is missing).
-    doc: { stages: doc.stages, palettes: doc.palettes.map(({ generatedFor: _generatedFor, variants: _variants, ...p }) => p), outputLock: doc.outputLock },
+    doc: docJson(project.doc),
     presetName: project.presetName,
-    texture: project.texture,
-    maps: project.maps,
+    textures: project.textures.map((t) => ({ ...t, ...(t.doc ? { doc: docJson(t.doc) } : {}) })),
+    active: project.active,
     model: project.model
   }
   return JSON.stringify(file, null, 2)
@@ -83,17 +94,47 @@ export function parseProject(json: string): ParsedProject {
   const warnings: string[] = []
   const doc = parseDoc(isObject(raw.doc) ? raw.doc : {}, warnings)
 
-  let texture: ProjectTexture | null = null
-  if (isObject(raw.texture)) {
-    const name = str(raw.texture.name) ?? 'texture'
-    const file = fileRefOf(raw.texture.file)
-    const png = pngOf(raw.texture.png)
-    texture = file ? { name, file } : png ? { name, png } : null
-    if (!texture) warnings.push('The texture entry is broken.')
+  const textures: ProjectTexture[] = []
+  if (raw.version === 1 || raw.version === undefined) {
+    // One texture, with the maps next to it.
+    const image = isObject(raw.texture) ? imageOf(raw.texture, warnings) : null
+    const maps = mapsOf(raw.maps, warnings)
+    if (image) textures.push({ ...image, maps, materials: [] })
+  } else {
+    for (const t of Array.isArray(raw.textures) ? raw.textures : []) {
+      if (!isObject(t)) continue
+      const image = imageOf(t, warnings)
+      if (!image) continue
+      const separate = isObject(t.doc) ? parseDoc(t.doc, warnings) : undefined
+      const materials = Array.isArray(t.materials) ? [...new Set(t.materials.filter((m): m is number => typeof m === 'number' && Number.isInteger(m) && m >= 0))] : []
+      textures.push({ ...image, maps: mapsOf(t.maps, warnings), ...(separate ? { doc: separate } : {}), materials })
+    }
+  }
+  const active = Math.min(index(raw.active), Math.max(textures.length - 1, 0))
+
+  let model: ProjectModel | null = null
+  if (isObject(raw.model)) {
+    const file = fileRefOf(raw.model.file)
+    if (file) model = { name: str(raw.model.name) ?? 'model', file, material: index(raw.model.material), uvSet: index(raw.model.uvSet) }
+    else warnings.push('The model entry is broken.')
   }
 
+  const presetName = str(raw.presetName)?.slice(0, 100) ?? null
+  return { project: { doc, presetName, textures, active, model }, warnings }
+}
+
+function imageOf(raw: Record<string, unknown>, warnings: string[]): ProjectImage | null {
+  const name = str(raw.name) ?? 'texture'
+  const file = fileRefOf(raw.file)
+  const png = pngOf(raw.png)
+  const image = file ? { name, file } : png ? { name, png } : null
+  if (!image) warnings.push(`The texture entry ${name} is broken.`)
+  return image
+}
+
+function mapsOf(raw: unknown, warnings: string[]): ProjectMap[] {
   const maps: ProjectMap[] = []
-  for (const m of Array.isArray(raw.maps) ? raw.maps : []) {
+  for (const m of Array.isArray(raw) ? raw : []) {
     if (!isObject(m)) continue
     const slot = MAP_SLOTS.find((s) => s.id === m.slot)?.id
     if (!slot || maps.some((x) => x.slot === slot)) continue
@@ -105,44 +146,44 @@ export function parseProject(json: string): ParsedProject {
     else if (png) maps.push({ slot, channel, name, png, ...(m.baked === true ? { baked: true as const } : {}) })
     else warnings.push(`The ${slot} map entry is broken.`)
   }
-
-  let model: ProjectModel | null = null
-  if (isObject(raw.model)) {
-    const file = fileRefOf(raw.model.file)
-    if (file) model = { name: str(raw.model.name) ?? 'model', file, material: index(raw.model.material), uvSet: index(raw.model.uvSet) }
-    else warnings.push('The model entry is broken.')
-  }
-
-  const presetName = str(raw.presetName)?.slice(0, 100) ?? null
-  return { project: { doc, presetName, texture, maps, model }, warnings }
+  return maps
 }
 
+type SignatureMaps = Partial<Record<MapSlot, { name: string; channel: MapChannel; path?: string; baked?: boolean; version: number }>>
+
 /** What a project stores of the app state (the parts that make it "modified"). */
-export interface ProjectState extends Doc {
-  image: { name: string; path?: string; version: number } | null
-  maps: Partial<Record<MapSlot, { name: string; channel: MapChannel; path?: string; baked?: boolean; version: number }>>
+export interface ProjectState {
+  docs: { shared: Doc; separate: Record<string, Doc> }
+  textures: { id: string; image: { name: string; path?: string; version: number }; maps: SignatureMaps; materials: number[] }[]
   model: { name: string; path?: string } | null
   modelMaterial: number
   modelUvSet: number
 }
 
+/** A stack as it counts for "modified": colors of auto-generated palettes left out (they regenerate). */
+function docSignature(doc: Doc): unknown {
+  const palettes = doc.palettes.map(({ generatedFor: _generatedFor, variants: _variants, ...p }) => (p.generator?.auto ? { ...p, colors: p.colors.filter((c) => c.locked) } : p))
+  return { stages: doc.stages, palettes, outputLock: doc.outputLock }
+}
+
 /**
  * A fingerprint of what a project saves. Colors of auto-generated palettes are left out: they
- * follow from the rest (and regenerate after loading without changing anything).
+ * follow from the rest (and regenerate after loading without changing anything). Which texture
+ * is being worked on doesn't count.
  */
 export function projectSignature(s: ProjectState): string {
-  const palettes = s.palettes.map(({ generatedFor: _generatedFor, variants: _variants, ...p }) => (p.generator?.auto ? { ...p, colors: p.colors.filter((c) => c.locked) } : p))
-  const maps = MAP_SLOTS.flatMap(({ id }) => {
-    const m = s.maps[id]
-    if (!m) return []
-    return [[id, m.channel, m.baked ? `baked#${m.version}` : (m.path ?? `${m.name}#${m.version}`)]]
-  })
   return JSON.stringify({
-    stages: s.stages,
-    palettes,
-    outputLock: s.outputLock,
-    image: s.image && (s.image.path ?? `${s.image.name}#${s.image.version}`),
-    maps,
+    shared: docSignature(s.docs.shared),
+    textures: s.textures.map((t) => ({
+      image: t.image.path ?? `${t.image.name}#${t.image.version}`,
+      maps: MAP_SLOTS.flatMap(({ id }) => {
+        const m = t.maps[id]
+        if (!m) return []
+        return [[id, m.channel, m.baked ? `baked#${m.version}` : (m.path ?? `${m.name}#${m.version}`)]]
+      }),
+      doc: s.docs.separate[t.id] ? docSignature(s.docs.separate[t.id]!) : null,
+      materials: t.materials
+    })),
     model: s.model && [s.model.path ?? s.model.name, s.modelMaterial, s.modelUvSet]
   })
 }

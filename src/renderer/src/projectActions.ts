@@ -1,4 +1,4 @@
-// Projects: saving the session (stack, palettes, texture, maps, model) to a .pxproj file and
+// Projects: saving the session (stacks, palettes, textures, maps, model) to a .pxproj file and
 // opening it again, plus the "unsaved changes" question before a project is replaced or the
 // window closes.
 
@@ -6,12 +6,12 @@ import { useMemo } from 'react'
 import type { OpenedFile } from '@shared/api'
 import { MAP_SLOTS } from '@shared/maps'
 import { baseName, fileRef, PROJECT_SUFFIX } from '@shared/project'
-import { clearMaps, loadImageFile, loadMapInto } from '@/actions'
+import { loadImageFile, loadMapInto } from '@/actions'
 import { getEngine } from '@/engine'
 import { readTextureRgba8 } from '@/gpu/textureIO'
 import { encodePng } from '@/image/png'
 import { closeModel, loadModelFile, stopBake } from '@/modelActions'
-import { base64ToBytes, bytesToBase64, parseProject, projectSignature, serializeProject, type ProjectData, type ProjectMap } from '@/stack/project'
+import { base64ToBytes, bytesToBase64, parseProject, projectSignature, serializeProject, type ProjectData, type ProjectMap, type ProjectTexture } from '@/stack/project'
 import { useApp, type AppState } from '@/store'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
@@ -26,18 +26,12 @@ export function projectDirty(state: AppState = useApp.getState()): boolean {
 /** projectDirty() for components; recomputed only when something a project saves changes. */
 export function useProjectDirty(): boolean {
   const project = useApp((s) => s.project)
-  const stages = useApp((s) => s.stages)
-  const palettes = useApp((s) => s.palettes)
-  const outputLock = useApp((s) => s.outputLock)
-  const image = useApp((s) => s.image)
-  const maps = useApp((s) => s.maps)
+  const docs = useApp((s) => s.docs)
+  const textures = useApp((s) => s.textures)
   const model = useApp((s) => s.model)
   const material = useApp((s) => s.modelMaterial)
   const uvSet = useApp((s) => s.modelUvSet)
-  return useMemo(
-    () => !!project && projectDirty(useApp.getState()),
-    [project, stages, palettes, outputLock, image, maps, model, material, uvSet]
-  )
+  return useMemo(() => !!project && projectDirty(useApp.getState()), [project, docs, textures, model, material, uvSet])
 }
 
 async function texturePng(texture: GPUTexture): Promise<string> {
@@ -49,31 +43,36 @@ async function texturePng(texture: GPUTexture): Promise<string> {
 async function snapshot(state: AppState, path: string): Promise<{ data: ProjectData; notes: string[] }> {
   const engine = getEngine()!
   const notes: string[] = []
-  const { image, model } = state
+  const { model } = state
 
-  let texture: ProjectData['texture'] = null
-  if (image?.path) texture = { name: image.name, file: fileRef(path, image.path) }
-  else if (image && engine.sourceTexture) texture = { name: image.name, png: await texturePng(engine.sourceTexture) }
-
-  const maps: ProjectMap[] = []
-  for (const { id: slot } of MAP_SLOTS) {
-    const map = state.maps[slot]
-    if (!map) continue
-    const base = { slot, channel: map.channel, name: map.name }
-    if (map.path && !map.baked) {
-      maps.push({ ...base, file: fileRef(path, map.path) })
-      continue
+  const textures: ProjectTexture[] = []
+  for (const t of state.textures) {
+    const { image } = t
+    const source = engine.sourceOf(t.id)
+    const pixels = image.path ? { name: image.name, file: fileRef(path, image.path) } : source ? { name: image.name, png: await texturePng(source) } : null
+    if (!pixels) continue
+    const maps: ProjectMap[] = []
+    for (const { id: slot } of MAP_SLOTS) {
+      const map = t.maps[slot]
+      if (!map) continue
+      const base = { slot, channel: map.channel, name: map.name }
+      if (map.path && !map.baked) {
+        maps.push({ ...base, file: fileRef(path, map.path) })
+        continue
+      }
+      const gpuTexture = engine.mapTexture(slot, t.id)
+      if (gpuTexture) maps.push({ ...base, png: await texturePng(gpuTexture), ...(map.baked ? { baked: true as const } : {}) })
     }
-    const gpuTexture = engine.mapTexture(slot)
-    if (gpuTexture) maps.push({ ...base, png: await texturePng(gpuTexture), ...(map.baked ? { baked: true as const } : {}) })
+    const doc = state.docs.separate[t.id]
+    textures.push({ ...pixels, maps, ...(doc ? { doc } : {}), materials: t.materials })
   }
+  const active = Math.max(state.textures.findIndex((t) => t.id === state.activeTextureId), 0)
 
   let projectModel: ProjectData['model'] = null
   if (model?.path) projectModel = { name: model.name, file: fileRef(path, model.path), material: state.modelMaterial, uvSet: state.modelUvSet }
   else if (model) notes.push(`${model.name} has no file on disk, so the project doesn't include it.`)
 
-  const doc = { stages: state.stages, palettes: state.palettes, outputLock: state.outputLock }
-  return { data: { doc, presetName: state.presetName, texture, maps, model: projectModel }, notes }
+  return { data: { doc: state.docs.shared, presetName: state.presetName, textures, active, model: projectModel }, notes }
 }
 
 function suggestedName(state: AppState): string {
@@ -144,11 +143,8 @@ export function startProjectGuard(): () => void {
   const unsubscribe = useApp.subscribe((s, prev) => {
     const relevant =
       s.project !== prev.project ||
-      s.stages !== prev.stages ||
-      s.palettes !== prev.palettes ||
-      s.outputLock !== prev.outputLock ||
-      s.image !== prev.image ||
-      s.maps !== prev.maps ||
+      s.docs !== prev.docs ||
+      s.textures !== prev.textures ||
       s.model !== prev.model ||
       s.modelMaterial !== prev.modelMaterial ||
       s.modelUvSet !== prev.modelUvSet
@@ -203,19 +199,29 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
   stopBake()
   // A project replaces every open texture.
   for (const t of useApp.getState().textures) useApp.getState().closeTexture(t.id)
-  // The stack first, so the texture is processed with it right away.
+  // The shared stack first, so textures are processed with it right away.
   app.loadDoc(project.doc)
-  app.clearHistory()
   app.setPresetName(project.presetName)
 
-  const { texture } = project
-  if (texture) {
-    const f = 'file' in texture ? await read(texture.file) : { name: texture.name, bytes: base64ToBytes(texture.png) }
-    if (f) await loadImageFile(f.name, f.bytes, f.path, { findMaps: false })
-    if (!f || useApp.getState().image?.name !== f.name) missing.push(texture.name)
+  const pixelsOf = async (t: ProjectTexture | ProjectMap): Promise<OpenedFile | null> =>
+    'file' in t ? read(t.file) : { name: t.name, bytes: base64ToBytes(t.png) }
+
+  // The textures, each with its separate stack.
+  const ids: (string | null)[] = []
+  for (const t of project.textures) {
+    const f = await pixelsOf(t)
+    const id = f ? await loadImageFile(f.name, f.bytes, f.path, { findMaps: false, materials: t.materials }) : null
+    ids.push(id)
+    if (!id) {
+      missing.push(t.name)
+      continue
+    }
+    if (t.doc) {
+      useApp.getState().selectTexture(id)
+      useApp.getState().setTextureStack(id, 'separate')
+      useApp.getState().loadDoc(t.doc)
+    }
   }
-  // The project lists its maps; the ones open now belong to the previous texture and model.
-  clearMaps()
 
   if (project.model) {
     const f = await read(project.model.file)
@@ -226,19 +232,28 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
     }
   } else if (useApp.getState().model) closeModel()
 
-  // After the model: loading one clears baked maps.
-  for (const map of project.maps) {
-    const f = 'file' in map ? await read(map.file) : { name: map.name, bytes: base64ToBytes(map.png) }
-    if (!f) {
-      missing.push(map.name)
-      continue
-    }
-    try {
-      await loadMapInto([{ slot: map.slot, channel: map.channel }], 'file' in map ? f.name : map.name, f.bytes, f.path, { baked: 'baked' in map })
-    } catch (e) {
-      warnings.push(`Couldn't load ${map.name}: ${errorText(e)}.`)
+  // After the model: loading one clears baked maps and material bindings.
+  for (const [i, t] of project.textures.entries()) {
+    const id = ids[i]
+    if (!id) continue
+    if (useApp.getState().model) useApp.getState().assignMaterials(id, t.materials)
+    for (const map of t.maps) {
+      const f = await pixelsOf(map)
+      if (!f) {
+        missing.push(map.name)
+        continue
+      }
+      try {
+        await loadMapInto([{ slot: map.slot, channel: map.channel }], 'file' in map ? f.name : map.name, f.bytes, f.path, { baked: 'baked' in map, textureId: id })
+      } catch (e) {
+        warnings.push(`Couldn't load ${map.name}: ${errorText(e)}.`)
+      }
     }
   }
+  const active = ids[project.active] ?? ids.find(Boolean)
+  if (active) useApp.getState().selectTexture(active)
+  if (project.model && project.model.material < (useApp.getState().model?.materials.length ?? 0)) useApp.getState().setModelMaterial(project.model.material)
+  useApp.getState().clearHistory()
 
   const name = withoutSuffix(file.name)
   useApp.getState().setProject({ path: projectPath, name, saved: projectSignature(useApp.getState()) })
