@@ -10,6 +10,7 @@ import type { RgbaImage } from '@/image/png'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
 import type { TextureEntry } from '@/stack/textures'
+import { openExportAll } from './ExportDialog'
 import { Button } from './ui/button'
 import { Field, Segmented } from './ui/controls'
 import { Select } from './ui/select'
@@ -84,6 +85,11 @@ export function TexturesPanel() {
             <Button size="sm" disabled={!gpuReady} onClick={() => void openImage()} title="Open textures (several at once)">
               Add textures…
             </Button>
+            {textures.length > 1 && (
+              <Button size="sm" onClick={openExportAll} title="Export every texture's result into one folder">
+                Export all…
+              </Button>
+            )}
           </div>
         </div>
       </GroupBox>

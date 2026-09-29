@@ -1,6 +1,7 @@
 import type { ExportFileType, ExportFormat, FileFilter, MenuCommand, OpenedFile, Theme, ViewMode } from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, textureBase, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
+import { uniqueFileNames } from '@shared/exportNames'
 import { isProjectFile } from '@shared/project'
 import type { View3dLookChoice } from '@shared/view3d'
 import { encodePattern, patternFromRgba } from '@/dither/customPattern'
@@ -20,6 +21,7 @@ import { openProject, openProjectFile, saveProject } from '@/projectActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
 import { LEGACY_PRESET_EXTENSION, parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
 import { newId, useApp, type MapInfo } from '@/store'
+import { docFor } from '@/stack/textures'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -411,6 +413,16 @@ export async function describeOutput(): Promise<OutputSummary | null> {
   }
 }
 
+/** An exported file's bytes, and how it was stored (for the message). */
+async function encodeOutput(rgba: RgbaImage, options: ExportOptions, palettes: Palette[]): Promise<{ bytes: Uint8Array; detail: string }> {
+  const { type, indexed } = parseExportFormat(options.format)
+  const encoder = ENCODERS[type]
+  if (!indexed) return { bytes: await encoder.rgba(rgba), detail: 'RGBA' }
+  const palette = options.paletteId ? palettes.find((p) => p.id === options.paletteId) : undefined
+  const image = toIndexed(rgba, palette?.colors.map((c) => c.hex), { alpha: encoder.indexedAlpha })
+  return { bytes: await encoder.indexed(image), detail: `${image.palette.length} colors, ${encoder.indexedDepth(image.palette.length)}-bit indexed` }
+}
+
 /** Returns true when the file was written. */
 export async function exportImage(options: ExportOptions): Promise<boolean> {
   const engine = getEngine()
@@ -418,19 +430,8 @@ export async function exportImage(options: ExportOptions): Promise<boolean> {
   if (!engine || !image) return false
   try {
     const rgba = await engine.readOutput()
-    const { type, indexed } = parseExportFormat(options.format)
-    const encoder = ENCODERS[type]
-    let bytes: Uint8Array
-    let detail: string
-    if (indexed) {
-      const palette = options.paletteId ? palettes.find((p) => p.id === options.paletteId) : undefined
-      const image = toIndexed(rgba, palette?.colors.map((c) => c.hex), { alpha: encoder.indexedAlpha })
-      bytes = await encoder.indexed(image)
-      detail = `${image.palette.length} colors, ${encoder.indexedDepth(image.palette.length)}-bit indexed`
-    } else {
-      bytes = await encoder.rgba(rgba)
-      detail = 'RGBA'
-    }
+    const encoder = ENCODERS[parseExportFormat(options.format).type]
+    const { bytes, detail } = await encodeOutput(rgba, options, palettes)
     const path = await window.fx.saveFile(`${baseName()}_4fx.${encoder.filter.extensions[0]}`, bytes, [encoder.filter])
     if (!path) return false
     setMessage({ kind: 'info', text: `Saved ${path} (${rgba.width}×${rgba.height}, ${detail})` })
@@ -439,6 +440,52 @@ export async function exportImage(options: ExportOptions): Promise<boolean> {
     setMessage({ kind: 'error', text: `Export failed: ${errorText(e)}` })
     return false
   }
+}
+
+/** Runs a texture's stack now (a texture not shown may not be up to date yet). */
+function processTextureNow(id: string): void {
+  const engine = getEngine()
+  const s = useApp.getState()
+  const t = s.textures.find((x) => x.id === id)
+  if (!engine || !t || id === s.activeTextureId) return
+  engine.processTexture(id, {
+    ...docFor(s.docs, id),
+    previewUid: null,
+    mapChannels: Object.fromEntries(Object.entries(t.maps).map(([slot, map]) => [slot, map.channel]))
+  })
+}
+
+/**
+ * Exports every open texture into a folder picked once, named like its texture (rock_4fx.png).
+ * An indexed export against a palette uses each texture's own colors of it. Returns true when
+ * any file was written.
+ */
+export async function exportAllTextures(options: ExportOptions): Promise<boolean> {
+  const engine = getEngine()
+  const { textures, setMessage } = useApp.getState()
+  if (!engine || !textures.length) return false
+  const folder = await window.fx.chooseExportFolder()
+  if (!folder) return false
+  const ext = ENCODERS[parseExportFormat(options.format).type].filter.extensions[0]
+  const names = uniqueFileNames(textures.map((t) => `${t.image.name.replace(/\.[^.]+$/, '')}_4fx.${ext}`))
+  const failed: string[] = []
+  let written = 0
+  for (const [i, t] of textures.entries()) {
+    try {
+      processTextureNow(t.id)
+      const rgba = await engine.readOutput(t.id)
+      const { bytes } = await encodeOutput(rgba, options, docFor(useApp.getState().docs, t.id).palettes)
+      await window.fx.writeExportFile(folder, names[i]!, bytes)
+      written++
+    } catch (e) {
+      failed.push(`${t.image.name} (${errorText(e)})`)
+    }
+  }
+  setMessage({
+    kind: failed.length ? 'error' : 'info',
+    text: `Exported ${written} of ${textures.length} textures to ${folder}${failed.length ? `. Couldn't export ${failed.join(', ')}` : ''}`
+  })
+  return written > 0
 }
 
 function importPaletteBytes(name: string, bytes: Uint8Array): void {

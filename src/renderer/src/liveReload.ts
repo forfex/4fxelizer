@@ -1,4 +1,4 @@
-// Live reload: the open texture, its maps and the model (with the files it was parsed with) reload
+// Live reload: the open textures, their maps and the model (with the files it was parsed with) reload
 // when their files change on disk, e.g. when the artist saves from Photoshop or re-exports from
 // Blender. Main watches the files (src/main/watch.ts); this keeps its list current and reloads
 // what changed. File > Reload Changed Files turns it off.
@@ -13,9 +13,9 @@ import { changedRoles, watchedPaths } from './watchedFiles'
 let modelQueued = false
 
 async function reload(path: string, roles: ReturnType<typeof changedRoles>): Promise<void> {
-  if (roles.texture || roles.map) {
+  if (roles.textures.length || roles.map) {
     const file = await window.fx.readWatchedFile(path)
-    if (file && roles.texture) await reloadImageFile(file)
+    if (file) for (const id of roles.textures) await reloadImageFile(file, id)
     if (file && roles.map) await reloadMapFile(file)
   }
   if (roles.model) {
@@ -46,12 +46,12 @@ export function startLiveReload(): () => void {
   const offChange = window.fx.onFileChanged((path) => {
     const roles = changedRoles(useApp.getState(), path)
     if (roles.model && modelQueued) roles.model = false
-    if (!roles.texture && !roles.map && !roles.model) return
+    if (!roles.textures.length && !roles.map && !roles.model) return
     if (roles.model) modelQueued = true
     queue = queue.then(() => reload(path, roles)).catch((e) => console.warn('Live reload failed:', e))
   })
   const unsubscribe = useApp.subscribe((s, prev) => {
-    if (s.liveReload !== prev.liveReload || s.image !== prev.image || s.maps !== prev.maps || s.model !== prev.model) sync()
+    if (s.liveReload !== prev.liveReload || s.textures !== prev.textures || s.model !== prev.model) sync()
   })
   sync()
   return () => {

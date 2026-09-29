@@ -331,6 +331,10 @@ export interface FxApi {
   readModelFile(modelPath: string, reference: string): Promise<OpenedFile | null>
   openFile(filters: FileFilter[]): Promise<OpenedFile | null>
   saveFile(defaultName: string, bytes: Uint8Array, filters: FileFilter[]): Promise<string | null>
+  /** Asks for a folder to export into; null = cancelled. */
+  chooseExportFolder(): Promise<string | null>
+  /** Writes an exported image into a folder picked with chooseExportFolder (plain image file names only). Returns its path. */
+  writeExportFile(folder: string, name: string, bytes: Uint8Array): Promise<string>
   /** Map files (AO, cavity, …) next to a texture, recognized by name (see @shared/maps). */
   findMaps(texturePath: string): Promise<OpenedFile[]>
   /** Path on disk of a dropped file ('' when it has none). */
@@ -387,6 +391,8 @@ export const IPC = {
   readModelFile: 'model:read-file',
   openFile: 'file:open',
   saveFile: 'file:save',
+  chooseExportFolder: 'export:choose-folder',
+  writeExportFile: 'export:write',
   findMaps: 'maps:find',
   watchFiles: 'files:watch',
   fileChanged: 'files:changed',

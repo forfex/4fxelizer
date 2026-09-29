@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { EXPORT_FILE_TYPES } from '@shared/api'
-import { describeOutput, ENCODERS, exportImage, parseExportFormat, type ExportFormat, type OutputSummary } from '@/actions'
+import { describeOutput, ENCODERS, exportAllTextures, exportImage, parseExportFormat, type ExportFormat, type OutputSummary } from '@/actions'
 import type { DitherParams } from '@/gpu/passes/dither'
 import type { QuantizeParams } from '@/gpu/passes/quantize'
 import { psxChecks, type PsxCheckState } from '@/image/psx'
@@ -37,6 +37,15 @@ function likelyPalette(): string | null {
   return palette && palette.colors.length <= MAX_INDEXED ? palette.id : null
 }
 
+/** The next time the dialog opens, it starts on "All textures". */
+let startWithAll = false
+
+/** Opens the export dialog set to export every open texture. */
+export function openExportAll(): void {
+  startWithAll = true
+  useApp.getState().setExportOpen(true)
+}
+
 export function ExportDialog() {
   const open = useApp((s) => s.exportOpen)
   const setOpen = useApp((s) => s.setExportOpen)
@@ -46,9 +55,14 @@ export function ExportDialog() {
   const [output, setOutput] = useState<OutputSummary | null>(null)
   const [busy, setBusy] = useState(false)
   const [psxCheck, setPsxCheck] = useState(() => savedSettings().psxCheck)
+  const textureCount = useApp((s) => s.textures.length)
+  const [all, setAll] = useState(false)
+  const exportAll = all && textureCount > 1
 
   useEffect(() => {
     if (!open) return
+    setAll(startWithAll)
+    startWithAll = false
     setOutput(null)
     setPaletteChoice(likelyPalette() ?? IMAGE_COLORS)
     describeOutput().then(setOutput, () => setOutput(null))
@@ -95,7 +109,8 @@ export function ExportDialog() {
 
   const run = async (): Promise<void> => {
     setBusy(true)
-    const ok = await exportImage({ format, paletteId: indexed ? (palette?.id ?? null) : null })
+    const options = { format, paletteId: indexed ? (palette?.id ?? null) : null }
+    const ok = exportAll ? await exportAllTextures(options) : await exportImage(options)
     setBusy(false)
     if (ok) setOpen(false)
   }
@@ -104,6 +119,19 @@ export function ExportDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent title="Export" className="w-[min(460px,90vw)]">
         <div className="flex flex-col gap-2.5">
+          {textureCount > 1 && (
+            <Field label="Textures" hint="Export the texture you're working on, or every open texture into one folder (named like each texture).">
+              <Segmented
+                className="flex-1"
+                value={exportAll ? 'all' : 'this'}
+                onChange={(v) => setAll(v === 'all')}
+                options={[
+                  { value: 'this', label: 'This one' },
+                  { value: 'all', label: `All ${textureCount}` }
+                ]}
+              />
+            </Field>
+          )}
           <Field label="Format">
             <Segmented
               className="flex-1"
@@ -170,8 +198,8 @@ export function ExportDialog() {
             <DialogClose asChild>
               <Button>Cancel</Button>
             </DialogClose>
-            <Button variant="primary" onClick={run} disabled={busy || tooManyColors}>
-              {busy ? 'Exporting…' : 'Export…'}
+            <Button variant="primary" onClick={run} disabled={busy || (tooManyColors && !exportAll)}>
+              {busy ? 'Exporting…' : exportAll ? 'Export all…' : 'Export…'}
             </Button>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { IPC, THEME_WINDOW_COLORS, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
+import { isExportFileName } from '@shared/exportNames'
 import { MAP_IMAGE_EXTENSIONS, siblingMaps } from '@shared/maps'
 import { isModelFile, isModelResource, MODEL_EXTENSIONS, referenceCandidates } from '@shared/model'
 import { baseName, isProjectFile, PROJECT_EXTENSION, type ProjectFileRef } from '@shared/project'
@@ -226,6 +227,25 @@ function registerIpc(): void {
     if (result.canceled || !result.filePath) return null
     await writeFile(result.filePath, bytes)
     return result.filePath
+  })
+
+  // Export into a folder: only folders the user picked in a dialog, only plain image file names.
+  const exportFolders = new Set<string>()
+  ipcMain.handle(IPC.chooseExportFolder, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(win, { title: 'Export all textures into', properties: ['openDirectory', 'createDirectory'] })
+    const folder = result.filePaths[0]
+    if (result.canceled || !folder) return null
+    exportFolders.add(resolve(folder))
+    return folder
+  })
+  ipcMain.handle(IPC.writeExportFile, async (_event, folder: unknown, name: unknown, bytes: unknown) => {
+    if (typeof folder !== 'string' || !exportFolders.has(resolve(folder))) throw new Error('Pick the folder to export into first.')
+    if (typeof name !== 'string' || !isExportFileName(name)) throw new Error(`"${String(name)}" isn't a file name the app exports.`)
+    if (!(bytes instanceof Uint8Array)) throw new Error('Nothing to write.')
+    const path = join(resolve(folder), name)
+    await writeFile(path, bytes)
+    return path
   })
 
   ipcMain.handle(IPC.projectOpen, (event) => openFile(BrowserWindow.fromWebContents(event.sender)!, PROJECT_FILTERS))
