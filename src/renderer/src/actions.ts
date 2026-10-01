@@ -15,7 +15,7 @@ import { encodeIndexedPng, encodePng, indexedBitDepth, type IndexedImage, type R
 import { psxStats, type PsxStats } from '@/image/psx'
 import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
-import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
+import { applyPick, MAX_PALETTE, normalizeHex, rgb8ToHex, type Palette } from '@/palette/palette'
 import { loadModelFile, openModel } from '@/modelActions'
 import { newProject, openProject, openProjectFile, saveProject } from '@/projectActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
@@ -549,8 +549,7 @@ export function shownPalette(): Palette | undefined {
 
 /**
  * Eyedropper: picks the color the viewer shows at `uv` (0–1 across the image) on one side of the
- * split into the shown palette. Replaces the selected color (which stays selected), or else adds a
- * new one without selecting it, so repeated picks keep adding colors.
+ * split into the shown palette (`addPickedColor`).
  */
 export async function pickColor(side: 'before' | 'after', uv: { u: number; v: number }): Promise<void> {
   const engine = getEngine()
@@ -566,34 +565,70 @@ export async function pickColor(side: 'before' | 'after', uv: { u: number; v: nu
       setMessage({ kind: 'error', text: 'That pixel is fully transparent; pick a visible one.' })
       return
     }
-    const palette = shownPalette()
-    if (!palette) {
-      setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
-      return
-    }
-    const hex = rgb8ToHex(r, g, b)
-    const { selectedColor, updatePalette, selectColor } = useApp.getState()
-    // An undo can leave the selection past the end of the palette; then the pick adds a color.
-    const index = selectedColor?.paletteId === palette.id && selectedColor.index < palette.colors.length ? selectedColor.index : null
-    const result = applyPick(palette.colors, hex, index, !!palette.generator)
-    if (!result) {
-      setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
-      return
-    }
-    if (result.colors !== palette.colors) updatePalette(palette.id, { colors: result.colors }, { coalesce: undefined })
-    if (index !== null) selectColor({ paletteId: palette.id, index })
-    const text =
-      index !== null
-        ? `Replaced color ${index} with ${hex}`
-        : result.index < palette.colors.length
-          ? `${hex} is already color ${result.index}${result.colors !== palette.colors ? ' (now locked)' : ''}`
-          : palette.generator
-            ? `Added ${hex} as a locked color (regenerating fills the rest)`
-            : `Added ${hex} as color ${result.index}`
-    setMessage({ kind: 'info', text: `${text} in "${palette.name}"` })
+    addPickedColor(rgb8ToHex(r, g, b))
   } catch (e) {
     setMessage({ kind: 'error', text: `Couldn't pick a color: ${errorText(e)}` })
   }
+}
+
+/**
+ * Screen eyedropper: picks a color from anywhere on screen, other applications included, into the
+ * shown palette (like `pickColor`). Must run from a click: Chromium opens the picker only on a user
+ * gesture. Esc cancels it.
+ */
+export async function pickScreenColor(): Promise<void> {
+  const { setMessage } = useApp.getState()
+  if (!screenPickerAvailable()) {
+    setMessage({ kind: 'error', text: "Picking colors from the screen isn't supported on this system." })
+    return
+  }
+  try {
+    const { sRGBHex } = await new EyeDropper().open()
+    const hex = normalizeHex(sRGBHex)
+    if (!hex) throw new Error(`unexpected color "${sRGBHex}"`)
+    addPickedColor(hex)
+  } catch (e) {
+    // Esc (or a click that leaves the picker) cancels it.
+    if (e instanceof DOMException && e.name === 'AbortError') return
+    setMessage({ kind: 'error', text: `Couldn't pick a color: ${errorText(e)}` })
+  }
+}
+
+/** Chromium's EyeDropper API: picks from the whole screen (Windows, macOS; Linux depends on the build). */
+export function screenPickerAvailable(): boolean {
+  return typeof window !== 'undefined' && 'EyeDropper' in window
+}
+
+/**
+ * Puts a picked color into the shown palette. Replaces the selected color (which stays selected),
+ * or else adds a new one without selecting it, so repeated picks keep adding colors.
+ */
+function addPickedColor(hex: string): void {
+  const { setMessage } = useApp.getState()
+  const palette = shownPalette()
+  if (!palette) {
+    setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
+    return
+  }
+  const { selectedColor, updatePalette, selectColor } = useApp.getState()
+  // An undo can leave the selection past the end of the palette; then the pick adds a color.
+  const index = selectedColor?.paletteId === palette.id && selectedColor.index < palette.colors.length ? selectedColor.index : null
+  const result = applyPick(palette.colors, hex, index, !!palette.generator)
+  if (!result) {
+    setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
+    return
+  }
+  if (result.colors !== palette.colors) updatePalette(palette.id, { colors: result.colors }, { coalesce: undefined })
+  if (index !== null) selectColor({ paletteId: palette.id, index })
+  const text =
+    index !== null
+      ? `Replaced color ${index} with ${hex}`
+      : result.index < palette.colors.length
+        ? `${hex} is already color ${result.index}${result.colors !== palette.colors ? ' (now locked)' : ''}`
+        : palette.generator
+          ? `Added ${hex} as a locked color (regenerating fills the rest)`
+          : `Added ${hex} as color ${result.index}`
+  setMessage({ kind: 'info', text: `${text} in "${palette.name}"` })
 }
 
 // ── Presets ────────────────────────────────────────────────────────────────
