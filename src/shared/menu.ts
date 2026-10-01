@@ -70,6 +70,8 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
         role('Paste', 'paste', 'CmdOrCtrl+V'),
         role('Select All', 'selectAll', 'CmdOrCtrl+A'),
         separator,
+        command('Pick Color from Screen', 'pick-screen-color', 'CmdOrCtrl+Shift+C'),
+        separator,
         command('Settings…', 'settings', 'CmdOrCtrl+,')
       ]
     },

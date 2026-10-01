@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { extractPaletteFromOutput, importPalette, savePalette } from '@/actions'
+import { extractPaletteFromOutput, importPalette, pickScreenColor, savePalette } from '@/actions'
 import { stageLabel } from '@/gpu/passes'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
@@ -18,9 +18,11 @@ import {
   type Palette,
   type PaletteColor
 } from '@/palette/palette'
+import { withShortcut } from '@/settings'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
 import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
+import { ScreenPickIcon } from './ui/icons'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { GroupBox, LCD_CLASS, Led, PanelBody } from './ui/retro'
 import { Select } from './ui/select'
@@ -239,6 +241,19 @@ function PaletteEditor({ palette }: { palette: Palette }) {
             onClick={() => useApp.getState().setPicking(!picking)}
           >
             Pick
+          </Button>
+          <Button
+            size="sm"
+            title={withShortcut(
+              'Pick colors from anywhere on screen: other applications, any monitor. Replaces the selected color, ' +
+                'or adds one. Shift+click picks more, Esc stops.' +
+                (palette.generator ? ' Picked colors are locked, so regenerating keeps them.' : ''),
+              'pick-screen-color'
+            )}
+            onClick={() => void pickScreenColor()}
+          >
+            <ScreenPickIcon />
+            Pick from screen
           </Button>
           <Button
             size="sm"

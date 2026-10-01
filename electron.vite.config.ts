@@ -12,14 +12,21 @@ export default defineConfig({
   preload: {
     resolve: { alias: shared },
     build: {
-      // Sandboxed preload scripts must be CommonJS.
-      rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } }
+      // Sandboxed preload scripts must be CommonJS. `picker` is the screen picker's overlay.
+      rollupOptions: {
+        input: { index: resolve('src/preload/index.ts'), picker: resolve('src/preload/picker.ts') },
+        output: { format: 'cjs', entryFileNames: '[name].cjs' }
+      }
     }
   },
   renderer: {
     resolve: {
       alias: { ...shared, '@': resolve('src/renderer/src') }
     },
-    plugins: [react(), tailwindcss()]
+    plugins: [react(), tailwindcss()],
+    build: {
+      // The app window, and the screen picker's overlay (src/main/screenPicker.ts).
+      rollupOptions: { input: { index: resolve('src/renderer/index.html'), picker: resolve('src/renderer/picker.html') } }
+    }
   }
 })

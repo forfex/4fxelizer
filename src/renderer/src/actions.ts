@@ -549,8 +549,7 @@ export function shownPalette(): Palette | undefined {
 
 /**
  * Eyedropper: picks the color the viewer shows at `uv` (0–1 across the image) on one side of the
- * split into the shown palette. Replaces the selected color (which stays selected), or else adds a
- * new one without selecting it, so repeated picks keep adding colors.
+ * split into the shown palette (`addPickedColor`).
  */
 export async function pickColor(side: 'before' | 'after', uv: { u: number; v: number }): Promise<void> {
   const engine = getEngine()
@@ -566,34 +565,75 @@ export async function pickColor(side: 'before' | 'after', uv: { u: number; v: nu
       setMessage({ kind: 'error', text: 'That pixel is fully transparent; pick a visible one.' })
       return
     }
-    const palette = shownPalette()
-    if (!palette) {
-      setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
-      return
-    }
-    const hex = rgb8ToHex(r, g, b)
-    const { selectedColor, updatePalette, selectColor } = useApp.getState()
-    // An undo can leave the selection past the end of the palette; then the pick adds a color.
-    const index = selectedColor?.paletteId === palette.id && selectedColor.index < palette.colors.length ? selectedColor.index : null
-    const result = applyPick(palette.colors, hex, index, !!palette.generator)
-    if (!result) {
-      setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
-      return
-    }
-    if (result.colors !== palette.colors) updatePalette(palette.id, { colors: result.colors }, { coalesce: undefined })
-    if (index !== null) selectColor({ paletteId: palette.id, index })
-    const text =
-      index !== null
-        ? `Replaced color ${index} with ${hex}`
-        : result.index < palette.colors.length
-          ? `${hex} is already color ${result.index}${result.colors !== palette.colors ? ' (now locked)' : ''}`
-          : palette.generator
-            ? `Added ${hex} as a locked color (regenerating fills the rest)`
-            : `Added ${hex} as color ${result.index}`
-    setMessage({ kind: 'info', text: `${text} in "${palette.name}"` })
+    addPickedColor(rgb8ToHex(r, g, b))
   } catch (e) {
     setMessage({ kind: 'error', text: `Couldn't pick a color: ${errorText(e)}` })
   }
+}
+
+/**
+ * Screen picker: picks colors from anywhere on screen (other applications, every monitor) into the
+ * shown palette. The first replaces the selected color like `pickColor`; Shift+click picks add more.
+ */
+export async function pickScreenColor(): Promise<void> {
+  const { setMessage } = useApp.getState()
+  if (!shownPalette()) {
+    setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
+    return
+  }
+  try {
+    const result = await window.fx.pickScreenColors()
+    if ('error' in result) {
+      setMessage({ kind: 'error', text: result.error })
+      return
+    }
+    // One undo step for the whole pick; stops at the first color that doesn't fit.
+    const coalesce = `screen-pick:${performance.now()}`
+    let added = 0
+    for (const hex of result.colors) {
+      if (!addPickedColor(hex, added === 0, coalesce)) break
+      added++
+    }
+    const palette = shownPalette()
+    if (added > 1 && palette) setMessage({ kind: 'info', text: `Picked ${added} colors into "${palette.name}"` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't pick a color: ${errorText(e)}` })
+  }
+}
+
+/**
+ * Puts a picked color into the shown palette. Replaces the selected color (which stays selected)
+ * when `replaceSelected`, or else adds a new one without selecting it, so repeated picks keep
+ * adding colors. `coalesce` merges picks into one undo step. Returns false when it didn't fit.
+ */
+function addPickedColor(hex: string, replaceSelected = true, coalesce?: string): boolean {
+  const { setMessage } = useApp.getState()
+  const palette = shownPalette()
+  if (!palette) {
+    setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
+    return false
+  }
+  const { selectedColor, updatePalette, selectColor } = useApp.getState()
+  // An undo can leave the selection past the end of the palette; then the pick adds a color.
+  const index =
+    replaceSelected && selectedColor?.paletteId === palette.id && selectedColor.index < palette.colors.length ? selectedColor.index : null
+  const result = applyPick(palette.colors, hex, index, !!palette.generator)
+  if (!result) {
+    setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
+    return false
+  }
+  if (result.colors !== palette.colors) updatePalette(palette.id, { colors: result.colors }, { coalesce })
+  if (index !== null) selectColor({ paletteId: palette.id, index })
+  const text =
+    index !== null
+      ? `Replaced color ${index} with ${hex}`
+      : result.index < palette.colors.length
+        ? `${hex} is already color ${result.index}${result.colors !== palette.colors ? ' (now locked)' : ''}`
+        : palette.generator
+          ? `Added ${hex} as a locked color (regenerating fills the rest)`
+          : `Added ${hex} as color ${result.index}`
+  setMessage({ kind: 'info', text: `${text} in "${palette.name}"` })
+  return true
 }
 
 // ── Presets ────────────────────────────────────────────────────────────────
@@ -751,5 +791,6 @@ export function runMenuCommand(command: MenuCommand): void {
       app.setUpdateOpen(true)
       return window.fx.checkForUpdates()
     case 'settings': return app.setSettingsOpen(true)
+    case 'pick-screen-color': return void pickScreenColor()
   }
 }
