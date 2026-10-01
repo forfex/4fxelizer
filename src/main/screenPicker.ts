@@ -3,7 +3,7 @@
 // other applications and on every monitor, with no native code: the capture is desktopCapturer's.
 
 import { join } from 'node:path'
-import { BrowserWindow, desktopCapturer, ipcMain, screen, systemPreferences, type Display } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen, systemPreferences, type Display } from 'electron'
 import { isHexColor, matchSources, physicalSize, PICKER_IPC, type ScreenCapture, type ScreenPickResult } from '@shared/screenPick'
 
 interface Session {
@@ -69,7 +69,12 @@ async function run(owner: BrowserWindow, theme: string): Promise<ScreenPickResul
         if (session !== s) return
         session = null
         for (const w of s.overlays) if (!w.isDestroyed()) w.destroy()
-        if (!owner.isDestroyed()) owner.focus()
+        // setVisibleOnAllWorkspaces(visibleOnFullScreen) hides the dock icon and menu bar; bring them back.
+        if (process.platform === 'darwin') void app.dock?.show()
+        if (!owner.isDestroyed()) {
+          owner.off('closed', s.finish)
+          owner.focus()
+        }
         resolve({ colors: s.colors })
       }
     }
@@ -138,8 +143,10 @@ function openOverlay(display: Display, capture: Omit<ScreenCapture, 'picked'>, t
   win.webContents.on('will-navigate', (event) => event.preventDefault())
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.once('did-finish-load', () => win.webContents.send(PICKER_IPC.capture, { ...capture, picked: s.colors.length }))
-  // Closed some other way (Alt+F4): the pick ends.
+  // Closed some other way (Alt+F4), or the overlay failed: the pick ends (else it would wait forever, hidden).
   win.once('closed', () => s.finish())
+  win.webContents.on('did-fail-load', (_event, _code, _text, _url, isMainFrame) => isMainFrame && s.finish())
+  win.webContents.on('render-process-gone', () => s.finish())
   const query = { theme }
   if (!process.env.ELECTRON_RENDERER_URL) {
     win.loadFile(join(import.meta.dirname, '../renderer/picker.html'), { query })

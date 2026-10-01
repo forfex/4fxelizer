@@ -587,9 +587,15 @@ export async function pickScreenColor(): Promise<void> {
       setMessage({ kind: 'error', text: result.error })
       return
     }
-    result.colors.forEach((hex, i) => addPickedColor(hex, i === 0))
+    // One undo step for the whole pick; stops at the first color that doesn't fit.
+    const coalesce = `screen-pick:${performance.now()}`
+    let added = 0
+    for (const hex of result.colors) {
+      if (!addPickedColor(hex, added === 0, coalesce)) break
+      added++
+    }
     const palette = shownPalette()
-    if (result.colors.length > 1 && palette) setMessage({ kind: 'info', text: `Picked ${result.colors.length} colors into "${palette.name}"` })
+    if (added > 1 && palette) setMessage({ kind: 'info', text: `Picked ${added} colors into "${palette.name}"` })
   } catch (e) {
     setMessage({ kind: 'error', text: `Couldn't pick a color: ${errorText(e)}` })
   }
@@ -598,14 +604,14 @@ export async function pickScreenColor(): Promise<void> {
 /**
  * Puts a picked color into the shown palette. Replaces the selected color (which stays selected)
  * when `replaceSelected`, or else adds a new one without selecting it, so repeated picks keep
- * adding colors.
+ * adding colors. `coalesce` merges picks into one undo step. Returns false when it didn't fit.
  */
-function addPickedColor(hex: string, replaceSelected = true): void {
+function addPickedColor(hex: string, replaceSelected = true, coalesce?: string): boolean {
   const { setMessage } = useApp.getState()
   const palette = shownPalette()
   if (!palette) {
     setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
-    return
+    return false
   }
   const { selectedColor, updatePalette, selectColor } = useApp.getState()
   // An undo can leave the selection past the end of the palette; then the pick adds a color.
@@ -614,9 +620,9 @@ function addPickedColor(hex: string, replaceSelected = true): void {
   const result = applyPick(palette.colors, hex, index, !!palette.generator)
   if (!result) {
     setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
-    return
+    return false
   }
-  if (result.colors !== palette.colors) updatePalette(palette.id, { colors: result.colors }, { coalesce: undefined })
+  if (result.colors !== palette.colors) updatePalette(palette.id, { colors: result.colors }, { coalesce })
   if (index !== null) selectColor({ paletteId: palette.id, index })
   const text =
     index !== null
@@ -627,6 +633,7 @@ function addPickedColor(hex: string, replaceSelected = true): void {
           ? `Added ${hex} as a locked color (regenerating fills the rest)`
           : `Added ${hex} as color ${result.index}`
   setMessage({ kind: 'info', text: `${text} in "${palette.name}"` })
+  return true
 }
 
 // ── Presets ────────────────────────────────────────────────────────────────
