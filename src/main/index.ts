@@ -10,6 +10,7 @@ import type { MenuRole } from '@shared/menu'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
+import { pickScreenColors, registerScreenPicker } from './screenPicker'
 import { flushSettings, getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
 import { checkForUpdates, currentVersion, installUpdate, prepareInstall, runInstaller, updateState } from './updater'
 import { FileWatcher } from './watch'
@@ -359,6 +360,12 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.gpuInfo, getGpuInfo)
+
+  registerScreenPicker()
+  ipcMain.handle(IPC.pickScreenColors, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return win ? pickScreenColors(win, getSettings().theme) : { colors: [] }
+  })
 
   ipcMain.on(IPC.appVersion, (event) => {
     event.returnValue = currentVersion()

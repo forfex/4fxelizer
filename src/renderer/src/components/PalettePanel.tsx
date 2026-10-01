@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { extractPaletteFromOutput, importPalette, pickScreenColor, savePalette, screenPickerAvailable } from '@/actions'
+import { extractPaletteFromOutput, importPalette, pickScreenColor, savePalette } from '@/actions'
 import { stageLabel } from '@/gpu/passes'
 import { cssColor } from '@/lib/pixelSnap'
 import { cn } from '@/lib/utils'
@@ -18,6 +18,7 @@ import {
   type Palette,
   type PaletteColor
 } from '@/palette/palette'
+import { withShortcut } from '@/settings'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
 import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
@@ -240,19 +241,18 @@ function PaletteEditor({ palette }: { palette: Palette }) {
           >
             Pick
           </Button>
-          {screenPickerAvailable() && (
-            <Button
-              size="sm"
-              title={
-                'Pick a color from anywhere on screen, other applications too. Replaces the selected color, ' +
-                'or adds one. Esc cancels.' +
-                (palette.generator ? ' Picked colors are locked, so regenerating keeps them.' : '')
-              }
-              onClick={() => void pickScreenColor()}
-            >
-              Screen
-            </Button>
-          )}
+          <Button
+            size="sm"
+            title={withShortcut(
+              'Pick colors from anywhere on screen: other applications, any monitor. Replaces the selected color, ' +
+                'or adds one. Shift+click picks more, Esc stops.' +
+                (palette.generator ? ' Picked colors are locked, so regenerating keeps them.' : ''),
+              'pick-screen-color'
+            )}
+            onClick={() => void pickScreenColor()}
+          >
+            Screen
+          </Button>
           <Button
             size="sm"
             disabled={!hasImage}

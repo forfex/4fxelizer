@@ -4,6 +4,7 @@ import { normalizeBake, normalizeBakePresets, DEFAULT_BAKE, type BakePreset, typ
 import { normalizeView3d, DEFAULT_VIEW3D, VIEW3D_LOOKS, type View3dLookChoice, type View3dSettings } from './view3d'
 import type { MenuRole } from './menu'
 import type { ProjectFileRef } from './project'
+import type { ScreenPickResult } from './screenPick'
 import { normalizeUpdateSettings, DEFAULT_UPDATE_SETTINGS, type UpdateSettings, type UpdateState } from './update'
 
 export interface FileFilter {
@@ -320,7 +321,8 @@ const PLAIN_COMMANDS = [
   'toggle-split',
   'toggle-tile',
   'gpu-diagnostics',
-  'check-updates'
+  'check-updates',
+  'pick-screen-color'
 ] as const
 
 export type MenuCommand =
@@ -423,6 +425,11 @@ export interface FxApi {
   installUpdate(): void
   /** Quits and installs the downloaded update, which starts the app again. Ask about unsaved work first: main doesn't. */
   restartToUpdate(): void
+  /**
+   * Covers every display with a capture of it and returns the colors the user clicks there
+   * (Shift+click picks more, Esc stops), so colors can come from other applications.
+   */
+  pickScreenColors(): Promise<ScreenPickResult>
 }
 
 export const IPC = {
@@ -464,7 +471,8 @@ export const IPC = {
   updateState: 'update:state',
   updateCheck: 'update:check',
   updateInstall: 'update:install',
-  updateRestart: 'update:restart'
+  updateRestart: 'update:restart',
+  pickScreenColors: 'screen:pick-colors'
 } as const
 
 /** Colors (CSS color strings) and height (CSS px) of the native window buttons over the custom title bar. */

@@ -61,7 +61,8 @@ const api: FxApi = {
   },
   checkForUpdates: () => ipcRenderer.send(IPC.updateCheck),
   installUpdate: () => ipcRenderer.send(IPC.updateInstall),
-  restartToUpdate: () => ipcRenderer.send(IPC.updateRestart)
+  restartToUpdate: () => ipcRenderer.send(IPC.updateRestart),
+  pickScreenColors: () => ipcRenderer.invoke(IPC.pickScreenColors)
 }
 
 // Before the first render, so the page lays out at the saved scale.

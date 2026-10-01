@@ -15,7 +15,7 @@ import { encodeIndexedPng, encodePng, indexedBitDepth, type IndexedImage, type R
 import { psxStats, type PsxStats } from '@/image/psx'
 import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
-import { applyPick, MAX_PALETTE, normalizeHex, rgb8ToHex, type Palette } from '@/palette/palette'
+import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
 import { loadModelFile, openModel } from '@/modelActions'
 import { newProject, openProject, openProjectFile, saveProject } from '@/projectActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
@@ -572,38 +572,35 @@ export async function pickColor(side: 'before' | 'after', uv: { u: number; v: nu
 }
 
 /**
- * Screen eyedropper: picks a color from anywhere on screen, other applications included, into the
- * shown palette (like `pickColor`). Must run from a click: Chromium opens the picker only on a user
- * gesture. Esc cancels it.
+ * Screen picker: picks colors from anywhere on screen (other applications, every monitor) into the
+ * shown palette. The first replaces the selected color like `pickColor`; Shift+click picks add more.
  */
 export async function pickScreenColor(): Promise<void> {
   const { setMessage } = useApp.getState()
-  if (!screenPickerAvailable()) {
-    setMessage({ kind: 'error', text: "Picking colors from the screen isn't supported on this system." })
+  if (!shownPalette()) {
+    setMessage({ kind: 'error', text: 'Create a palette first (palette panel › ⋯ › New empty).' })
     return
   }
   try {
-    const { sRGBHex } = await new EyeDropper().open()
-    const hex = normalizeHex(sRGBHex)
-    if (!hex) throw new Error(`unexpected color "${sRGBHex}"`)
-    addPickedColor(hex)
+    const result = await window.fx.pickScreenColors()
+    if ('error' in result) {
+      setMessage({ kind: 'error', text: result.error })
+      return
+    }
+    result.colors.forEach((hex, i) => addPickedColor(hex, i === 0))
+    const palette = shownPalette()
+    if (result.colors.length > 1 && palette) setMessage({ kind: 'info', text: `Picked ${result.colors.length} colors into "${palette.name}"` })
   } catch (e) {
-    // Esc (or a click that leaves the picker) cancels it.
-    if (e instanceof DOMException && e.name === 'AbortError') return
     setMessage({ kind: 'error', text: `Couldn't pick a color: ${errorText(e)}` })
   }
 }
 
-/** Chromium's EyeDropper API: picks from the whole screen (Windows, macOS; Linux depends on the build). */
-export function screenPickerAvailable(): boolean {
-  return typeof window !== 'undefined' && 'EyeDropper' in window
-}
-
 /**
- * Puts a picked color into the shown palette. Replaces the selected color (which stays selected),
- * or else adds a new one without selecting it, so repeated picks keep adding colors.
+ * Puts a picked color into the shown palette. Replaces the selected color (which stays selected)
+ * when `replaceSelected`, or else adds a new one without selecting it, so repeated picks keep
+ * adding colors.
  */
-function addPickedColor(hex: string): void {
+function addPickedColor(hex: string, replaceSelected = true): void {
   const { setMessage } = useApp.getState()
   const palette = shownPalette()
   if (!palette) {
@@ -612,7 +609,8 @@ function addPickedColor(hex: string): void {
   }
   const { selectedColor, updatePalette, selectColor } = useApp.getState()
   // An undo can leave the selection past the end of the palette; then the pick adds a color.
-  const index = selectedColor?.paletteId === palette.id && selectedColor.index < palette.colors.length ? selectedColor.index : null
+  const index =
+    replaceSelected && selectedColor?.paletteId === palette.id && selectedColor.index < palette.colors.length ? selectedColor.index : null
   const result = applyPick(palette.colors, hex, index, !!palette.generator)
   if (!result) {
     setMessage({ kind: 'error', text: `"${palette.name}" is full (${MAX_PALETTE} colors).` })
@@ -786,5 +784,6 @@ export function runMenuCommand(command: MenuCommand): void {
       app.setUpdateOpen(true)
       return window.fx.checkForUpdates()
     case 'settings': return app.setSettingsOpen(true)
+    case 'pick-screen-color': return void pickScreenColor()
   }
 }

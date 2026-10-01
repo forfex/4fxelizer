@@ -1,0 +1,78 @@
+@import '../styles/tokens.css';
+
+/* The screen picker overlay: the frozen capture at 1:1 device pixels, plus a loupe by the pointer. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  cursor: crosshair;
+  user-select: none;
+}
+
+#screen {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  image-rendering: pixelated;
+}
+
+.loupe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  background: var(--fx-panel);
+  border: var(--fx-outline) solid var(--fx-edge);
+  border-radius: var(--fx-radius);
+  box-shadow: var(--fx-shadow-window);
+  padding: 4px;
+  color: var(--fx-text);
+  font-family: var(--fx-font-ui);
+  font-size: var(--fx-font-size-small);
+}
+
+.loupe[hidden] {
+  display: none;
+}
+
+#zoom {
+  display: block;
+  width: 132px;
+  height: 132px;
+  image-rendering: pixelated;
+  border: var(--px, 1px) solid var(--fx-edge);
+}
+
+.readout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: var(--px, 1px) solid var(--fx-edge);
+}
+
+.hex {
+  flex: 1;
+  padding: 2px 6px;
+  background: var(--fx-lcd-bg);
+  color: var(--fx-lcd-text);
+  text-shadow: var(--fx-lcd-glow);
+  font-family: var(--fx-font-mono);
+  font-size: var(--fx-font-size-lcd);
+}
+
+.hint {
+  margin-top: 4px;
+  max-width: 132px;
+  color: var(--fx-text-dim);
+  line-height: 1.35;
+}

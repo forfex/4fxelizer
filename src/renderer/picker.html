@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:"
+    />
+    <title>Pick a color</title>
+  </head>
+  <body>
+    <canvas id="screen"></canvas>
+    <div id="loupe" class="loupe" hidden>
+      <canvas id="zoom"></canvas>
+      <div class="readout">
+        <span id="swatch" class="swatch"></span>
+        <span id="hex" class="hex"></span>
+      </div>
+      <div id="hint" class="hint"></div>
+    </div>
+    <script type="module" src="/src/picker/picker.ts"></script>
+  </body>
+</html>
