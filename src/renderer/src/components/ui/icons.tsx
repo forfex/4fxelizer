@@ -81,3 +81,12 @@ export const MinusIcon = ({ className }: P) => (
     <path d="M2.5 7h9" />
   </Icon>
 )
+
+/** Pick from screen: a monitor with one pixel in the middle. */
+export const ScreenPickIcon = ({ className }: P) => (
+  <Icon className={className}>
+    <rect x="2" y="2" width="10" height="7" />
+    <path d="M7 9v3M4 12.5h6" />
+    <rect x="6" y="4.5" width="2" height="2" fill="currentColor" stroke="none" />
+  </Icon>
+)

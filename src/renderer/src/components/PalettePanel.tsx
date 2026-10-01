@@ -22,6 +22,7 @@ import { withShortcut } from '@/settings'
 import { useApp } from '@/store'
 import { Button } from './ui/button'
 import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
+import { ScreenPickIcon } from './ui/icons'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './ui/menu'
 import { GroupBox, LCD_CLASS, Led, PanelBody } from './ui/retro'
 import { Select } from './ui/select'
@@ -251,7 +252,8 @@ function PaletteEditor({ palette }: { palette: Palette }) {
             )}
             onClick={() => void pickScreenColor()}
           >
-            Screen
+            <ScreenPickIcon />
+            Pick from screen
           </Button>
           <Button
             size="sm"
