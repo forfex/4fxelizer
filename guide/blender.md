@@ -57,6 +57,10 @@ connecting, and the delay before a channel bakes.
 
 ## Good to know
 
+- Ucupaint is optional: without it, Link Image works with any Image Texture node, and Link Material Channel offers
+  whatever feeds the Principled BSDF (Base Color, Emission Color, Roughness, Metallic).
+- A material channel always bakes from your original images, also while image links in the same material show their
+  result, so nothing is processed twice.
 - Saving the .blend file puts the original node links back first, so the file never depends on the add-on.
 - The connection is local to your computer (127.0.0.1); nothing leaves the machine.
 - A link keeps working while 4FXELIZER is minimized or behind Blender.

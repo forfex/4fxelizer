@@ -409,9 +409,15 @@ def bake_channel(link):
     restore_active = []  # (tree, node)
     restore_outputs = []
     slot = mat.paint_active_slot
+    # Image links shown inside this material step aside, so the bake reads the original images
+    # (else their result would be processed twice).
+    in_material = {n.get("fx4_link") for t in tree_closure(tree) for n in t.nodes if n.get("fx4_link")}
+    hidden = [l for l in links() if l.source == "IMAGE" and l.uid in in_material]
     busy = True
     started = time.perf_counter()
     try:
+        for other in hidden:
+            remove_preview(other.uid)
         try:
             render.engine = "CYCLES"
         except TypeError:
@@ -479,6 +485,8 @@ def bake_channel(link):
                     setattr(bake, {"selected_to_active": "use_selected_to_active"}.get(key, key), value)
             except (TypeError, AttributeError):
                 pass
+        for other in hidden:
+            ensure_preview(other)
         busy = False
         touched_trees()
 
