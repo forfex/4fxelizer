@@ -29,6 +29,7 @@ import select
 import socket
 import struct
 import time
+import traceback
 import uuid
 import zlib
 
@@ -335,11 +336,19 @@ def write_result(link, width, height, payload):
         image["fx4_result"] = True
         link.result_name = image.name
     if tuple(image.size) != (width, height):
-        image.scale(width, height)
+        # Image.scale() leaves a generated image's buffer as it was; its generated size remakes it.
+        image.generated_width, image.generated_height = width, height
+        if tuple(image.size) != (width, height):
+            bpy.data.images.remove(image)
+            image = bpy.data.images.new(name, width, height, alpha=True)
+            image["fx4_result"] = True
+            link.result_name = image.name
     image.colorspace_settings.name = "Non-Color" if link.source == "CHANNEL" and is_data_channel(link) else "sRGB"
     px = np.frombuffer(payload, np.uint8).reshape(height, width, 4)[::-1].astype(np.float32) / 255.0
     image.pixels.foreach_set(px.ravel())
     image.update()
+    # Without this the viewport can keep drawing the previous pixels.
+    image.update_tag()
     touched_trees()
     fresh.add(link.uid)
     ensure_preview(link)
@@ -545,6 +554,15 @@ def receive(message, payload):
 
 
 def tick():
+    # Blender drops a timer that raises, which would stop the link for good.
+    try:
+        return run_tick()
+    except Exception:
+        traceback.print_exc()
+        return 0.5
+
+
+def run_tick():
     global last_ensure
     p = prefs()
     now = time.monotonic()
