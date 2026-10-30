@@ -11,7 +11,7 @@ import { Dialog, DialogContent } from '../ui/dialog'
 import { MENU_MARK_CLASS } from '../ui/menu'
 import { SCROLL_GUTTER_CLASS } from '../ui/retro'
 import { KeybindsEditor } from './Keybinds'
-import { AppearanceSection, FilesSection, GpuSection, InterfaceSection, ResetSection, UpdatesSection, ViewerSection, WheelSection } from './sections'
+import { AppearanceSection, BlenderLinkSection, FilesSection, GpuSection, InterfaceSection, ResetSection, UpdatesSection, ViewerSection, WheelSection } from './sections'
 
 type CategoryId = 'all' | 'general' | 'appearance' | 'mouse' | 'viewer' | 'keybinds' | 'gpu'
 
@@ -59,6 +59,13 @@ const SECTIONS: Section[] = [
     title: 'Updates',
     keywords: 'update upgrade version new release download install automatic auto check github',
     render: () => <UpdatesSection />
+  },
+  {
+    id: 'blender',
+    category: 'general',
+    title: 'Blender link',
+    keywords: 'blender link live paint ucupaint addon add-on connect port socket viewport texture paint',
+    render: () => <BlenderLinkSection />
   },
   { id: 'reset', category: 'general', title: 'Settings file', keywords: 'reset defaults restore folder json', render: () => <ResetSection /> },
   { id: 'theme', category: 'appearance', title: 'Theme', keywords: 'color colour dark light night matrix retro look', render: () => <AppearanceSection /> },

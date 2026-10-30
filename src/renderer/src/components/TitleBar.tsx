@@ -86,12 +86,12 @@ export function TitleBar() {
 function AppMenuBar() {
   const root = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState('')
-  const keybinds = useSavedSettings().keybinds
+  const { keybinds, blenderLink } = useSavedSettings()
   const menu = useMemo(() => appMenu(platform, import.meta.env.DEV, keybinds), [keybinds])
   const menuRef = useRef(menu)
   menuRef.current = menu
   // Commands that are on/off states show the selected mark in the menu.
-  const checked = useApp(
+  const checkedState = useApp(
     useShallow((s): Partial<Record<MenuCommand, boolean>> => ({
       'toggle-grid': s.grid,
       'toggle-split': s.split,
@@ -101,6 +101,7 @@ function AppMenuBar() {
       [`view-${s.viewMode}`]: true
     }))
   )
+  const checked: Partial<Record<MenuCommand, boolean>> = { ...checkedState, 'blender-link': blenderLink.enabled }
   // Clipboard actions must reach the field that was focused before the menu took focus. Recorded
   // before Radix moves focus (pointer down, or the keyboard shortcuts below).
   const lastFocus = useRef<HTMLElement | null>(null)
