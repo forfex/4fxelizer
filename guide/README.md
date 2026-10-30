@@ -9,6 +9,7 @@ New here? Start with the [quick start](../README.md#quick-start) in the main REA
 | [Several textures](textures.md) | Texture tabs, shared or separate stacks, models with several materials, exporting all |
 | [Masks and maps](masks-and-maps.md) | Limiting dithering to parts of the image, loading AO / cavity / ORM maps |
 | [3D view and baking](3d.md) | Opening models, looks (Lit, Wireframe, PSX, N64, …), baking maps from the model |
+| [Blender link](blender.md) | Live 4FXELIZER result on the model while you paint in Blender (Ucupaint too) |
 | [Projects, presets and export](presets-and-export.md) | Project files, saving and sharing stacks, PNG / TGA / BMP export, indexed images |
 | [Workspace and shortcuts](workspace.md) | Panels, layouts, themes, keyboard shortcuts |
 | [Troubleshooting](troubleshooting.md) | GPU problems, install warnings, Linux |
