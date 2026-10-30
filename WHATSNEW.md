@@ -1,10 +1,8 @@
-- Added auto-update (no more downloading from GitHub every time)
-  - The app tells you when a new version is out and installs it for you
-  - Settings › Updates: check for updates, or update automatically at launch
-  - Help › Check for Updates…
-- Live reload per file
-  - File › Reload Changed Files: All Files, Per File or Off
-  - Per File: a Reload on change switch on each texture and the model in the Textures panel
-- Separate alpha for Downscale and Upscale
-  - Alpha setting: Same as color, Nearest, Smooth or Cutout (with threshold)
-  - Upscale can keep the original image's alpha, so hard cutouts stay sharp
+- Blender link: paint in Blender and see the 4FXELIZER result on your model while you paint
+  - File › Blender Link: turn it on and save the Blender add-on
+  - Link a single image (a Ucupaint layer or any texture) or the combined material texture
+  - Updates while painting, when you lift the brush, or only when you ask, at the rate you choose
+  - Works with Ucupaint and with plain image painting; your .blend files stay untouched
+- Pick colors from anywhere on screen, other apps too
+  - Edit › Pick Color from Screen, or Pick from screen in the palette panel
+  - Shift+click picks several colors, Esc stops
