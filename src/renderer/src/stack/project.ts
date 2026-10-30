@@ -17,9 +17,10 @@ export type ProjectImage = { name: string; file: ProjectFileRef } | { name: stri
 
 /**
  * An open texture: its image, its maps, its separate stack (none = the shared one), the materials
- * drawn with it, and `liveReload: false` when its reload switch is off.
+ * drawn with it, `liveReload: false` when its reload switch is off, and its Blender link id when it
+ * came from Blender (it rebinds when Blender sends that link again).
  */
-export type ProjectTexture = ProjectImage & { maps: ProjectMap[]; doc?: Doc; materials: number[]; liveReload?: false }
+export type ProjectTexture = ProjectImage & { maps: ProjectMap[]; doc?: Doc; materials: number[]; liveReload?: false; link?: string }
 
 /** An imported map (by file, or as PNG when it has none) or one baked from the model (as PNG). */
 export type ProjectMap = { slot: MapSlot; channel: MapChannel; name: string } & ({ file: ProjectFileRef } | { png: string; baked?: true })
@@ -112,7 +113,7 @@ export function parseProject(json: string): ParsedProject {
       if (!image) continue
       const separate = isObject(t.doc) ? parseDoc(t.doc, warnings) : undefined
       const materials = Array.isArray(t.materials) ? [...new Set(t.materials.filter((m): m is number => typeof m === 'number' && Number.isInteger(m) && m >= 0))] : []
-      textures.push({ ...image, maps: mapsOf(t.maps, warnings), ...(separate ? { doc: separate } : {}), materials, ...(t.liveReload === false ? { liveReload: false as const } : {}) })
+      textures.push({ ...image, maps: mapsOf(t.maps, warnings), ...(separate ? { doc: separate } : {}), materials, ...(t.liveReload === false ? { liveReload: false as const } : {}), ...(typeof t.link === 'string' && t.link ? { link: t.link } : {}) })
     }
   }
   const active = Math.min(index(raw.active), Math.max(textures.length - 1, 0))
@@ -162,7 +163,7 @@ type SignatureMaps = Partial<Record<MapSlot, { name: string; channel: MapChannel
 /** What a project stores of the app state (the parts that make it "modified"). */
 export interface ProjectState {
   docs: { shared: Doc; separate: Record<string, Doc> }
-  textures: { id: string; image: { name: string; path?: string; version: number }; maps: SignatureMaps; materials: number[]; liveReload?: boolean }[]
+  textures: { id: string; image: { name: string; path?: string; version: number }; maps: SignatureMaps; materials: number[]; liveReload?: boolean; link?: string }[]
   model: { name: string; path?: string; liveReload?: boolean } | null
   modelMaterial: number
   modelUvSet: number
@@ -191,7 +192,8 @@ export function projectSignature(s: ProjectState): string {
       }),
       doc: s.docs.separate[t.id] ? docSignature(s.docs.separate[t.id]!) : null,
       materials: t.materials,
-      liveReload: t.liveReload !== false
+      liveReload: t.liveReload !== false,
+      link: t.link ?? null
     })),
     model: s.model && [s.model.path ?? s.model.name, s.modelMaterial, s.modelUvSet, s.model.liveReload !== false]
   })

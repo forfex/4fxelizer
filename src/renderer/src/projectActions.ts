@@ -65,7 +65,7 @@ async function snapshot(state: AppState, path: string): Promise<{ data: ProjectD
       if (gpuTexture) maps.push({ ...base, png: await texturePng(gpuTexture), ...(map.baked ? { baked: true as const } : {}) })
     }
     const doc = state.docs.separate[t.id]
-    textures.push({ ...pixels, maps, ...(doc ? { doc } : {}), materials: t.materials, ...(t.liveReload === false ? { liveReload: false as const } : {}) })
+    textures.push({ ...pixels, maps, ...(doc ? { doc } : {}), materials: t.materials, ...(t.liveReload === false ? { liveReload: false as const } : {}), ...(t.link ? { link: t.link } : {}) })
   }
   const active = Math.max(state.textures.findIndex((t) => t.id === state.activeTextureId), 0)
 
@@ -240,6 +240,7 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
       continue
     }
     if (t.liveReload === false) useApp.getState().setTextureLiveReload(id, false)
+    if (t.link) useApp.getState().updateTexture(id, { link: t.link })
     if (t.doc) {
       useApp.getState().selectTexture(id)
       useApp.getState().setTextureStack(id, 'separate')

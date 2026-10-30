@@ -3,6 +3,7 @@ import { openDroppedFiles, redo, runMenuCommand } from '@/actions'
 import { startEngine } from '@/engine'
 import { adapterLabel } from '@/gpu/device'
 import { startPaletteController } from '@/palette/controller'
+import { startBlenderLink } from '@/blenderLink'
 import { useApp } from '@/store'
 import { startUpdates } from '@/updates'
 import { ExportDialog } from './components/ExportDialog'
@@ -41,9 +42,11 @@ export function App() {
           if (s.textures !== prev.textures || s.activeTextureId !== prev.activeTextureId) follow()
         })
         const stopPalettes = stopController
+        const stopLink = startBlenderLink(engine)
         stopController = () => {
           stopPalettes()
           unfollow()
+          stopLink()
         }
         setGpu({ status: 'ready', adapter: adapterLabel(engine.gpu.adapter) })
         engine.gpu.device.lost.then((info) => {

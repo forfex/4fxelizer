@@ -173,12 +173,12 @@ export interface AppState extends Doc {
 
   setGpu(gpu: GpuState): void
   /** Opens a texture as a new tab and selects it. */
-  addTexture(texture: { id: string; image: Omit<ImageInfo, 'version'>; thumbnail: string | null; materials?: number[] }): void
+  addTexture(texture: { id: string; image: Omit<ImageInfo, 'version'>; thumbnail: string | null; materials?: number[]; link?: string }): void
   selectTexture(id: string): void
   closeTexture(id: string): void
   /** Gives a texture its own stack (a copy of the shared one) or puts it back on the shared stack. Undoable. */
   setTextureStack(id: string, stack: 'shared' | 'separate'): void
-  updateTexture(id: string, patch: Partial<Pick<TextureEntry, 'thumbnail'>>): void
+  updateTexture(id: string, patch: Partial<Pick<TextureEntry, 'thumbnail' | 'link'>>): void
   /** Draws model materials with a texture (they leave any other texture); [] unbinds it. */
   assignMaterials(textureId: string, materials: number[]): void
   /** Forgets which textures the materials use (another model opened). */
@@ -375,9 +375,9 @@ export const useApp = create<AppState>()((set, get) => ({
   lastEdit: null,
 
   setGpu: (gpu) => set({ gpu }),
-  addTexture: ({ id, image, thumbnail, materials = [] }) => {
+  addTexture: ({ id, image, thumbnail, materials = [], link }) => {
     const s = get()
-    const entry: TextureEntry = { id, image: { ...image, version: 1 }, maps: {}, thumbnail, materials, view: null }
+    const entry: TextureEntry = { id, image: { ...image, version: 1 }, maps: {}, thumbnail, materials, view: null, ...(link ? { link } : {}) }
     set(showTexture(s, id, s.docs, [...s.textures, entry]))
   },
   selectTexture: (id) => {
