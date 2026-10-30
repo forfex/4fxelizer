@@ -19,7 +19,7 @@ bl_info = {
     "author": "4FX",
     "version": (1, 0, 0),
     "blender": (4, 2, 0),
-    "location": "3D View > Sidebar > 4FX",
+    "location": "3D View > Sidebar > 4FXELIZER",
     "description": "Live 4FXELIZER preview of the textures you paint",
     "category": "Paint",
 }
@@ -175,6 +175,8 @@ conn = Connection()
 due = {}
 # uid → crc of the pixels last sent (skips sending the same pixels again)
 sent_crc = {}
+# uid → time.monotonic() of the last send (the update rate spaces them out)
+last_sent = {}
 # uids whose result arrived in this session (only those are shown on the model)
 fresh = set()
 # what a link last reported ("Baked in 0.2 s", errors)
@@ -204,6 +206,17 @@ def find_link(uid):
 
 def own_image(image):
     return image.name.startswith(BAKE_PREFIX) or image.get("fx4_result", False)
+
+
+def update_mode():
+    p = prefs()
+    return p.update_mode if p else "LIVE"
+
+
+def update_rate():
+    """Least time between two updates of a link (seconds)."""
+    p = prefs()
+    return float(p.update_rate) if p else 0.1
 
 
 def mark(link, delay=0.0):
@@ -533,18 +546,20 @@ def tick():
         for message, payload in conn.poll():
             receive(message, payload)
     if conn.state == "connected":
-        # Live while a stroke is under way (images only: baking takes too long for that).
+        mode, rate = update_mode(), update_rate()
+        # While painting, also during the stroke (images only: baking takes too long for that).
         if stroke["active"]:
             if now - stroke["since"] > 30:
                 stroke["active"] = False
-            elif p and p.live_strokes and now - stroke["last"] > p.stroke_interval:
+            elif mode == "LIVE" and now - stroke["last"] >= rate:
                 stroke["last"] = now
                 for link in links():
                     if link.source == "IMAGE" and link.auto_update and not conn.busy(link.uid):
                         mark(link)
         for link in list(links()):
-            if link.uid in due and due[link.uid] <= now and not conn.busy(link.uid):
+            if link.uid in due and due[link.uid] <= now and not conn.busy(link.uid) and now - last_sent.get(link.uid, 0.0) >= rate:
                 del due[link.uid]
+                last_sent[link.uid] = now
                 try:
                     send_link(link)
                 except Exception as e:  # never let the timer die
@@ -573,6 +588,8 @@ def on_depsgraph(scene, depsgraph):
     if images:
         # A painted image updates when a stroke ends.
         stroke["active"] = False
+    if update_mode() == "MANUAL":
+        return
     count_trees = time.monotonic() > ignore_trees_until
     p = prefs()
     for link in links():
@@ -590,7 +607,8 @@ def on_depsgraph(scene, depsgraph):
 
 @persistent
 def on_undo(*_):
-    mark_all()
+    if update_mode() != "MANUAL":
+        mark_all()
     ensure_previews()
 
 
@@ -598,6 +616,7 @@ def on_undo(*_):
 def on_load(*_):
     due.clear()
     sent_crc.clear()
+    last_sent.clear()
     fresh.clear()
     status.clear()
     conn.close()
@@ -813,18 +832,45 @@ class FX4Preferences(bpy.types.AddonPreferences):
 
     port: bpy.props.IntProperty(name="Port", description="Same as Settings > Blender link in 4FXELIZER", default=47811, min=1024, max=65535)
     auto_connect: bpy.props.BoolProperty(name="Connect automatically", description="Connect whenever 4FXELIZER is listening and a link exists", default=True)
-    live_strokes: bpy.props.BoolProperty(name="Update during strokes", description="Send image links while the brush is still down", default=True)
-    stroke_interval: bpy.props.FloatProperty(name="Interval", description="Seconds between updates during a stroke", default=0.1, min=0.03, max=1.0)
+    update_mode: bpy.props.EnumProperty(
+        name="Update",
+        description="When links send their texture",
+        items=[
+            ("LIVE", "While painting", "During strokes too (material channels update when you lift the brush)", "BRUSH_DATA", 0),
+            ("LIFT", "When you lift the brush", "Once a stroke ends, and after other changes", "MOUSE_LMB", 1),
+            ("MANUAL", "Only with Send Now", "Nothing is sent until you press Send Now", "HAND", 2),
+        ],
+        default="LIVE",
+    )
+    update_rate: bpy.props.EnumProperty(
+        name="Rate",
+        description="Least time between two updates of a link",
+        items=[
+            ("0", "Instant", "As fast as 4FXELIZER keeps up"),
+            ("0.1", "100 ms", ""),
+            ("0.25", "250 ms", ""),
+            ("0.5", "500 ms", ""),
+            ("1", "1 s", ""),
+            ("2", "2 s", ""),
+        ],
+        default="0.1",
+    )
     bake_delay: bpy.props.FloatProperty(name="Bake delay", description="Seconds after the last change before a material channel bakes", default=0.25, min=0.0, max=5.0)
 
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "port")
         layout.prop(self, "auto_connect")
-        row = layout.row()
-        row.prop(self, "live_strokes")
-        row.prop(self, "stroke_interval")
+        draw_update(layout, self)
         layout.prop(self, "bake_delay")
+
+
+def draw_update(layout, p):
+    col = layout.column(align=True)
+    col.prop(p, "update_mode", text="")
+    row = col.row(align=True)
+    row.active = p.update_mode != "MANUAL"
+    row.prop(p, "update_rate", text="Rate")
 
 
 # ── Operators ──────────────────────────────────────────────────────────────
@@ -968,7 +1014,7 @@ class FX4_OT_unlink(bpy.types.Operator):
         remove_preview(link.uid)
         if conn.state == "connected":
             conn.send({"type": "unlink", "id": link.uid})
-        for key in (due, sent_crc, status):
+        for key in (due, sent_crc, last_sent, status):
             key.pop(link.uid, None)
         fresh.discard(link.uid)
         image = bpy.data.images.get(link.result_name) if link.result_name else None
@@ -1038,7 +1084,7 @@ class FX4_UL_links(bpy.types.UIList):
 
 class FX4Panel:
     bl_region_type = "UI"
-    bl_category = "4FX"
+    bl_category = "4FXELIZER"
     bl_label = "4FXELIZER Link"
 
     def draw(self, context):
@@ -1056,6 +1102,9 @@ class FX4Panel:
             row.operator("fx4.connect")
             if conn.error:
                 box.label(text=conn.error, icon="INFO")
+        p = prefs()
+        if p:
+            draw_update(box, p)
 
         col = layout.column(align=True)
         col.operator("fx4.link_image", icon="IMAGE_DATA")

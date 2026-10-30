@@ -12,7 +12,7 @@ It works with [Ucupaint](https://extensions.blender.org/add-ons/ucupaint/) and w
 2. Save the add-on with **File › Blender Link › Save Blender Add-on…**.
 3. In Blender (4.2 or newer): **Edit › Preferences › Add-ons › Install from Disk**, pick `fxelizer_link.py` and
    tick **4FXELIZER Link**.
-4. Open the 3D view's sidebar (**N**) and its **4FX** tab. The image editor has the same tab.
+4. Open the 3D view's sidebar (**N**) and its **4FXELIZER** tab. The image editor has the same tab.
 
 The add-on connects on its own once you link something, and again whenever 4FXELIZER starts. The status line in the
 tab (and in 4FXELIZER's Settings) shows whether they are connected.
@@ -42,8 +42,18 @@ again.
   material uses), how far it extends past the UV islands (so downscaling doesn't pull in the background), and the
   UV map it's baked with.
 
-The add-on's preferences hold the port (the same as in 4FXELIZER's Settings), automatic connecting, updates during
-strokes and their interval, and the delay before a channel bakes.
+## When it updates
+
+At the top of the tab, under the connection status:
+
+- **Update**: **While painting** sends image links during a stroke as well (material channels still wait until you
+  lift the brush); **When you lift the brush** sends once each stroke ends; **Only with Send Now** sends nothing on
+  its own.
+- **Rate**: the least time between two updates of a link: **Instant**, 100 ms, 250 ms, 500 ms, 1 s or 2 s. A slower
+  rate keeps Blender smoother on big textures.
+
+The same settings are in the add-on's preferences, with the port (the same as in 4FXELIZER's Settings), automatic
+connecting, and the delay before a channel bakes.
 
 ## Good to know
 

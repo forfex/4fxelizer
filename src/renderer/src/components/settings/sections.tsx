@@ -240,7 +240,7 @@ export function BlenderLinkSection() {
           onChange={(port) => saveSettings({ blenderLink: { ...blenderLink, port: Math.round(port) } })}
         />
       </Field>
-      <Field label="Add-on" hint="In Blender: Edit › Preferences › Add-ons › Install from Disk, then open the 4FX tab in the 3D view's sidebar.">
+      <Field label="Add-on" hint="In Blender: Edit › Preferences › Add-ons › Install from Disk, then open the 4FXELIZER tab in the 3D view's sidebar.">
         <Button onClick={() => void saveBlenderAddon()}>Save Blender add-on…</Button>
       </Field>
     </>
