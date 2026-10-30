@@ -2,6 +2,7 @@
 
 import { normalizeBake, normalizeBakePresets, DEFAULT_BAKE, type BakePreset, type BakeSettings } from './bake'
 import { normalizeView3d, DEFAULT_VIEW3D, VIEW3D_LOOKS, type View3dLookChoice, type View3dSettings } from './view3d'
+import { normalizeLinkSettings, DEFAULT_LINK_SETTINGS, type LinkMessage, type LinkSettings, type LinkState } from './blenderLink'
 import type { MenuRole } from './menu'
 import type { ProjectFileRef } from './project'
 import type { ScreenPickResult } from './screenPick'
@@ -71,6 +72,8 @@ export interface UserSettings {
   invertZoom: boolean
   /** Checking for and installing new versions. */
   updates: UpdateSettings
+  /** Blender link: the local connection the Blender add-on sends painted textures through. */
+  blenderLink: LinkSettings
 }
 
 /**
@@ -189,7 +192,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   gpu: 'auto',
   uiScale: 1,
   invertZoom: false,
-  updates: DEFAULT_UPDATE_SETTINGS
+  updates: DEFAULT_UPDATE_SETTINGS,
+  blenderLink: DEFAULT_LINK_SETTINGS
 }
 
 const isObject = (v: unknown): v is object => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -270,7 +274,8 @@ export function normalizeSettings(raw: unknown): UserSettings {
     gpu: GPU_PREFERENCES.includes(r.gpu as GpuPreference) ? (r.gpu as GpuPreference) : DEFAULT_SETTINGS.gpu,
     uiScale: normalizeScale(r.uiScale),
     invertZoom: bool('invertZoom'),
-    updates: normalizeUpdateSettings(r.updates)
+    updates: normalizeUpdateSettings(r.updates),
+    blenderLink: normalizeLinkSettings(r.blenderLink)
   }
 }
 
@@ -322,7 +327,9 @@ const PLAIN_COMMANDS = [
   'toggle-tile',
   'gpu-diagnostics',
   'check-updates',
-  'pick-screen-color'
+  'pick-screen-color',
+  'blender-link',
+  'blender-addon'
 ] as const
 
 export type MenuCommand =
@@ -430,6 +437,16 @@ export interface FxApi {
    * (Shift+click picks more, Esc stops), so colors can come from other applications.
    */
   pickScreenColors(): Promise<ScreenPickResult>
+  /** The Blender link server's state (started and stopped by the blenderLink setting). */
+  getLinkState(): Promise<LinkState>
+  /** Called whenever the link server's state or its connections change. */
+  onLinkState(listener: (state: LinkState) => void): () => void
+  /** Called with each message a connected Blender sends (`client` is its connection id). */
+  onLinkMessage(listener: (client: string, message: LinkMessage, payload: Uint8Array<ArrayBuffer>) => void): () => void
+  /** Sends a message (with pixels) to a connected Blender; dropped when it's gone. */
+  sendLinkMessage(client: string, message: LinkMessage, payload?: Uint8Array): void
+  /** Asks where to save the Blender add-on and writes it there (null = cancelled). */
+  saveBlenderAddon(): Promise<string | null>
 }
 
 export const IPC = {
@@ -472,7 +489,12 @@ export const IPC = {
   updateCheck: 'update:check',
   updateInstall: 'update:install',
   updateRestart: 'update:restart',
-  pickScreenColors: 'screen:pick-colors'
+  pickScreenColors: 'screen:pick-colors',
+  linkGetState: 'link:get-state',
+  linkState: 'link:state',
+  linkMessage: 'link:message',
+  linkSend: 'link:send',
+  linkSaveAddon: 'link:save-addon'
 } as const
 
 /** Colors (CSS color strings) and height (CSS px) of the native window buttons over the custom title bar. */

@@ -23,6 +23,8 @@ export interface TextureEntry {
   view: View | null
   /** false: it and its maps don't reload when live reload is set to per file. */
   liveReload?: boolean
+  /** Blender link id when the texture comes from Blender (see blenderLink.ts). */
+  link?: string
 }
 
 /** The shared stack and the separate stacks of textures that have one (by texture id). */

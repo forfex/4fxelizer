@@ -54,6 +54,7 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
         command('Import Preset…', 'import-preset'),
         separator,
         { kind: 'submenu', label: 'Reload Changed Files', items: LIVE_RELOAD_MODES.map((m) => command(LIVE_RELOAD_NAMES[m], `live-reload-${m}`)) },
+        { kind: 'submenu', label: 'Blender Link', items: [command('Link with Blender', 'blender-link'), command('Save Blender Add-on…', 'blender-addon')] },
         separator,
         isMac ? role('Close Window', 'close', 'Cmd+W') : role('Exit', 'quit', platform === 'win32' ? 'Alt+F4' : 'Ctrl+Q')
       ]

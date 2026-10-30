@@ -17,12 +17,13 @@ import {
   type MainGpuInfo,
   type WheelMode
 } from '@shared/api'
+import { saveBlenderAddon, useLinkState } from '@/blenderLink'
 import { listGpus, type GpuEntry } from '@/gpu/gpuList'
 import { cn } from '@/lib/utils'
 import { savedSettings, saveSettings, useSavedSettings } from '@/settings'
 import { useApp } from '@/store'
 import { Button } from '../ui/button'
-import { Checkbox, Field, ParamSlider, Segmented } from '../ui/controls'
+import { Checkbox, Field, NumberField, ParamSlider, Segmented } from '../ui/controls'
 import { MENU_MARK_CLASS } from '../ui/menu'
 import { Lcd, Led } from '../ui/retro'
 import { Select } from '../ui/select'
@@ -200,6 +201,48 @@ export function FilesSection() {
         <Segmented value={liveReload} onChange={(m) => useApp.getState().setLiveReload(m)} options={LIVE_RELOAD_OPTIONS} />
       </Field>
       <p className="text-dim">{mode.hint}</p>
+    </>
+  )
+}
+
+export function BlenderLinkSection() {
+  const { blenderLink } = useSavedSettings()
+  const link = useLinkState()
+  const connected = link.clients.map((c) => (c.file ? `${c.app} (${c.file})` : c.app)).join(', ')
+  return (
+    <>
+      <Field label="Link" hint="Also in File › Blender Link.">
+        <Checkbox
+          checked={blenderLink.enabled}
+          onCheckedChange={(enabled) => saveSettings({ blenderLink: { ...blenderLink, enabled } })}
+          label="Link with Blender"
+          hint="Blender's 4FXELIZER add-on sends the texture you paint, and shows the result on the model."
+        />
+      </Field>
+      <Field label="Status">
+        <Led state={link.status === 'error' ? 'error' : connected ? 'on' : link.status === 'listening' ? 'busy' : 'off'} />
+        <span className="min-w-0">
+          {link.status === 'error'
+            ? link.error
+            : link.status === 'off'
+              ? 'Off'
+              : connected
+                ? `Connected: ${connected}`
+                : `Waiting for Blender on port ${link.port}`}
+        </span>
+      </Field>
+      <Field label="Port" hint="Set the same port in the add-on's preferences.">
+        <NumberField
+          className="w-24"
+          value={blenderLink.port}
+          min={1024}
+          max={65535}
+          onChange={(port) => saveSettings({ blenderLink: { ...blenderLink, port: Math.round(port) } })}
+        />
+      </Field>
+      <Field label="Add-on" hint="In Blender: Edit › Preferences › Add-ons › Install from Disk, then open the 4FXELIZER tab in the 3D view's sidebar.">
+        <Button onClick={() => void saveBlenderAddon()}>Save Blender add-on…</Button>
+      </Field>
     </>
   )
 }

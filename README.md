@@ -36,6 +36,8 @@ Everything runs on your GPU, so changes show up instantly.
 - **3D view and map baking**: glTF, GLB, FBX and OBJ models in Lit, Unlit, Wireframe, Clay, Normals, PSX
   (vertex wobble, affine warping, 240 lines) or N64 looks, or your own style, and AO, cavity, curvature and more
   baked on the GPU. [More](guide/3d.md)
+- **Blender link**: paint in Blender (Ucupaint too) and see the 4FXELIZER result on your model while you paint,
+  a single layer or the combined texture. [More](guide/blender.md)
 - **Several textures at once**: tabs for every texture, one shared stack or a stack per texture, and models with
   several materials, each with its own texture. [More](guide/textures.md)
 - **Projects, presets and export**: save your whole session as a project; console, computer and stylized

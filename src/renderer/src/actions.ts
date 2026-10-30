@@ -16,6 +16,7 @@ import { psxStats, type PsxStats } from '@/image/psx'
 import { encodeIndexedTga, encodeTga } from '@/image/tga'
 import { exportPalette, parsePaletteFile, type PaletteExportFormat } from '@/palette/formats'
 import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palette'
+import { saveBlenderAddon, toggleBlenderLink } from '@/blenderLink'
 import { loadModelFile, openModel } from '@/modelActions'
 import { newProject, openProject, openProjectFile, saveProject } from '@/projectActions'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
@@ -792,5 +793,7 @@ export function runMenuCommand(command: MenuCommand): void {
       return window.fx.checkForUpdates()
     case 'settings': return app.setSettingsOpen(true)
     case 'pick-screen-color': return void pickScreenColor()
+    case 'blender-link': return toggleBlenderLink()
+    case 'blender-addon': return void saveBlenderAddon()
   }
 }

@@ -22,7 +22,7 @@ function sample(): ProjectData {
         ],
         materials: [0, 2]
       },
-      { name: 'roof.png', png: 'iVBORw0KGgo=', maps: [], doc: separate, materials: [1], liveReload: false }
+      { name: 'roof.png', png: 'iVBORw0KGgo=', maps: [], doc: separate, materials: [1], liveReload: false, link: '1f49c9ae' }
     ],
     active: 1,
     model: { name: 'castle.glb', file: { path: 'C:/art/castle.glb' }, material: 2, uvSet: 1, liveReload: false }

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 import { IPC, type FxApi, type MenuCommand } from '@shared/api'
+import type { LinkMessage, LinkState } from '@shared/blenderLink'
 import type { UpdateState } from '@shared/update'
 
 const api: FxApi = {
@@ -62,7 +63,20 @@ const api: FxApi = {
   checkForUpdates: () => ipcRenderer.send(IPC.updateCheck),
   installUpdate: () => ipcRenderer.send(IPC.updateInstall),
   restartToUpdate: () => ipcRenderer.send(IPC.updateRestart),
-  pickScreenColors: () => ipcRenderer.invoke(IPC.pickScreenColors)
+  pickScreenColors: () => ipcRenderer.invoke(IPC.pickScreenColors),
+  getLinkState: () => ipcRenderer.invoke(IPC.linkGetState),
+  onLinkState: (listener) => {
+    const handler = (_: unknown, state: LinkState): void => listener(state)
+    ipcRenderer.on(IPC.linkState, handler)
+    return () => ipcRenderer.removeListener(IPC.linkState, handler)
+  },
+  onLinkMessage: (listener) => {
+    const handler = (_: unknown, client: string, message: LinkMessage, payload: Uint8Array<ArrayBuffer>): void => listener(client, message, payload)
+    ipcRenderer.on(IPC.linkMessage, handler)
+    return () => ipcRenderer.removeListener(IPC.linkMessage, handler)
+  },
+  sendLinkMessage: (client, message, payload) => ipcRenderer.send(IPC.linkSend, client, message, payload),
+  saveBlenderAddon: () => ipcRenderer.invoke(IPC.linkSaveAddon)
 }
 
 // Before the first render, so the page lays out at the saved scale.

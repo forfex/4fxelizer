@@ -6,7 +6,10 @@ import { isExportFileName } from '@shared/exportNames'
 import { MAP_IMAGE_EXTENSIONS, siblingMaps } from '@shared/maps'
 import { isModelFile, isModelResource, MODEL_EXTENSIONS, referenceCandidates } from '@shared/model'
 import { baseName, isProjectFile, PROJECT_EXTENSION, type ProjectFileRef } from '@shared/project'
+import type { LinkMessage } from '@shared/blenderLink'
 import type { MenuRole } from '@shared/menu'
+import addonSource from '../../blender/fxelizer_link.py?raw'
+import { LinkServer } from './blenderLink'
 import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
@@ -201,6 +204,17 @@ function guardClose(win: BrowserWindow): void {
   win.on('responsive', () => hung.delete(win))
 }
 
+/** The Blender link server; its messages go to every window (there is one). */
+const linkServer = new LinkServer(
+  currentVersion(),
+  (state) => sendToWindows(IPC.linkState, state),
+  (client, message, payload) => sendToWindows(IPC.linkMessage, client, message, payload)
+)
+
+function sendToWindows(channel: string, ...args: unknown[]): void {
+  for (const win of BrowserWindow.getAllWindows()) if (!win.webContents.isDestroyed()) win.webContents.send(channel, ...args)
+}
+
 /** Settings is recording a shortcut: the menu's own shortcuts must not run meanwhile. */
 let shortcutsSuspended = false
 
@@ -343,6 +357,7 @@ function registerIpc(): void {
     // Changed shortcuts: rebuild the native menu, which provides them.
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win && typeof patch === 'object' && patch !== null && 'keybinds' in patch) refreshMenu(win)
+    if (typeof patch === 'object' && patch !== null && 'blenderLink' in patch) linkServer.configure(getSettings().blenderLink)
   })
   ipcMain.on(IPC.suspendShortcuts, (event, suspend: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -365,6 +380,24 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pickScreenColors, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win ? pickScreenColors(win, getSettings().theme) : { colors: [] }
+  })
+
+  ipcMain.handle(IPC.linkGetState, () => linkServer.state())
+  ipcMain.on(IPC.linkSend, (_event, client: unknown, message: LinkMessage, payload: unknown) => {
+    if (typeof client === 'string' && typeof message === 'object' && message !== null) {
+      linkServer.send(client, message, payload instanceof Uint8Array ? payload : undefined)
+    }
+  })
+  ipcMain.handle(IPC.linkSaveAddon, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showSaveDialog(win, {
+      title: 'Save the Blender add-on',
+      defaultPath: 'fxelizer_link.py',
+      filters: [{ name: 'Blender add-on', extensions: ['py'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    await writeFile(result.filePath, addonSource, 'utf8')
+    return result.filePath
   })
 
   ipcMain.on(IPC.appVersion, (event) => {
@@ -496,6 +529,7 @@ function scheduleUpdateCheck(): void {
 app.whenReady().then(() => {
   registerIpc()
   createWindow()
+  if (!gpuReportPath) linkServer.configure(getSettings().blenderLink)
   scheduleUpdateCheck()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -508,6 +542,7 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   flushSettings()
+  linkServer.dispose()
   if (quitIntent === 'relaunch') app.relaunch()
   if (quitIntent === 'update') runInstaller()
 })
