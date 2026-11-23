@@ -61,13 +61,19 @@ describe('placeCallout', () => {
 describe('sampleTexture', () => {
   it('is an opaque, varied image that is the same every time', () => {
     const a = sampleTexture()
+    const b = sampleTexture()
     expect(a.data.length).toBe(a.width * a.height * 4)
-    expect(a.data).toEqual(sampleTexture().data)
+    // Plain loops: an expect() per pixel is far too slow for a quarter of a million pixels.
+    let different = 0
+    let transparent = 0
     const colors = new Set<number>()
     for (let i = 0; i < a.data.length; i += 4) {
-      expect(a.data[i + 3]).toBe(255)
+      if (a.data[i] !== b.data[i] || a.data[i + 1] !== b.data[i + 1] || a.data[i + 2] !== b.data[i + 2]) different++
+      if (a.data[i + 3] !== 255) transparent++
       colors.add((a.data[i]! << 16) | (a.data[i + 1]! << 8) | a.data[i + 2]!)
     }
+    expect(different).toBe(0)
+    expect(transparent).toBe(0)
     // Enough colors that reducing them is visible.
     expect(colors.size).toBeGreaterThan(1000)
   })
