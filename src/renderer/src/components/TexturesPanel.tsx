@@ -1,4 +1,4 @@
-// The open textures with previews of their source and result: click one to work on it, switch
+// The open textures, each with a preview of its result: click one to work on it, switch
 // it between the shared stack and a separate one, choose the model material it's drawn on, close
 // it, or open more. With a multi-material model, each material can get a texture of its own. With
 // live reload set to per file, each texture (and the model) has its own reload switch.
@@ -174,26 +174,41 @@ function TextureCard({ texture, preview }: { texture: TextureEntry; preview: str
       )}
       onClick={select}
     >
-      <div className="flex items-center gap-1">
-        <button type="button" className="min-w-0 flex-1 truncate text-left font-semibold" title={image.path ?? image.name} onClick={select}>
-          {image.name}
-        </button>
-        <button
-          type="button"
-          aria-label={`Close ${image.name}`}
-          title="Close this texture"
-          className="flex size-5 shrink-0 items-center justify-center rounded-[2px] text-dim hover:bg-hover hover:text-text"
-          onClick={(e) => {
-            e.stopPropagation()
-            closeTexture(texture.id)
-          }}
-        >
-          <CloseIcon className="size-3" />
-        </button>
-      </div>
-      <div className="grid grid-cols-2 gap-1">
-        <Thumb src={texture.thumbnail} label="Source" />
-        <Thumb src={preview} label="Result" />
+      <div className="flex min-w-0 gap-2">
+        {/* The result; the source stands in until the stack has run. */}
+        <Thumb src={preview ?? texture.thumbnail} label={preview ? 'Result' : 'Source'} />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <button type="button" className="min-w-0 flex-1 truncate text-left font-semibold" title={image.path ?? image.name} onClick={select}>
+              {image.name}
+            </button>
+            <button
+              type="button"
+              aria-label={`Close ${image.name}`}
+              title="Close this texture"
+              className="flex size-5 shrink-0 items-center justify-center rounded-[2px] text-dim hover:bg-hover hover:text-text"
+              onClick={(e) => {
+                e.stopPropagation()
+                closeTexture(texture.id)
+              }}
+            >
+              <CloseIcon className="size-3" />
+            </button>
+          </div>
+          <span className="font-mono text-small text-dim">
+            {image.width} × {image.height}
+          </span>
+          <span className="mt-auto self-start" onClick={(e) => e.stopPropagation()}>
+            <Segmented
+              value={separate ? 'separate' : 'shared'}
+              onChange={(v) => useApp.getState().setTextureStack(texture.id, v)}
+              options={[
+                { value: 'shared', label: 'Shared', hint: 'Processed with the shared stack.' },
+                { value: 'separate', label: 'Separate', hint: 'Processed with a stack of its own (starts as a copy of the shared one).' }
+              ]}
+            />
+          </span>
+        </div>
       </div>
       {materials && (
         <p className="truncate text-small text-dim" title="Model materials drawn with this texture (Materials, above)">
@@ -210,32 +225,14 @@ function TextureCard({ texture, preview }: { texture: TextureEntry; preview: str
           />
         </span>
       )}
-      <div className="flex items-center gap-2 text-small text-dim">
-        <span className="font-mono">
-          {image.width} × {image.height}
-        </span>
-        <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
-          <Segmented
-            value={separate ? 'separate' : 'shared'}
-            onChange={(v) => useApp.getState().setTextureStack(texture.id, v)}
-            options={[
-              { value: 'shared', label: 'Shared', hint: 'Processed with the shared stack.' },
-              { value: 'separate', label: 'Separate', hint: 'Processed with a stack of its own (starts as a copy of the shared one).' }
-            ]}
-          />
-        </span>
-      </div>
     </div>
   )
 }
 
 function Thumb({ src, label }: { src: string | null; label: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <div className="bevel-sunken flex aspect-square items-center justify-center overflow-hidden bg-well">
-        {src ? <img src={src} alt={label} className="size-full object-contain [image-rendering:pixelated]" /> : <span className="text-small text-faint">—</span>}
-      </div>
-      <span className="text-center text-small text-dim label-caps">{label}</span>
+    <div className="bevel-sunken flex size-[72px] shrink-0 items-center justify-center overflow-hidden bg-well" title={label}>
+      {src ? <img src={src} alt={label} className="size-full object-contain [image-rendering:pixelated]" /> : <span className="text-small text-faint">—</span>}
     </div>
   )
 }
