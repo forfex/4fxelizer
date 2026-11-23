@@ -27,7 +27,6 @@ import {
   VIEWER,
   workspaceName
 } from '@/workspace/workspace'
-import { BakePanel } from './BakePanel'
 import { MapsPanel } from './MapsPanel'
 import { PalettePanel } from './PalettePanel'
 import { StackPanel } from './StackPanel'
@@ -57,9 +56,8 @@ const COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   stack: StackPanel,
   palettes: PalettePanel,
   maps: MapsPanel,
-  bake: BakePanel,
   textures: TexturesPanel,
-  // Former panels (the 3D view, Generate); layouts that still have one close it on load (see workspace.ts).
+  // Former panels (the 3D view, Generate, Bake); layouts that still have one close it on load (see workspace.ts).
   ...Object.fromEntries(LEGACY_PANELS.map((id) => [id, () => null]))
 }
 

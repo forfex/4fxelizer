@@ -313,9 +313,9 @@ export const BUILTIN_WORKSPACE_NAMES: Record<BuiltinWorkspaceId, string> = {
 }
 
 /** Dockable tool panels (their ids are stored in layouts: keep them stable), in menu order. */
-export const TOOL_PANEL_IDS = ['stack', 'palettes', 'maps', 'bake', 'textures'] as const
+export const TOOL_PANEL_IDS = ['stack', 'palettes', 'maps', 'textures'] as const
 export type ToolPanelId = (typeof TOOL_PANEL_IDS)[number]
-export const TOOL_PANEL_NAMES: Record<ToolPanelId, string> = { stack: 'Stack', palettes: 'Palettes', maps: 'Maps', bake: 'Bake', textures: 'Textures' }
+export const TOOL_PANEL_NAMES: Record<ToolPanelId, string> = { stack: 'Stack', palettes: 'Palettes', maps: 'Maps', textures: 'Textures' }
 
 const PLAIN_COMMANDS = [
   'new-project',

@@ -19,7 +19,7 @@ export interface PanelDef {
 }
 
 /** Tool panels (the viewer is always there and can't be closed). */
-const MIN_WIDTHS: Record<ToolPanelId, number> = { stack: 240, palettes: 220, maps: 240, bake: 240, textures: 220 }
+const MIN_WIDTHS: Record<ToolPanelId, number> = { stack: 240, palettes: 220, maps: 240, textures: 220 }
 export const PANELS: PanelDef[] = TOOL_PANEL_IDS.map((id) => ({ id, title: TOOL_PANEL_NAMES[id], minWidth: MIN_WIDTHS[id] }))
 
 /**
@@ -29,10 +29,10 @@ export const PANELS: PanelDef[] = TOOL_PANEL_IDS.map((id) => ({ id, title: TOOL_
 export const LEGACY_VIEW3D = 'view3d'
 
 /**
- * Former panels whose content moved into other panels (Generate into Palettes). Layouts saved
- * with them still load; the panels are removed on restore.
+ * Former panels whose content moved into other panels (Generate into Palettes, Bake into Maps).
+ * Layouts saved with them still load; the panels are removed on restore.
  */
-export const LEGACY_PANELS = [LEGACY_VIEW3D, 'generate']
+export const LEGACY_PANELS = [LEGACY_VIEW3D, 'generate', 'bake']
 
 interface BuiltinWorkspace {
   id: BuiltinWorkspaceId
@@ -94,10 +94,9 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
     build(api) {
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'left', 320)
-      addTool(api, 'palettes', VIEWER, 'right', 300)
+      addTool(api, 'palettes', VIEWER, 'right', 340)
       addTool(api, 'textures', 'palettes', 'within')
       addTool(api, 'maps', 'palettes', 'within')
-      addTool(api, 'bake', 'palettes', 'within')
     }
   },
   {
@@ -109,7 +108,6 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'stack', VIEWER, 'right', 330)
       addTool(api, 'palettes', 'stack', 'below')
       addTool(api, 'maps', 'palettes', 'within')
-      addTool(api, 'bake', 'palettes', 'within')
       addTool(api, 'textures', 'palettes', 'within')
     }
   },
@@ -121,7 +119,6 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'left', 300)
       addTool(api, 'maps', 'stack', 'within')
-      addTool(api, 'bake', 'stack', 'within')
       addTool(api, 'textures', 'stack', 'within')
       addTool(api, 'palettes', VIEWER, 'right', 400)
     }
@@ -129,14 +126,13 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   {
     id: '3d',
     name: BUILTIN_WORKSPACE_NAMES['3d'],
-    hint: 'The 3D view beside the texture, with the bake and maps panels.',
+    hint: 'The 3D view beside the texture, with the maps panel (and baking) on the right.',
     build(api) {
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'left', 300)
       addTool(api, 'palettes', 'stack', 'within')
-      addTool(api, 'bake', null, 'right', 300)
-      addTool(api, 'maps', 'bake', 'below')
-      addTool(api, 'textures', 'bake', 'within')
+      addTool(api, 'maps', null, 'right', 300)
+      addTool(api, 'textures', 'maps', 'within')
       // The texture and the model share the main view.
       const app = useApp.getState()
       if (app.viewMode === '2d') app.setViewMode('split')
@@ -155,7 +151,6 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       float('stack', 12, 12, 320, 560)
       float('palettes', Math.max(width - 312, 344), 12, 300, 560)
       addTool(api, 'maps', 'palettes', 'within')
-      addTool(api, 'bake', 'palettes', 'within')
       addTool(api, 'textures', 'palettes', 'within')
     }
   }

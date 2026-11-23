@@ -1,5 +1,6 @@
-// Bakes maps (AO, cavity, curvature, edge, thickness, height, up-facing) from the loaded model into
-// the map slots, for the texture set the open texture belongs to.
+// The Maps panel's model and bake sections: the loaded model (texture set, UV set) and baking maps
+// (AO, cavity, curvature, edge, thickness, height, up-facing) from it into the map slots, for the
+// texture set the open texture belongs to.
 
 import { useState } from 'react'
 import { BAKE_MAPS, BAKE_NUMBERS, BAKE_SIZES, BUILTIN_BAKE_PRESETS, MAX_BAKE_PRESETS, sameBake, type BakeSettings } from '@shared/bake'
@@ -10,8 +11,9 @@ import { closeModel, openModel, openTextureOf, startBake, stopBake } from '@/mod
 import { useApp } from '@/store'
 import { activeMaterials, unboundPick } from '@/stack/textures'
 import { Button } from './ui/button'
+import { Fold } from './stages/editors'
 import { Checkbox, Field, INPUT_CLASS, ParamSlider, Segmented } from './ui/controls'
-import { GroupBox, Led, PanelBody } from './ui/retro'
+import { GroupBox, Led } from './ui/retro'
 import { Select } from './ui/select'
 
 type NumberKey = keyof typeof BAKE_NUMBERS
@@ -36,34 +38,46 @@ function BakeSlider({ k, label, hint, percent, log }: { k: NumberKey; label: str
   )
 }
 
-export function BakePanel() {
-  const model = useApp((s) => s.model)
+/** Without a model: one line and an Open button. */
+export function NoModelBox() {
   const gpuReady = useApp((s) => s.gpu.status === 'ready')
-  if (!model) {
-    return (
-      <PanelBody>
-        <GroupBox title="Model">
-          <p className="mb-2 text-small text-dim">
-            Open a model (glTF, GLB, FBX or OBJ) to see the texture on it and bake AO, cavity, curvature and other maps from its shape.
-          </p>
-          <Button variant="primary" onClick={openModel} disabled={!gpuReady}>
-            Open Model…
-          </Button>
-        </GroupBox>
-      </PanelBody>
-    )
-  }
   return (
-    <PanelBody>
-      <ModelBox />
-      <MapsBox />
-      <SettingsBox />
-      <BakeBox />
-    </PanelBody>
+    <GroupBox title="Model">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="min-w-0 flex-1 text-small text-dim">Open a model (glTF, GLB, FBX, OBJ) to bake maps from its shape.</span>
+        <Button size="sm" variant="primary" onClick={openModel} disabled={!gpuReady}>
+          Open Model…
+        </Button>
+      </div>
+    </GroupBox>
   )
 }
 
-function ModelBox() {
+/** Which maps to bake, the bake button and (folded) the bake settings. */
+export function BakeSection() {
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  return (
+    <GroupBox title="Bake">
+      <div className="flex flex-col gap-2">
+        <BakeMapsChoice />
+        <BakeBox />
+        <Fold label="Settings" summary={useBakeSummary()} open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <SettingsBox />
+        </Fold>
+      </div>
+    </GroupBox>
+  )
+}
+
+/** "Preset · 1024 px" for the folded settings. */
+function useBakeSummary(): string {
+  const bake = useApp((s) => s.bake)
+  const saved = useSavedSettings().bakePresets
+  const preset = saved.find((p) => sameBake(p.settings, bake))?.name ?? BUILTIN_BAKE_PRESETS.find((p) => sameBake(p.settings, bake))?.name ?? 'Custom'
+  return `${preset} · ${bake.size} px`
+}
+
+export function ModelBox() {
   const model = useApp((s) => s.model)!
   // The texture set the active texture is drawn on.
   // (or a picked one no texture is drawn on yet: a bake makes one for it).
@@ -137,10 +151,10 @@ function ModelBox() {
   )
 }
 
-function MapsBox() {
+function BakeMapsChoice() {
   const maps = useApp((s) => s.bake.maps)
   return (
-    <GroupBox title="Bake maps">
+    <>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-x-3 gap-y-1.5">
         {BAKE_MAPS.map((m) => {
           const slot = MAP_SLOTS.find((s) => s.id === m)!
@@ -155,7 +169,7 @@ function MapsBox() {
           )
         })}
       </div>
-    </GroupBox>
+    </>
   )
 }
 
@@ -164,54 +178,52 @@ function SettingsBox() {
   const { setBake } = useApp.getState()
   const m = bake.maps
   return (
-    <GroupBox title="Settings">
-      <div className="flex flex-col gap-2">
-        <PresetRow />
-        <Field label="Size" hint="Resolution of the baked maps. Masks read maps by UV, so it doesn't need to match the texture.">
-          <Select
-            className="w-32"
-            value={String(bake.size)}
-            onValueChange={(v) => setBake({ size: Number(v) })}
-            options={BAKE_SIZES.map((s) => ({ value: String(s), label: `${s} × ${s}` }))}
-          />
-        </Field>
-        <BakeSlider k="padding" label="Padding" hint="Texels the UV islands grow outward, so maps don't show seams when sampled or downscaled." />
-        {(m.ao || m.cavity) && (
-          <Checkbox
-            label="Ignore back faces"
-            hint="Hits on the back of faces don't darken AO or cavity. Helps with open meshes and parts that poke through."
-            checked={bake.aoIgnoreBackfaces}
-            onCheckedChange={(aoIgnoreBackfaces) => setBake({ aoIgnoreBackfaces })}
-          />
-        )}
-        {m.ao && (
-          <Section title="Ambient occlusion">
-            <BakeSlider k="aoSamples" label="Samples" hint="Rays per texel. More is smoother and slower." log />
-            <BakeSlider k="aoDistance" label="Distance" hint="How far rays look for blockers, as a share of the model's size." percent log />
-            <BakeSlider k="aoFalloff" label="Falloff" hint="0: every blocker darkens fully. 1: far blockers darken less." />
-          </Section>
-        )}
-        {m.cavity && (
-          <Section title="Cavity">
-            <BakeSlider k="cavitySamples" label="Samples" hint="Rays per texel." log />
-            <BakeSlider k="cavityDistance" label="Distance" hint="How deep a crevice has to be to darken, as a share of the model's size." percent log />
-          </Section>
-        )}
-        {(m.curvature || m.edge) && (
-          <Section title="Curvature and edge">
-            <BakeSlider k="edgeSamples" label="Samples" hint="Probes per texel." log />
-            <BakeSlider k="edgeWidth" label="Width" hint="How far from an edge or crease it still shows, as a share of the model's size." percent log />
-            <BakeSlider k="edgeStrength" label="Strength" hint="Contrast: higher makes gentle curves show too." log />
-          </Section>
-        )}
-        {m.thickness && (
-          <Section title="Thickness">
-            <BakeSlider k="thicknessSamples" label="Samples" hint="Rays per texel." log />
-            <BakeSlider k="thicknessDistance" label="Distance" hint="Thickness that reads as white, as a share of the model's size." percent log />
-          </Section>
-        )}
-      </div>
-    </GroupBox>
+    <div className="flex flex-col gap-2">
+      <PresetRow />
+      <Field label="Size" hint="Resolution of the baked maps. Masks read maps by UV, so it doesn't need to match the texture.">
+        <Select
+          className="w-32"
+          value={String(bake.size)}
+          onValueChange={(v) => setBake({ size: Number(v) })}
+          options={BAKE_SIZES.map((s) => ({ value: String(s), label: `${s} × ${s}` }))}
+        />
+      </Field>
+      <BakeSlider k="padding" label="Padding" hint="Texels the UV islands grow outward, so maps don't show seams when sampled or downscaled." />
+      {(m.ao || m.cavity) && (
+        <Checkbox
+          label="Ignore back faces"
+          hint="Hits on the back of faces don't darken AO or cavity. Helps with open meshes and parts that poke through."
+          checked={bake.aoIgnoreBackfaces}
+          onCheckedChange={(aoIgnoreBackfaces) => setBake({ aoIgnoreBackfaces })}
+        />
+      )}
+      {m.ao && (
+        <Section title="Ambient occlusion">
+          <BakeSlider k="aoSamples" label="Samples" hint="Rays per texel. More is smoother and slower." log />
+          <BakeSlider k="aoDistance" label="Distance" hint="How far rays look for blockers, as a share of the model's size." percent log />
+          <BakeSlider k="aoFalloff" label="Falloff" hint="0: every blocker darkens fully. 1: far blockers darken less." />
+        </Section>
+      )}
+      {m.cavity && (
+        <Section title="Cavity">
+          <BakeSlider k="cavitySamples" label="Samples" hint="Rays per texel." log />
+          <BakeSlider k="cavityDistance" label="Distance" hint="How deep a crevice has to be to darken, as a share of the model's size." percent log />
+        </Section>
+      )}
+      {(m.curvature || m.edge) && (
+        <Section title="Curvature and edge">
+          <BakeSlider k="edgeSamples" label="Samples" hint="Probes per texel." log />
+          <BakeSlider k="edgeWidth" label="Width" hint="How far from an edge or crease it still shows, as a share of the model's size." percent log />
+          <BakeSlider k="edgeStrength" label="Strength" hint="Contrast: higher makes gentle curves show too." log />
+        </Section>
+      )}
+      {m.thickness && (
+        <Section title="Thickness">
+          <BakeSlider k="thicknessSamples" label="Samples" hint="Rays per texel." log />
+          <BakeSlider k="thicknessDistance" label="Distance" hint="Thickness that reads as white, as a share of the model's size." percent log />
+        </Section>
+      )}
+    </div>
   )
 }
 
@@ -322,7 +334,7 @@ function BakeBox() {
         )}
         <Led state={running ? 'busy' : job ? 'on' : 'off'} />
         <span className="min-w-0 flex-1 truncate text-small text-dim">
-          {running ? `${job.label} · ${Math.floor(job.progress * 100)}%` : (job?.label ?? 'Maps land in the Maps panel.')}
+          {running ? `${job.label} · ${Math.floor(job.progress * 100)}%` : (job?.label ?? 'Baked maps fill the slots above.')}
         </span>
       </div>
       {running && (
