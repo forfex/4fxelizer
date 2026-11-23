@@ -34,7 +34,7 @@ export function PalettePanel() {
 
   return (
     <PanelBody>
-      <GroupBox title="Palettes">
+      <GroupBox title="Palettes" data-tour="palette-list">
         <div className="flex gap-1">
           <Select
             className="flex-1"
@@ -173,7 +173,7 @@ function PaletteEditor({ palette }: { palette: Palette }) {
   }
 
   return (
-    <GroupBox title={`Colors · ${palette.colors.length}`}>
+    <GroupBox title={`Colors · ${palette.colors.length}`} data-tour="palette-colors">
       <div className="flex flex-col gap-2">
         {palette.colors.length > 0 ? (
           palette.colors.length <= SWATCH_BUTTONS_MAX ? (
@@ -418,7 +418,7 @@ function GeneratorBox({ palette }: { palette: Palette }) {
   const ownerIndex = palette.ownerUid ? stages.findIndex((s) => s.uid === palette.ownerUid) : -1
 
   return (
-    <GroupBox title="Generate">
+    <GroupBox title="Generate" data-tour="palette-generate">
       <div className="flex flex-col gap-1.5">
         {ownerIndex >= 0 ? (
           <p className="text-small text-dim">

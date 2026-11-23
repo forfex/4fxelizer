@@ -48,7 +48,7 @@ export function PresetsMenu() {
       }}
     >
       <MenuTrigger asChild>
-        <Button title="Save the current stack as a preset, or apply one">Presets ▾</Button>
+        <Button data-tour="presets" title="Save the current stack as a preset, or apply one">Presets ▾</Button>
       </MenuTrigger>
       <MenuContent className="w-64">
         <MenuItem onSelect={() => setPresetsOpen(true)}>Save current as preset…</MenuItem>

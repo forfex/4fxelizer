@@ -13,7 +13,7 @@ export function MainView() {
   const share = useApp((s) => s.viewSplit)
   const root = useRef<HTMLDivElement>(null)
   return (
-    <div ref={root} className="relative flex h-full min-h-0 bg-panel p-1.5">
+    <div ref={root} data-tour="viewer" className="relative flex h-full min-h-0 bg-panel p-1.5">
       <div
         className={cn('flex min-h-0 min-w-0', mode === '3d' ? 'invisible absolute inset-1.5' : 'flex-1')}
         style={mode === 'split' ? { flex: `${share} 1 0` } : undefined}

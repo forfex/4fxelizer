@@ -757,6 +757,7 @@ export function runMenuCommand(command: MenuCommand): void {
     case 'reset-workspace': return resetWorkspace()
     case 'save-workspace': return app.setSaveWorkspaceOpen(true)
     case 'command-search': return app.setCommandSearchOpen(true)
+    case 'tutorial': return app.setTutorialStep(0)
     case 'new-project': return void newProject()
     case 'open-project': return void openProject()
     case 'save-project': return void saveProject()
