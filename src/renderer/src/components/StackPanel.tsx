@@ -6,34 +6,41 @@ import { cn } from '@/lib/utils'
 import { analyzeStack, blendMaskOf, type StageInfo } from '@/stack/analyze'
 import { stageSummary } from '@/stack/summary'
 import { useApp } from '@/store'
+import { revealPanel } from '@/workspace/workspace'
 import { BlendRow, Fold, PaletteSelect, StageEditor } from './stages/editors'
 import { Button } from './ui/button'
-import { Checkbox, Field, Segmented } from './ui/controls'
+import { Checkbox, Field } from './ui/controls'
 import { CaretIcon, MoreIcon, PlusIcon, PreviewIcon } from './ui/icons'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './ui/menu'
 import { GroupBox, Led, LedToggle, PanelBody } from './ui/retro'
 
-/** Whether the active texture uses the shared stack or one of its own (shown once several textures are open, or it has its own). */
-function StackChoice() {
+/**
+ * Which stack the active texture is processed with (shown once several textures are open, or it
+ * has its own). Read-only: it reveals the Textures panel, where the stack is switched.
+ */
+function StackBadge() {
   const id = useApp((s) => s.activeTextureId)
   const separate = useApp((s) => !!id && !!s.docs.separate[id])
   const sharedCount = useApp((s) => s.textures.filter((t) => !s.docs.separate[t.id]).length)
   const count = useApp((s) => s.textures.length)
+  const name = useApp((s) => s.image?.name ?? '')
   if (!id || (count < 2 && !separate)) return null
+  const text = separate ? `Only ${name}` : `Shared · ${sharedCount} ${sharedCount === 1 ? 'texture' : 'textures'}`
   return (
-    <Field
-      label="Stack"
-      hint="Shared: every texture on the shared stack is processed the same way. Separate: this texture gets a stack of its own (starting as a copy of the shared one)."
-    >
-      <Segmented
-        className="flex-1"
-        value={separate ? 'separate' : 'shared'}
-        onChange={(v) => useApp.getState().setTextureStack(id, v)}
-        options={[
-          { value: 'shared', label: `Shared · ${sharedCount}`, hint: 'Use the stack shared by the textures (drops this texture’s own stack; Undo brings it back).' },
-          { value: 'separate', label: 'Separate', hint: 'Give this texture a stack of its own, starting as a copy of the shared one.' }
-        ]}
-      />
+    <Field label="Stack">
+      <button
+        type="button"
+        className="bevel-raised flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-fx border-px border-edge bg-panel-hi px-2 text-left text-small hover:text-accent-hi"
+        title={
+          separate
+            ? 'This texture has a stack of its own. Switch it in the Textures panel.'
+            : 'These textures share this stack and are processed the same way. Give one its own stack in the Textures panel.'
+        }
+        onClick={() => revealPanel('textures')}
+      >
+        <span className="min-w-0 flex-1 truncate">{text}</span>
+        <span className="shrink-0 text-dim">Textures…</span>
+      </button>
     </Field>
   )
 }
@@ -63,7 +70,7 @@ export function StackPanel() {
               <dt className="text-dim">Size</dt>
               <dd className="font-mono">{image.width} × {image.height}</dd>
             </dl>
-            <StackChoice />
+            <StackBadge />
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
