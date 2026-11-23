@@ -4,7 +4,7 @@
 // layout and the user's saved workspaces live in user settings.
 
 import type { DockviewApi, SerializedDockview } from 'dockview-react'
-import { MAX_WORKSPACES, type SavedWorkspace } from '@shared/api'
+import { BUILTIN_WORKSPACE_NAMES, MAX_WORKSPACES, TOOL_PANEL_IDS, TOOL_PANEL_NAMES, type BuiltinWorkspaceId, type SavedWorkspace, type ToolPanelId } from '@shared/api'
 import { savedSettings, saveSettings } from '@/settings'
 import { useApp } from '@/store'
 import { layoutProblem } from './layoutCheck'
@@ -12,20 +12,15 @@ import { layoutProblem } from './layoutCheck'
 export const VIEWER = 'viewer'
 
 export interface PanelDef {
-  id: string
+  id: ToolPanelId
   title: string
   /** Narrowest the panel may get when docked. */
   minWidth: number
 }
 
 /** Tool panels (the viewer is always there and can't be closed). */
-export const PANELS: PanelDef[] = [
-  { id: 'stack', title: 'Stack', minWidth: 240 },
-  { id: 'palettes', title: 'Palettes', minWidth: 220 },
-  { id: 'maps', title: 'Maps', minWidth: 240 },
-  { id: 'bake', title: 'Bake', minWidth: 240 },
-  { id: 'textures', title: 'Textures', minWidth: 220 }
-]
+const MIN_WIDTHS: Record<ToolPanelId, number> = { stack: 240, palettes: 220, maps: 240, bake: 240, textures: 220 }
+export const PANELS: PanelDef[] = TOOL_PANEL_IDS.map((id) => ({ id, title: TOOL_PANEL_NAMES[id], minWidth: MIN_WIDTHS[id] }))
 
 /**
  * The 3D view's former panel id. It now lives in the main view (the view mode switch), so layouts
@@ -40,7 +35,7 @@ export const LEGACY_VIEW3D = 'view3d'
 export const LEGACY_PANELS = [LEGACY_VIEW3D, 'generate']
 
 interface BuiltinWorkspace {
-  id: string
+  id: BuiltinWorkspaceId
   name: string
   hint: string
   build(api: DockviewApi): void
@@ -94,7 +89,7 @@ function addTool(
 export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   {
     id: 'essentials',
-    name: 'Essentials',
+    name: BUILTIN_WORKSPACE_NAMES['essentials'],
     hint: 'Stack on the left; palettes, textures and maps on the right.',
     build(api) {
       addViewer(api)
@@ -107,7 +102,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   },
   {
     id: 'wide-viewer',
-    name: 'Wide viewer',
+    name: BUILTIN_WORKSPACE_NAMES['wide-viewer'],
     hint: 'Every panel in one right-hand column, for the most image space.',
     build(api) {
       addViewer(api)
@@ -120,7 +115,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   },
   {
     id: 'palette-focus',
-    name: 'Palette editing',
+    name: BUILTIN_WORKSPACE_NAMES['palette-focus'],
     hint: 'A wide palette panel, with the stack and maps tabbed on the left.',
     build(api) {
       addViewer(api)
@@ -133,7 +128,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   },
   {
     id: '3d',
-    name: '3D',
+    name: BUILTIN_WORKSPACE_NAMES['3d'],
     hint: 'The 3D view beside the texture, with the bake and maps panels.',
     build(api) {
       addViewer(api)
@@ -149,7 +144,7 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   },
   {
     id: 'floating',
-    name: 'Floating',
+    name: BUILTIN_WORKSPACE_NAMES['floating'],
     hint: 'Panels float over the viewer; drag them anywhere, or onto an edge to dock.',
     build(api) {
       addViewer(api)

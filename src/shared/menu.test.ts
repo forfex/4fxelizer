@@ -7,7 +7,7 @@ const flat = (items: MenuEntry[]): MenuEntry[] => items.flatMap((i) => (i.kind =
 describe('app menu', () => {
   it('has the same sections on every platform, dev items only in dev', () => {
     for (const platform of ['win32', 'darwin', 'linux']) {
-      expect(appMenu(platform, false).map((s) => s.label)).toEqual(['File', 'Edit', 'View', 'Help'])
+      expect(appMenu(platform, false).map((s) => s.label)).toEqual(['File', 'Edit', 'View', 'Window', 'Help'])
     }
     const labels = (dev: boolean): string[] =>
       appMenu('win32', dev).flatMap((s) => flat(s.items).flatMap((i) => (i.kind === 'separator' ? [] : [i.label])))
@@ -54,6 +54,12 @@ describe('app menu', () => {
       'look-n64',
       'look-custom'
     ])
+  })
+
+  it('lists the workspaces and a toggle per panel in Window', () => {
+    const window = appMenu('win32', false).find((s) => s.label === 'Window')!
+    const commands = flat(window.items).flatMap((i) => (i.kind === 'command' ? [i.command] : []))
+    expect(commands).toEqual(expect.arrayContaining(['workspace-essentials', 'workspace-floating', 'reset-workspace', 'save-workspace', 'panel-stack', 'panel-maps']))
   })
 
   it('formats shortcuts per platform', () => {

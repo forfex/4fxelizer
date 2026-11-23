@@ -130,6 +130,8 @@ export interface AppState extends Doc {
   settingsOpen: boolean
   exportOpen: boolean
   presetsOpen: boolean
+  /** The Save workspace dialog (toolbar workspace menu, Window menu). */
+  saveWorkspaceOpen: boolean
   /** Name of the last loaded or saved preset (suggested when saving). */
   presetName: string | null
   /** Bumped when the user's preset files change, so lists reload. */
@@ -213,6 +215,7 @@ export interface AppState extends Doc {
   setSettingsOpen(open: boolean): void
   setExportOpen(open: boolean): void
   setPresetsOpen(open: boolean): void
+  setSaveWorkspaceOpen(open: boolean): void
   setPresetName(name: string | null): void
   presetsChanged(): void
   /** Replaces the whole document (e.g. loading a preset) as one undo step. */
@@ -353,6 +356,7 @@ export const useApp = create<AppState>()((set, get) => ({
   settingsOpen: false,
   exportOpen: false,
   presetsOpen: false,
+  saveWorkspaceOpen: false,
   presetName: null,
   presetsVersion: 0,
   previewUid: null,
@@ -490,6 +494,7 @@ export const useApp = create<AppState>()((set, get) => ({
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
   setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
+  setSaveWorkspaceOpen: (saveWorkspaceOpen) => set({ saveWorkspaceOpen }),
   setPresetName: (presetName) => set({ presetName }),
   presetsChanged: () => set({ presetsVersion: get().presetsVersion + 1 }),
   loadDoc: (doc) => {

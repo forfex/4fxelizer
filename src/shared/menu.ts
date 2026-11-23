@@ -1,7 +1,21 @@
 // The app menu, defined once. Main builds the native menu from it (keyboard shortcuts everywhere,
 // the menu bar on macOS); the renderer draws it in the custom title bar on Windows and Linux.
 
-import { LIVE_RELOAD_MODES, LIVE_RELOAD_NAMES, LOOK_CHOICES, THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type Keybinds, type MenuCommand } from './api'
+import {
+  BUILTIN_WORKSPACE_IDS,
+  BUILTIN_WORKSPACE_NAMES,
+  LIVE_RELOAD_MODES,
+  LIVE_RELOAD_NAMES,
+  LOOK_CHOICES,
+  THEME_NAMES,
+  THEMES,
+  TOOL_PANEL_IDS,
+  TOOL_PANEL_NAMES,
+  VIEW_MODE_NAMES,
+  VIEW_MODES,
+  type Keybinds,
+  type MenuCommand
+} from './api'
 import { VIEW3D_LOOK_INFO } from './view3d'
 
 /** Actions main performs itself (clipboard, window, dev tools). */
@@ -91,13 +105,23 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
         command('Zoom Out', 'zoom-out', 'CmdOrCtrl+-'),
         separator,
         command('Pixel Grid', 'toggle-grid', 'CmdOrCtrl+G'),
-        command('Split View', 'toggle-split', 'CmdOrCtrl+\\'),
+        command('Compare Before / After', 'toggle-split', 'CmdOrCtrl+\\'),
         command('Tiling View', 'toggle-tile', 'CmdOrCtrl+T'),
         separator,
         { kind: 'submenu', label: 'Theme', items: THEMES.map((t) => command(THEME_NAMES[t], `theme-${t}`)) },
         separator,
         role('Toggle Full Screen', 'togglefullscreen', isMac ? 'Ctrl+Cmd+F' : 'F11'),
         ...(isDev ? [separator, role('Reload', 'reload', 'CmdOrCtrl+R'), role('Toggle Developer Tools', 'toggleDevTools', isMac ? 'Alt+Cmd+I' : 'Ctrl+Shift+I')] : [])
+      ]
+    },
+    {
+      label: 'Window',
+      items: [
+        { kind: 'submenu', label: 'Workspace', items: BUILTIN_WORKSPACE_IDS.map((w) => command(BUILTIN_WORKSPACE_NAMES[w], `workspace-${w}`)) },
+        command('Reset Workspace', 'reset-workspace'),
+        command('Save Workspace As…', 'save-workspace'),
+        separator,
+        ...TOOL_PANEL_IDS.map((p) => command(`${TOOL_PANEL_NAMES[p]} Panel`, `panel-${p}`))
       ]
     },
     {

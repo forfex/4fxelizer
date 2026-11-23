@@ -10,6 +10,7 @@ import {
 import 'dockview-react/dist/styles/dockview.css'
 import '@/styles/dock.css'
 import { savedSettings, saveSettings, useSavedSettings } from '@/settings'
+import { useApp } from '@/store'
 import {
   BUILTIN_WORKSPACES,
   deleteWorkspace,
@@ -122,7 +123,8 @@ function Dock() {
 
 /** Toolbar dropdown: switch, save, reset and delete workspaces; show or hide panels. */
 export function WorkspaceMenu() {
-  const [saveOpen, setSaveOpen] = useState(false)
+  const saveOpen = useApp((s) => s.saveWorkspaceOpen)
+  const setSaveOpen = useApp((s) => s.setSaveWorkspaceOpen)
   const { workspace } = useSavedSettings()
   const workspaces = savedWorkspaces()
   return (
