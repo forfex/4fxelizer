@@ -1,6 +1,6 @@
 // Settings UI for each stage type, plus the shared blend row.
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BLEND_MODES, type BlendMode } from '@/gpu/pass'
 import { DEFAULT_ADJUST, type AdjustParams } from '@/gpu/passes/adjust'
 import {
@@ -26,10 +26,12 @@ import { MAX_UPSCALE_FACTOR, UPSCALE_ALPHA, UPSCALE_METHODS, type UpscaleParams 
 import type { StageSpec } from '@/gpu/plan'
 import { GENERATE_METHODS, MAX_PALETTE, type GeneratorSettings, type Palette } from '@/palette/palette'
 import type { StageInfo } from '@/stack/analyze'
+import { adjustMoreChanged } from '@/stack/summary'
 import { ownedPalette } from '@/stack/doc'
 import { useApp } from '@/store'
 import { Button } from '../ui/button'
 import { Checkbox, Field, NumberField, ParamSlider, Segmented } from '../ui/controls'
+import { CaretIcon } from '../ui/icons'
 import { Led } from '../ui/retro'
 import { Select } from '../ui/select'
 
@@ -159,6 +161,12 @@ function PaletteSource({ stage, paletteId, set }: { stage: StageSpec; paletteId:
 
 function AdjustEditor({ params: p, set }: EditorProps<AdjustParams>) {
   const maps = useApp((s) => s.maps)
+  // Levels and map shading are rarely used: folded away unless one of them is set.
+  const moreChanged = adjustMoreChanged(p)
+  const [moreOpen, setMoreOpen] = useState(moreChanged)
+  useEffect(() => {
+    if (moreChanged) setMoreOpen(true)
+  }, [moreChanged])
   const missing = [
     { label: 'AO', used: p.ao > 0, loaded: !!maps.ao },
     { label: 'cavity', used: p.cavity > 0, loaded: !!maps.cavity }
@@ -171,40 +179,93 @@ function AdjustEditor({ params: p, set }: EditorProps<AdjustParams>) {
       <ParamSlider label="Saturation" value={p.saturation} min={-1} max={1} step={0.01} onChange={(saturation) => set({ saturation })} />
       <ParamSlider label="Hue" value={p.hue} min={-180} max={180} step={1} suffix="°" onChange={(hue) => set({ hue })} />
       <ParamSlider label="Sharpen" hint="Unsharp mask before everything else. Helps details survive downscaling." value={p.sharpen} min={0} max={3} step={0.05} onChange={(sharpen) => set({ sharpen })} />
-      <Field label="Input levels" hint="Black and white points of the input.">
-        <NumberField className="flex-1" value={p.inBlack} min={0} max={1} step={0.01} onChange={(inBlack) => set({ inBlack })} />
-        <NumberField className="flex-1" value={p.inWhite} min={0} max={1} step={0.01} onChange={(inWhite) => set({ inWhite })} />
-      </Field>
-      <Field label="Output levels" hint="Darkest and brightest output values.">
-        <NumberField className="flex-1" value={p.outBlack} min={0} max={1} step={0.01} onChange={(outBlack) => set({ outBlack })} />
-        <NumberField className="flex-1" value={p.outWhite} min={0} max={1} step={0.01} onChange={(outWhite) => set({ outWhite })} />
-      </Field>
-      <ParamSlider
-        label="AO shading"
-        hint="Multiplies the imported ambient occlusion map into the color: baked lighting, darker in crevices and contact shadows."
-        value={p.ao ?? 0}
-        min={0}
-        max={1}
-        step={0.01}
-        onChange={(ao) => set({ ao })}
-      />
-      <ParamSlider
-        label="Cavity shading"
-        hint="Multiplies the imported cavity map into the color: darker small crevices and scratches."
-        value={p.cavity ?? 0}
-        min={0}
-        max={1}
-        step={0.01}
-        onChange={(cavity) => set({ cavity })}
-      />
+      <Fold
+        label="More"
+        summary="levels, AO, cavity"
+        open={moreOpen}
+        onOpenChange={setMoreOpen}
+        aside={
+          <Button size="sm" className="shrink-0" onClick={() => set(DEFAULT_ADJUST)} title="Put every Adjust setting back to its default">
+            Reset
+          </Button>
+        }
+      >
+        <Field label="Input levels" hint="Black and white points of the input.">
+          <NumberField className="flex-1" value={p.inBlack} min={0} max={1} step={0.01} onChange={(inBlack) => set({ inBlack })} />
+          <NumberField className="flex-1" value={p.inWhite} min={0} max={1} step={0.01} onChange={(inWhite) => set({ inWhite })} />
+        </Field>
+        <Field label="Output levels" hint="Darkest and brightest output values.">
+          <NumberField className="flex-1" value={p.outBlack} min={0} max={1} step={0.01} onChange={(outBlack) => set({ outBlack })} />
+          <NumberField className="flex-1" value={p.outWhite} min={0} max={1} step={0.01} onChange={(outWhite) => set({ outWhite })} />
+        </Field>
+        <ParamSlider
+          label="AO shading"
+          hint="Multiplies the imported ambient occlusion map into the color: baked lighting, darker in crevices and contact shadows."
+          value={p.ao ?? 0}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(ao) => set({ ao })}
+        />
+        <ParamSlider
+          label="Cavity shading"
+          hint="Multiplies the imported cavity map into the color: darker small crevices and scratches."
+          value={p.cavity ?? 0}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(cavity) => set({ cavity })}
+        />
+      </Fold>
       {missing.length > 0 && (
         <p className="text-small text-led-warn">
           No {missing.map((m) => m.label).join(' or ')} map loaded. Load one in the Maps panel.
         </p>
       )}
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => set(DEFAULT_ADJUST)}>Reset</Button>
-      </div>
+    </>
+  )
+}
+
+/** A row that folds settings away, like a stage card's Blending. */
+export function Fold({
+  label,
+  summary,
+  open,
+  onOpenChange,
+  aside,
+  children
+}: {
+  label: string
+  /** Shown after the label in parentheses. */
+  summary?: string
+  open: boolean
+  onOpenChange(open: boolean): void
+  /** Controls at the right end of the fold's row. */
+  aside?: React.ReactNode
+  children: React.ReactNode
+}) {
+  const toggle = (
+    <button
+      type="button"
+      className="mt-0.5 flex min-w-0 items-center gap-1.5 self-start text-left text-small text-dim hover:text-text"
+      onClick={() => onOpenChange(!open)}
+      aria-expanded={open}
+    >
+      <CaretIcon open={open} className="shrink-0" /> {label}
+      {summary ? ` (${summary})` : ''}
+    </button>
+  )
+  return (
+    <>
+      {aside ? (
+        <div className="flex items-center justify-between gap-2">
+          {toggle}
+          {aside}
+        </div>
+      ) : (
+        toggle
+      )}
+      {open && children}
     </>
   )
 }

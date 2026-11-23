@@ -1,10 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
+import { openImage } from '@/actions'
 import { STAGE_TYPES, stageLabel } from '@/gpu/passes'
 import type { StageSpec } from '@/gpu/plan'
 import { cn } from '@/lib/utils'
 import { analyzeStack, blendMaskOf, type StageInfo } from '@/stack/analyze'
+import { stageSummary } from '@/stack/summary'
 import { useApp } from '@/store'
-import { BlendRow, PaletteSelect, StageEditor } from './stages/editors'
+import { BlendRow, Fold, PaletteSelect, StageEditor } from './stages/editors'
 import { Button } from './ui/button'
 import { Checkbox, Field, Segmented } from './ui/controls'
 import { CaretIcon, MoreIcon, PlusIcon, PreviewIcon } from './ui/icons'
@@ -64,7 +66,12 @@ export function StackPanel() {
             <StackChoice />
           </div>
         ) : (
-          <p className="text-dim">No image loaded.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 text-dim">Open a texture to start.</span>
+            <Button size="sm" variant="primary" onClick={openImage}>
+              Open…
+            </Button>
+          </div>
         )}
       </GroupBox>
 
@@ -130,6 +137,9 @@ export function StackPanel() {
 }
 
 const END = '__end'
+
+/** The click that opens a stage card without closing the others. */
+const MULTI_CLICK = window.fx.platform === 'darwin' ? '⌘-click' : 'Ctrl+click'
 
 function DropLine() {
   return <div className="-my-1 h-0.5 rounded-full bg-accent" />
@@ -199,9 +209,12 @@ function StageCard({
   dragging: boolean
   onGripPointerDown(e: React.PointerEvent<HTMLElement>): void
 }) {
-  const [open, setOpen] = useState(true)
+  const open = useApp((s) => s.openStages.includes(stage.uid))
+  const summary = useApp((s) => (open ? '' : stageSummary(stage, s.palettes)))
   const [blendOpen, setBlendOpen] = useState(false)
-  const { updateStage, setPreview, duplicateStage, removeStage, moveStage } = useApp.getState()
+  const { updateStage, setPreview, duplicateStage, removeStage, moveStage, setStageOpen } = useApp.getState()
+  // Opening a card closes the others; Ctrl/Cmd-click keeps them open.
+  const toggle = (e: React.MouseEvent): void => setStageOpen(stage.uid, !open, e.ctrlKey || e.metaKey)
   const warnings = info?.warnings ?? []
   const resized = info && (info.input.width !== info.output.width || info.input.height !== info.output.height)
   const blended = stage.blend.opacity < 1 || stage.blend.mode !== 'normal'
@@ -220,18 +233,16 @@ function StageCard({
       )}
     >
       <div
-        className="flex h-8 min-w-0 items-center gap-1 pr-1 pl-1 select-none"
-        title={open ? 'Double-click to collapse' : 'Double-click to expand'}
-        // Double-clicking the header (not one of its controls) collapses or expands the card. Every
-        // second click of a series toggles (not only dblclick's second one), so quick double-clicks
-        // in a row keep working without waiting for the click count to reset.
+        className="flex h-8 min-w-0 cursor-default items-center gap-1 pr-1 pl-1 select-none"
+        title={`${open ? 'Click to collapse' : 'Click to open'} · ${MULTI_CLICK} keeps other stages open`}
+        // A click on the header (not on one of its controls or the grip) opens or closes the card.
         onClick={(e) => {
-          if (e.detail < 2 || e.detail % 2 !== 0) return
-          if ((e.target as HTMLElement).closest('button, [role="switch"], [role="checkbox"], input')) return
-          setOpen((o) => !o)
+          if ((e.target as HTMLElement).closest('button, [role="switch"], [role="checkbox"], input, [data-grip]')) return
+          toggle(e)
         }}
       >
         <span
+          data-grip
           className="flex h-full w-3 shrink-0 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
           title="Drag to reorder"
           onPointerDown={onGripPointerDown}
@@ -256,6 +267,11 @@ function StageCard({
           {(blended || masked) && (
             <span className="pl-1 font-ui text-small font-normal text-dim">
               · {blended ? `${Math.round(stage.blend.opacity * 100)}%` : 'masked'}
+            </span>
+          )}
+          {summary && (
+            <span className="pl-1.5 font-ui text-small font-normal text-dim" title={summary}>
+              {summary}
             </span>
           )}
         </span>
@@ -298,10 +314,10 @@ function StageCard({
           variant="ghost"
           size="icon"
           className="size-5 shrink-0"
-          title={open ? 'Collapse' : 'Expand'}
-          aria-label={open ? 'Collapse' : 'Expand'}
+          title={`${open ? 'Collapse' : 'Open'} (${MULTI_CLICK} keeps other stages open)`}
+          aria-label={open ? 'Collapse' : 'Open'}
           aria-expanded={open}
-          onClick={() => setOpen(!open)}
+          onClick={toggle}
         >
           <CaretIcon open={open} className="text-dim" />
         </Button>
@@ -317,15 +333,9 @@ function StageCard({
             </p>
           ))}
           <StageEditor stage={stage} info={info} />
-          <button
-            type="button"
-            className="mt-0.5 flex items-center gap-1.5 self-start text-small text-dim hover:text-text"
-            onClick={() => setBlendOpen(!blendOpen)}
-            aria-expanded={blendOpen}
-          >
-            <CaretIcon open={blendOpen} /> Blending{blendSummary ? ` (${blendSummary})` : ''}
-          </button>
-          {blendOpen && <BlendRow stage={stage} />}
+          <Fold label="Blending" summary={blendSummary} open={blendOpen} onOpenChange={setBlendOpen}>
+            <BlendRow stage={stage} />
+          </Fold>
         </div>
       )}
     </div>
