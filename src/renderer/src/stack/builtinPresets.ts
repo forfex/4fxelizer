@@ -1,12 +1,13 @@
-// Built-in presets, grouped by category (hardware looks, then stylized ones that show off masks,
-// blending, error diffusion and the other stage features). Built with the same document operations
+// Built-in presets: Init (the stack a new project starts with, in no category), then the others
+// grouped by category (hardware looks, then stylized ones that show off masks, blending, error
+// diffusion and the other stage features). Built with the same document operations
 // the UI uses.
 
 import type { MaskSpec } from '@/gpu/mask'
 import type { StageBlend } from '@/gpu/pass'
 import { BUILTIN_PALETTES } from '@/palette/builtins'
 import type { GeneratorSettings } from '@/palette/palette'
-import { makeStage, newId, ownedPalette, readsPalette, toProjectPalette, type Doc } from './doc'
+import { initialDoc, makeStage, newId, ownedPalette, readsPalette, toProjectPalette, type Doc } from './doc'
 
 export const PRESET_CATEGORIES = [
   { id: 'console', label: 'Consoles' },
@@ -18,7 +19,8 @@ export type PresetCategory = (typeof PRESET_CATEGORIES)[number]['id']
 
 export interface BuiltinPreset {
   name: string
-  category: PresetCategory
+  /** Left out: listed above the categories. */
+  category?: PresetCategory
   hint: string
   build(): Doc
 }
@@ -77,6 +79,11 @@ function build({ stages: recipe, lock }: Recipe): Doc {
 const PSX15 = { color15: true }
 
 export const BUILTIN_PRESETS: BuiltinPreset[] = [
+  {
+    name: 'Init',
+    hint: 'The stack a new project starts with: Adjust, Downscale and Dither, set to leave the texture unchanged.',
+    build: initialDoc
+  },
   // ── Consoles ──────────────────────────────────────────────────────────────
   {
     name: 'PSX 8bpp',

@@ -50,7 +50,7 @@ function SearchBody({ onDone }: { onDone(): void }) {
     const presets = BUILTIN_PRESETS.map(
       (preset): SearchItem<Action> => ({
         label: preset.name,
-        path: `Preset · ${PRESET_CATEGORIES.find((c) => c.id === preset.category)?.label ?? ''}`,
+        path: ['Preset', PRESET_CATEGORIES.find((c) => c.id === preset.category)?.label].filter(Boolean).join(' · '),
         value: { kind: 'preset', preset }
       })
     )
