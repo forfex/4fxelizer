@@ -6,6 +6,7 @@ import { startPaletteController } from '@/palette/controller'
 import { startBlenderLink } from '@/blenderLink'
 import { useApp } from '@/store'
 import { startUpdates } from '@/updates'
+import { CommandSearch } from './components/CommandSearch'
 import { ExportDialog } from './components/ExportDialog'
 import { GpuDiagnostics } from './components/GpuDiagnostics'
 import { PresetsDialog } from './components/Presets'
@@ -107,6 +108,7 @@ export function App() {
       <StatusBar />
       <GpuDiagnostics />
       <ExportDialog />
+      <CommandSearch />
       <PresetsDialog />
       <SettingsDialog />
       <UnsavedDialog />

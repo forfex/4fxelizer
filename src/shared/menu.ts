@@ -126,7 +126,13 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
     },
     {
       label: 'Help',
-      items: [command('GPU Diagnostics…', 'gpu-diagnostics'), separator, command('Check for Updates…', 'check-updates')]
+      items: [
+        command('Search Commands…', 'command-search', 'CmdOrCtrl+K'),
+        separator,
+        command('GPU Diagnostics…', 'gpu-diagnostics'),
+        separator,
+        command('Check for Updates…', 'check-updates')
+      ]
     }
   ]
 }

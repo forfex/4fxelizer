@@ -347,7 +347,8 @@ const PLAIN_COMMANDS = [
   'blender-link',
   'blender-addon',
   'reset-workspace',
-  'save-workspace'
+  'save-workspace',
+  'command-search'
 ] as const
 
 export type MenuCommand =
