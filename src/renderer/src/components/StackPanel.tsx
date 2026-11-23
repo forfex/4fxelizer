@@ -264,20 +264,21 @@ function StageCard({
           onCheckedChange={(enabled) => updateStage(stage.uid, { enabled })}
         />
         {/* Only the preview button previews: a stray click on the name must not change the view. */}
-        <span
-          className={cn(
-            'min-w-0 flex-1 truncate font-display text-[14px] leading-[18px] font-semibold',
-            !stage.enabled && 'text-faint line-through'
-          )}
-        >
-          {stageLabel(stage.passId)}
+        {/* The name stays whole; the summary after it gives way when the card is narrow. */}
+        <span className="flex min-w-0 flex-1 items-baseline">
+          <span
+            className={cn(
+              'max-w-full shrink-0 truncate font-display text-[14px] leading-[18px] font-semibold',
+              !stage.enabled && 'text-faint line-through'
+            )}
+          >
+            {stageLabel(stage.passId)}
+          </span>
           {(blended || masked) && (
-            <span className="pl-1 font-ui text-small font-normal text-dim">
-              · {blended ? `${Math.round(stage.blend.opacity * 100)}%` : 'masked'}
-            </span>
+            <span className="shrink-0 pl-1 text-small text-dim">· {blended ? `${Math.round(stage.blend.opacity * 100)}%` : 'masked'}</span>
           )}
           {summary && (
-            <span className="pl-1.5 font-ui text-small font-normal text-dim" title={summary}>
+            <span className="min-w-0 truncate pl-1.5 text-small text-dim" title={summary}>
               {summary}
             </span>
           )}
@@ -295,7 +296,7 @@ function StageCard({
         <Button
           variant="ghost"
           size="icon"
-          className="size-5 shrink-0"
+          className={cn('size-5 shrink-0', !previewing && 'hidden @min-[200px]/card:inline-flex')}
           title={previewing ? 'Showing the image after this stage. Click to show the final result.' : 'Show the image after this stage'}
           aria-label="Preview this stage"
           aria-pressed={previewing}
