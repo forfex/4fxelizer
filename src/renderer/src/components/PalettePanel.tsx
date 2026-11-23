@@ -47,15 +47,10 @@ export function PalettePanel() {
         </div>
         {palette && <NameField key={palette.id} palette={palette} />}
       </GroupBox>
+      {palette?.generator && <GeneratorBox palette={palette} />}
       {palette && <PaletteEditor key={palette.id} palette={palette} />}
     </PanelBody>
   )
-}
-
-/** Generator settings of the palette shown in the palette panel. */
-export function GeneratePanel() {
-  const palette = useApp((s) => s.palettes.find((p) => p.id === s.selectedPaletteId) ?? s.palettes[0])
-  return <PanelBody>{palette ? <GeneratorBox palette={palette} /> : <p className="text-dim">No palette selected.</p>}</PanelBody>
 }
 
 function PaletteMenu({ palette }: { palette: Palette | undefined }) {
@@ -93,6 +88,18 @@ function PaletteMenu({ palette }: { palette: Palette | undefined }) {
         >
           Duplicate{palette?.ownerUid ? ' as project palette' : ''}
         </MenuItem>
+        {palette && !palette.generator && (
+          <MenuItem
+            title="Build this palette's colors from the image, with the generator settings shown under it"
+            onSelect={() =>
+              useApp.getState().updatePalette(palette.id, {
+                generator: { ...DEFAULT_GENERATOR, auto: false, count: Math.max(palette.colors.length, 2) }
+              })
+            }
+          >
+            Generate from image
+          </MenuItem>
+        )}
         <MenuSub>
           <MenuSubTrigger disabled={!palette?.colors.length}>Export as</MenuSubTrigger>
           <MenuSubContent>
@@ -402,23 +409,7 @@ function GeneratorBox({ palette }: { palette: Palette }) {
   const sharedCount = useApp((s) => (s.activeTextureId && s.docs.separate[s.activeTextureId] ? 0 : s.textures.filter((t) => !s.docs.separate[t.id]).length))
   const gen = palette.generator
 
-  if (!gen) {
-    return (
-      <GroupBox title="Generate">
-        <p className="mb-2 text-small text-dim">Build this palette from the image.</p>
-        <Button
-          size="sm"
-          onClick={() =>
-            useApp.getState().updatePalette(palette.id, {
-              generator: { ...DEFAULT_GENERATOR, auto: false, count: Math.max(palette.colors.length, 2) }
-            })
-          }
-        >
-          Set up generator
-        </Button>
-      </GroupBox>
-    )
-  }
+  if (!gen) return null
 
   const set = (patch: Partial<GeneratorSettings>): void =>
     useApp.getState().updatePalette(palette.id, { generator: { ...gen, ...patch } }, { coalesce: `gen:${palette.id}:${Object.keys(patch)}` })

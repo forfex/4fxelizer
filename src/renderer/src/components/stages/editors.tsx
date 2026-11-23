@@ -24,11 +24,12 @@ import { DOWNSCALE_ALPHA, DOWNSCALE_METHODS, type DownscaleParams } from '@/gpu/
 import type { ColorMetric, QuantizeParams } from '@/gpu/passes/quantize'
 import { MAX_UPSCALE_FACTOR, UPSCALE_ALPHA, UPSCALE_METHODS, type UpscaleParams } from '@/gpu/passes/upscale'
 import type { StageSpec } from '@/gpu/plan'
-import { GENERATE_METHODS, MAX_PALETTE, type GeneratorSettings, type Palette } from '@/palette/palette'
+import { MAX_PALETTE, type GeneratorSettings, type Palette } from '@/palette/palette'
 import type { StageInfo } from '@/stack/analyze'
 import { adjustMoreChanged } from '@/stack/summary'
 import { ownedPalette } from '@/stack/doc'
 import { useApp } from '@/store'
+import { revealPanel } from '@/workspace/workspace'
 import { Button } from '../ui/button'
 import { Checkbox, Field, NumberField, ParamSlider, Segmented } from '../ui/controls'
 import { CaretIcon } from '../ui/icons'
@@ -50,6 +51,12 @@ const METRICS: { value: ColorMetric; label: string; hint: string }[] = [
 /** Most swatches a strip draws; larger palettes are sampled evenly. */
 const STRIP_MAX = 128
 
+/** Shows a palette in the Palettes panel (selected there, the panel brought to the front). */
+export function showPalette(id: string): void {
+  useApp.getState().selectPalette(id)
+  revealPanel('palettes')
+}
+
 /** Thin row of a palette's colors; click to open the palette in the palette panel. */
 export function PaletteStrip({ palette }: { palette: Palette }) {
   if (!palette.colors.length) return null
@@ -59,8 +66,8 @@ export function PaletteStrip({ palette }: { palette: Palette }) {
     <button
       type="button"
       className="bevel-sunken flex h-2.5 w-full overflow-hidden rounded-[2px] border-px border-edge"
-      title="Edit this palette"
-      onClick={() => useApp.getState().selectPalette(palette.id)}
+      title="Edit this palette in the Palettes panel"
+      onClick={() => showPalette(palette.id)}
     >
       {shown.map((c, i) => (
         <span key={i} className="h-full flex-1" style={{ backgroundColor: c.hex }} />
@@ -124,15 +131,7 @@ function PaletteSource({ stage, paletteId, set }: { stage: StageSpec; paletteId:
             max={MAX_PALETTE}
             onChange={(count) => updateGen({ count })}
           />
-          <Field label="Method" hint={GENERATE_METHODS.find((m) => m.id === gen.method)?.hint}>
-            <Select
-              className="flex-1"
-              value={gen.method}
-              onValueChange={(method) => updateGen({ method })}
-              options={GENERATE_METHODS.map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
-            />
-          </Field>
-          <Field label="" hint="More settings (weights, locked colors) in the palette panel.">
+          <Field label="" hint="Method, weights and locked colors are in the Palettes panel.">
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <PaletteStrip palette={owned} />
               <span className="flex items-center gap-1.5 text-small text-dim">
@@ -144,7 +143,16 @@ function PaletteSource({ stage, paletteId, set }: { stage: StageSpec; paletteId:
                     </span>
                   </>
                 ) : (
-                  `${owned.colors.length} colors · click the strip for more settings`
+                  <>
+                    <span className="truncate">{owned.colors.length} colors ·</span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-accent-hi underline-offset-2 hover:underline"
+                      onClick={() => showPalette(owned.id)}
+                    >
+                      More in Palettes
+                    </button>
+                  </>
                 )}
               </span>
             </div>

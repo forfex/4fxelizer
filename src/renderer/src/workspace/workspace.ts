@@ -22,7 +22,6 @@ export interface PanelDef {
 export const PANELS: PanelDef[] = [
   { id: 'stack', title: 'Stack', minWidth: 240 },
   { id: 'palettes', title: 'Palettes', minWidth: 220 },
-  { id: 'generate', title: 'Generate', minWidth: 220 },
   { id: 'maps', title: 'Maps', minWidth: 240 },
   { id: 'bake', title: 'Bake', minWidth: 240 },
   { id: 'textures', title: 'Textures', minWidth: 220 }
@@ -34,6 +33,12 @@ export const PANELS: PanelDef[] = [
  */
 export const LEGACY_VIEW3D = 'view3d'
 
+/**
+ * Former panels whose content moved into other panels (Generate into Palettes). Layouts saved
+ * with them still load; the panels are removed on restore.
+ */
+export const LEGACY_PANELS = [LEGACY_VIEW3D, 'generate']
+
 interface BuiltinWorkspace {
   id: string
   name: string
@@ -44,18 +49,19 @@ interface BuiltinWorkspace {
 const panelDef = (id: string): PanelDef => PANELS.find((p) => p.id === id)!
 
 /** Components a stored layout may use (they match the components registered in Workspace.tsx). */
-const KNOWN = { components: [VIEWER, ...PANELS.map((p) => p.id), LEGACY_VIEW3D], tabComponents: [VIEWER], required: VIEWER }
+const KNOWN = { components: [VIEWER, ...PANELS.map((p) => p.id), ...LEGACY_PANELS], tabComponents: [VIEWER], required: VIEWER }
 
 /** Restores a stored layout, after checking it only uses panels this version has. */
 function restore(dock: DockviewApi, layout: unknown): void {
   const problem = layoutProblem(layout, KNOWN)
   if (problem) throw new Error(problem)
   dock.fromJSON(layout as SerializedDockview)
-  const view3d = dock.getPanel(LEGACY_VIEW3D)
-  if (view3d) {
-    dock.removePanel(view3d)
+  for (const id of LEGACY_PANELS) {
+    const panel = dock.getPanel(id)
+    if (!panel) continue
+    dock.removePanel(panel)
     const app = useApp.getState()
-    if (app.viewMode === '2d') app.setViewMode('split')
+    if (id === LEGACY_VIEW3D && app.viewMode === '2d') app.setViewMode('split')
   }
 }
 
@@ -89,15 +95,14 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   {
     id: 'essentials',
     name: 'Essentials',
-    hint: 'Stack on the left; palettes, generator and maps on the right.',
+    hint: 'Stack on the left; palettes, textures and maps on the right.',
     build(api) {
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'left', 320)
       addTool(api, 'palettes', VIEWER, 'right', 300)
-      addTool(api, 'generate', 'palettes', 'below', 330)
-      addTool(api, 'maps', 'generate', 'within')
-      addTool(api, 'bake', 'generate', 'within')
       addTool(api, 'textures', 'palettes', 'within')
+      addTool(api, 'maps', 'palettes', 'within')
+      addTool(api, 'bake', 'palettes', 'within')
     }
   },
   {
@@ -108,7 +113,6 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'right', 330)
       addTool(api, 'palettes', 'stack', 'below')
-      addTool(api, 'generate', 'palettes', 'within')
       addTool(api, 'maps', 'palettes', 'within')
       addTool(api, 'bake', 'palettes', 'within')
       addTool(api, 'textures', 'palettes', 'within')
@@ -117,11 +121,10 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
   {
     id: 'palette-focus',
     name: 'Palette editing',
-    hint: 'A wide palette panel, with the stack, generator and maps tabbed on the left.',
+    hint: 'A wide palette panel, with the stack and maps tabbed on the left.',
     build(api) {
       addViewer(api)
       addTool(api, 'stack', VIEWER, 'left', 300)
-      addTool(api, 'generate', 'stack', 'within')
       addTool(api, 'maps', 'stack', 'within')
       addTool(api, 'bake', 'stack', 'within')
       addTool(api, 'textures', 'stack', 'within')
@@ -138,7 +141,6 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
       addTool(api, 'palettes', 'stack', 'within')
       addTool(api, 'bake', null, 'right', 300)
       addTool(api, 'maps', 'bake', 'below')
-      addTool(api, 'generate', 'maps', 'within')
       addTool(api, 'textures', 'bake', 'within')
       // The texture and the model share the main view.
       const app = useApp.getState()
@@ -156,11 +158,10 @@ export const BUILTIN_WORKSPACES: BuiltinWorkspace[] = [
         api.addPanel({ id, component: id, title: panelDef(id).title, floating: { x, y, width: w, height: h } })
       }
       float('stack', 12, 12, 320, 560)
-      float('palettes', Math.max(width - 312, 344), 12, 300, 330)
-      float('generate', Math.max(width - 312, 344), 356, 300, 330)
-      addTool(api, 'maps', 'generate', 'within')
-      addTool(api, 'bake', 'generate', 'within')
-      addTool(api, 'textures', 'generate', 'within')
+      float('palettes', Math.max(width - 312, 344), 12, 300, 560)
+      addTool(api, 'maps', 'palettes', 'within')
+      addTool(api, 'bake', 'palettes', 'within')
+      addTool(api, 'textures', 'palettes', 'within')
     }
   }
 ]
@@ -319,6 +320,14 @@ export function deleteWorkspace(name: string): void {
     workspaces: settings.workspaces.filter((w) => w.name !== name),
     ...(settings.workspace === name ? { workspace: BUILTIN_WORKSPACES[0]!.id } : {})
   })
+}
+
+/** Shows a tool panel: brings it to the front of its tab group, or opens it when closed. */
+export function revealPanel(id: string): void {
+  if (!api) return
+  const panel = api.getPanel(id)
+  if (panel) panel.api.setActive()
+  else togglePanel(id)
 }
 
 export function isPanelOpen(id: string): boolean {

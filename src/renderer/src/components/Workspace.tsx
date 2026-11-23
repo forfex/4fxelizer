@@ -15,7 +15,7 @@ import {
   deleteWorkspace,
   isPanelOpen,
   isReservedName,
-  LEGACY_VIEW3D,
+  LEGACY_PANELS,
   PANELS,
   resetWorkspace,
   savedWorkspaces,
@@ -28,7 +28,7 @@ import {
 } from '@/workspace/workspace'
 import { BakePanel } from './BakePanel'
 import { MapsPanel } from './MapsPanel'
-import { GeneratePanel, PalettePanel } from './PalettePanel'
+import { PalettePanel } from './PalettePanel'
 import { StackPanel } from './StackPanel'
 import { Button } from './ui/button'
 import { INPUT_CLASS } from './ui/controls'
@@ -55,12 +55,11 @@ const COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   [VIEWER]: MainView,
   stack: StackPanel,
   palettes: PalettePanel,
-  generate: GeneratePanel,
   maps: MapsPanel,
   bake: BakePanel,
   textures: TexturesPanel,
-  // The 3D view used to be a panel; layouts that still have one close it on load (see workspace.ts).
-  [LEGACY_VIEW3D]: () => null
+  // Former panels (the 3D view, Generate); layouts that still have one close it on load (see workspace.ts).
+  ...Object.fromEntries(LEGACY_PANELS.map((id) => [id, () => null]))
 }
 
 const TAB_COMPONENTS: Record<string, React.FunctionComponent<IDockviewPanelHeaderProps>> = {
