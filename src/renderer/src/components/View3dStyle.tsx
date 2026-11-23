@@ -15,11 +15,11 @@ const LOOK_OPTIONS = LOOK_CHOICES.map((l) =>
     : { value: l, label: VIEW3D_LOOK_INFO[l].label, hint: VIEW3D_LOOK_INFO[l].hint, group: l === 'psx' || l === 'n64' ? 'Consoles' : undefined }
 )
 
-export function LookSelect() {
+export function LookSelect({ className = 'w-40' }: { className?: string }) {
   const look = useApp((s) => s.view3d.look)
   return (
     <Select<View3dLookChoice>
-      className="w-40"
+      className={className}
       title="How the model is drawn (View › 3D Look)"
       value={look}
       onValueChange={(l) => useApp.getState().setView3d({ look: l })}

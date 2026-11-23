@@ -204,6 +204,7 @@ export function View3d() {
 
   const drag = useRef<{ x: number; y: number; mode: 'orbit' | 'pan' | 'sun' } | null>(null)
   const [turningSun, setTurningSun] = useState(false)
+  const [styleOpen, setStyleOpen] = useState(false)
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>): void => {
     if (e.button > 2) return
@@ -239,32 +240,36 @@ export function View3d() {
     redraw.current()
   }
 
+  const shown3d = !!model || hasImage
   return (
-    <div className="bevel-sunken relative isolate min-h-0 min-w-0 flex-1 bg-well p-(--px)">
-      <canvas
-        ref={canvasRef}
-        className={cn('block size-full', (model || hasImage) && (turningSun ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'))}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onDoubleClick={frameModel}
-        onContextMenu={(e) => e.preventDefault()}
-        onAuxClick={(e) => e.preventDefault()}
-      />
-      {model || hasImage ? (
-        <>
-          <View3dToolbar onFrame={frameModel} />
-          <div className="pointer-events-none absolute right-2 bottom-2 left-2 flex flex-wrap items-end justify-between gap-1">
-            <span className={cn(BADGE_CLASS, 'max-w-full truncate')}>
-              {model ? `${model.name} · ${model.triangles.toLocaleString('en-US')} tris` : 'No model open: a preview shape'}
-            </span>
-            <NavigationHints />
-          </div>
-        </>
-      ) : (
-        <EmptyState />
-      )}
+    <div className="bevel-sunken flex min-h-0 min-w-0 flex-1 flex-col bg-well p-(--px)">
+      {shown3d && <View3dToolbar onFrame={frameModel} styleOpen={styleOpen} onStyleOpen={setStyleOpen} />}
+      <div className="relative isolate min-h-0 flex-1">
+        <canvas
+          ref={canvasRef}
+          className={cn('block size-full', shown3d && (turningSun ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'))}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onDoubleClick={frameModel}
+          onContextMenu={(e) => e.preventDefault()}
+          onAuxClick={(e) => e.preventDefault()}
+        />
+        {shown3d ? (
+          <>
+            {styleOpen && <View3dStylePanel className="absolute top-2 right-2 z-20 max-h-[calc(100%-1rem)]" onClose={() => setStyleOpen(false)} />}
+            <div className="pointer-events-none absolute right-2 bottom-2 left-2 flex flex-wrap items-end justify-between gap-1">
+              <span className={cn(BADGE_CLASS, 'max-w-full truncate')}>
+                {model ? `${model.name} · ${model.triangles.toLocaleString('en-US')} tris` : 'No model open: a preview shape'}
+              </span>
+              <NavigationHints />
+            </div>
+          </>
+        ) : (
+          <EmptyState />
+        )}
+      </div>
     </div>
   )
 }
@@ -286,35 +291,51 @@ function NavigationHints() {
 
 const SHAPE_OPTIONS = VIEW3D_SHAPES.map((shape) => ({ value: shape, label: VIEW3D_SHAPE_NAMES[shape] }))
 
-function View3dToolbar({ onFrame }: { onFrame(): void }) {
+/** A labeled control in the 3D view's strip. */
+function StripField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="shrink-0 text-small text-dim">{label}</span>
+      {children}
+    </span>
+  )
+}
+
+/** The strip along the top of the 3D view: what goes on the model, the look, the shape, style and framing. */
+function View3dToolbar({ onFrame, styleOpen, onStyleOpen }: { onFrame(): void; styleOpen: boolean; onStyleOpen(open: boolean): void }) {
   const hasModel = useApp((s) => !!s.model)
   const shape = useApp((s) => s.view3d.shape)
   const show = useApp((s) => s.view3dShow)
   const maps = useApp((s) => s.maps)
   const setView3dShow = useApp((s) => s.setView3dShow)
-  const [styleOpen, setStyleOpen] = useState(false)
   const options: { value: View3dShow; label: string; hint?: string; group?: string }[] = [
-    { value: 'result', label: 'Result', hint: 'The texture as the viewer shows it on the right: the result, or the stage you preview.' },
+    { value: 'result', label: 'Result', hint: 'The texture as the viewer shows it: the result, or the stage you preview.' },
     { value: 'source', label: 'Source', hint: 'The texture as loaded.' },
     ...MAP_SLOTS.filter((m) => maps[m.id]).map((m) => ({ value: m.id as View3dShow, label: m.label, hint: `The ${m.label.toLowerCase()} map.`, group: 'Maps' }))
   ]
   // A map view whose map was removed falls back to the result.
   const value = options.some((o) => o.value === show) ? show : 'result'
   return (
-    <>
-      <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
-        <Select className="w-36" title="What to put on the model" value={value} onValueChange={setView3dShow} options={options} />
-        <LookSelect />
-        {!hasModel && (
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b-px border-edge bg-panel px-2 py-1">
+      <StripField label="Show">
+        <Select className="w-32" title="What to put on the model" value={value} onValueChange={setView3dShow} options={options} />
+      </StripField>
+      <StripField label="Look">
+        <LookSelect className="w-32" />
+      </StripField>
+      {!hasModel && (
+        <StripField label="Shape">
           <Select<View3dShape>
-            className="w-40"
+            className="w-28"
             title="Shape to show the texture on (open a model to see yours)"
             value={shape}
             onValueChange={(v) => useApp.getState().setView3d({ shape: v })}
             options={SHAPE_OPTIONS}
           />
-        )}
-        <Button aria-pressed={styleOpen} className={cn(styleOpen && 'bg-well bevel-sunken')} onClick={() => setStyleOpen(!styleOpen)} title="Every setting of the look">
+        </StripField>
+      )}
+      <span className="ml-auto flex gap-1">
+        <Button aria-pressed={styleOpen} onClick={() => onStyleOpen(!styleOpen)} title="Every setting of the look">
           Style…
         </Button>
         <Button onClick={onFrame} title="Frame the model (double-click the view)">
@@ -325,9 +346,8 @@ function View3dToolbar({ onFrame }: { onFrame(): void }) {
             Open Model…
           </Button>
         )}
-      </div>
-      {styleOpen && <View3dStylePanel className="absolute top-11 right-2 z-20 max-h-[calc(100%-3.5rem)]" onClose={() => setStyleOpen(false)} />}
-    </>
+      </span>
+    </div>
   )
 }
 
