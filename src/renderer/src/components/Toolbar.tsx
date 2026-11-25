@@ -36,10 +36,10 @@ export function Toolbar() {
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-1 overflow-hidden border-b-px border-edge bg-panel px-2 shadow-[inset_0_var(--px)_0_var(--fx-bevel-light)]">
-      <Button onClick={openImage} disabled={gpu.status !== 'ready'} title={tip('Open image', 'open')}>
+      <Button data-tour="open" onClick={openImage} disabled={gpu.status !== 'ready'} title={tip('Open image', 'open')}>
         Open…
       </Button>
-      <Button variant="primary" onClick={() => setExportOpen(true)} disabled={!hasImage} title={tip('Export PNG, TGA or BMP', 'export')}>
+      <Button data-tour="export" variant="primary" onClick={() => setExportOpen(true)} disabled={!hasImage} title={tip('Export PNG, TGA or BMP', 'export')}>
         Export…
       </Button>
       <PresetsMenu />

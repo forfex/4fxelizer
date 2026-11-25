@@ -30,7 +30,8 @@ describe('settings', () => {
       uiScale: 1,
       invertZoom: false,
       updates: DEFAULT_SETTINGS.updates,
-      blenderLink: DEFAULT_SETTINGS.blenderLink
+      blenderLink: DEFAULT_SETTINGS.blenderLink,
+      tutorialSeen: false
     })
     expect(normalizeSettings({ exportFormat: 'tiff' }).exportFormat).toBe('png-indexed')
     for (const f of ['tga-indexed', 'tga-rgba', 'bmp-indexed', 'bmp-rgba']) expect(normalizeSettings({ exportFormat: f }).exportFormat).toBe(f)

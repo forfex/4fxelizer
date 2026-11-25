@@ -82,10 +82,10 @@ export function StackPanel() {
         )}
       </GroupBox>
 
-      <GroupBox title="Stack">
+      <GroupBox title="Stack" data-tour="stack">
         <div ref={reorder.listRef} className="flex flex-col gap-1.5">
           {stages.map((stage, i) => (
-            <div key={stage.uid} data-uid={stage.uid} className="flex flex-col gap-1.5">
+            <div key={stage.uid} data-uid={stage.uid} data-tour={`stage-${stage.passId}`} className="flex flex-col gap-1.5">
               {reorder.dropBefore === stage.uid && <DropLine />}
               <StageCard
                 stage={stage}
@@ -354,7 +354,7 @@ function AddStageMenu() {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button className="flex-1" title="Add a stage (after the previewed stage, or at the end)">
+        <Button data-tour="add-stage" className="flex-1" title="Add a stage (after the previewed stage, or at the end)">
           <PlusIcon /> Add stage
         </Button>
       </MenuTrigger>

@@ -74,6 +74,8 @@ export interface UserSettings {
   updates: UpdateSettings
   /** Blender link: the local connection the Blender add-on sends painted textures through. */
   blenderLink: LinkSettings
+  /** The first launch's offer to take the tutorial was shown. */
+  tutorialSeen: boolean
 }
 
 /**
@@ -193,7 +195,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   uiScale: 1,
   invertZoom: false,
   updates: DEFAULT_UPDATE_SETTINGS,
-  blenderLink: DEFAULT_LINK_SETTINGS
+  blenderLink: DEFAULT_LINK_SETTINGS,
+  tutorialSeen: false
 }
 
 const isObject = (v: unknown): v is object => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -248,7 +251,7 @@ function normalizeLiveReload(raw: unknown): LiveReloadMode {
 /** Settings from disk with missing or invalid fields replaced by defaults (old files keep working). */
 export function normalizeSettings(raw: unknown): UserSettings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const bool = (key: 'grid' | 'split' | 'tile' | 'psxCheck' | 'invertZoom'): boolean =>
+  const bool = (key: 'grid' | 'split' | 'tile' | 'psxCheck' | 'invertZoom' | 'tutorialSeen'): boolean =>
     typeof r[key] === 'boolean' ? (r[key] as boolean) : DEFAULT_SETTINGS[key]
   return {
     grid: bool('grid'),
@@ -275,7 +278,8 @@ export function normalizeSettings(raw: unknown): UserSettings {
     uiScale: normalizeScale(r.uiScale),
     invertZoom: bool('invertZoom'),
     updates: normalizeUpdateSettings(r.updates),
-    blenderLink: normalizeLinkSettings(r.blenderLink)
+    blenderLink: normalizeLinkSettings(r.blenderLink),
+    tutorialSeen: bool('tutorialSeen')
   }
 }
 
@@ -348,7 +352,8 @@ const PLAIN_COMMANDS = [
   'blender-addon',
   'reset-workspace',
   'save-workspace',
-  'command-search'
+  'command-search',
+  'tutorial'
 ] as const
 
 export type MenuCommand =

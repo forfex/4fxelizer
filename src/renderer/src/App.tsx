@@ -13,6 +13,7 @@ import { PresetsDialog } from './components/Presets'
 import { SettingsDialog } from './components/settings/SettingsDialog'
 import { StatusBar } from './components/StatusBar'
 import { TitleBar } from './components/TitleBar'
+import { startTutorialPrompt, Tutorial, TutorialPrompt } from './components/Tutorial'
 import { Toolbar } from './components/Toolbar'
 import { UnsavedDialog } from './components/UnsavedDialog'
 import { UpdateDialog, WhatsNewDialog } from './components/UpdateDialog'
@@ -63,6 +64,8 @@ export function App() {
 
   useEffect(() => window.fx.onMenuCommand(runMenuCommand), [])
   useEffect(startUpdates, [])
+  // After startUpdates, so the tutorial offer waits for What's new.
+  useEffect(startTutorialPrompt, [])
 
   // Ctrl+Shift+Z as a second redo shortcut on Windows/Linux (the menu shows Ctrl+Y).
   useEffect(() => {
@@ -114,6 +117,8 @@ export function App() {
       <UnsavedDialog />
       <UpdateDialog />
       <WhatsNewDialog />
+      <TutorialPrompt />
+      <Tutorial />
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 border-2 border-dashed border-accent bg-accent/5" />
       )}

@@ -134,6 +134,10 @@ export interface AppState extends Doc {
   saveWorkspaceOpen: boolean
   /** Help › Search Commands. */
   commandSearchOpen: boolean
+  /** The tutorial's current step (null = not running). */
+  tutorialStep: number | null
+  /** The first launch's offer to take the tutorial. */
+  tutorialPromptOpen: boolean
   /** Name of the last loaded or saved preset (suggested when saving). */
   presetName: string | null
   /** Bumped when the user's preset files change, so lists reload. */
@@ -219,6 +223,8 @@ export interface AppState extends Doc {
   setPresetsOpen(open: boolean): void
   setSaveWorkspaceOpen(open: boolean): void
   setCommandSearchOpen(open: boolean): void
+  setTutorialStep(step: number | null): void
+  setTutorialPromptOpen(open: boolean): void
   setPresetName(name: string | null): void
   presetsChanged(): void
   /** Replaces the whole document (e.g. loading a preset) as one undo step. */
@@ -361,6 +367,8 @@ export const useApp = create<AppState>()((set, get) => ({
   presetsOpen: false,
   saveWorkspaceOpen: false,
   commandSearchOpen: false,
+  tutorialStep: null,
+  tutorialPromptOpen: false,
   presetName: null,
   presetsVersion: 0,
   previewUid: null,
@@ -500,6 +508,8 @@ export const useApp = create<AppState>()((set, get) => ({
   setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
   setSaveWorkspaceOpen: (saveWorkspaceOpen) => set({ saveWorkspaceOpen }),
   setCommandSearchOpen: (commandSearchOpen) => set({ commandSearchOpen }),
+  setTutorialStep: (tutorialStep) => set({ tutorialStep }),
+  setTutorialPromptOpen: (tutorialPromptOpen) => set({ tutorialPromptOpen }),
   setPresetName: (presetName) => set({ presetName }),
   presetsChanged: () => set({ presetsVersion: get().presetsVersion + 1 }),
   loadDoc: (doc) => {

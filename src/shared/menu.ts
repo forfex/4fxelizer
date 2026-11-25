@@ -127,6 +127,7 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
     {
       label: 'Help',
       items: [
+        command('Tutorial', 'tutorial'),
         command('Search Commands…', 'command-search', 'CmdOrCtrl+K'),
         separator,
         command('GPU Diagnostics…', 'gpu-diagnostics'),
