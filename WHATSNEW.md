@@ -1,8 +1,11 @@
-- Blender link: paint in Blender and see the 4FXELIZER result on your model while you paint
-  - File › Blender Link: turn it on and save the Blender add-on
-  - Link a single image (a Ucupaint layer or any texture) or the combined material texture
-  - Updates while painting, when you lift the brush, or only when you ask, at the rate you choose
-  - Works with Ucupaint and with plain image painting; your .blend files stay untouched
-- Pick colors from anywhere on screen, other apps too
-  - Edit › Pick Color from Screen, or Pick from screen in the palette panel
-  - Shift+click picks several colors, Esc stops
+- A tidier workspace: fewer panels, and the whole stack fits on screen
+  - Stage cards fold to one line with a summary; open one at a time (Ctrl-click keeps several)
+  - Palette generation moved into the Palettes panel, baking into the Maps panel
+  - Help › Search Commands (Ctrl+K) finds any command, panel or preset
+- A newly opened texture is left unchanged until you adjust the stack; the new Init preset starts over the same way
+- Help › Tutorial: a short tour of the stack and palettes, offered once on first launch
+- File › Open Recent: your last projects, textures and models
+- File › Process Folder: run the current stack on every texture in a folder
+- Export all and Process Folder save into a 4fxelizer folder, with the textures' own names
+- Export's PSX check shows how much video memory the texture takes
+- Open dialogs start in the folder you last opened from
