@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { snapHexTo15bit, rgb8ToHex } from '@/palette/palette'
-import { psxChecks, psxStats, type PsxInput } from './psx'
+import { psxChecks, psxMemory, psxStats, type PsxInput } from './psx'
 
 const image = (pixels: number[][]) => ({ width: pixels.length, height: 1, data: new Uint8Array(pixels.flat()) })
 
@@ -44,6 +44,25 @@ describe('psxChecks', () => {
 
   it('warns about off-15-bit colors, translucency and opaque black', () => {
     const states = psxChecks({ ...fits, off15bit: 3, translucent: true, opaqueBlack: true }).map((c) => c.state)
-    expect(states).toEqual(['ok', 'ok', 'warn', 'warn', 'warn'])
+    expect(states).toEqual(['ok', 'ok', 'warn', 'ok', 'warn', 'warn'])
+  })
+
+  it('says what the texture takes in video memory', () => {
+    // 128×64 at 4 bits = 4096 bytes, plus a 16-entry CLUT.
+    expect(psxChecks(fits)[3]!.text).toBe("Video memory: 4 KB at 4-bit + 32 B CLUT, 0.4% of the PSX's 1 MB.")
+    expect(psxChecks({ ...fits, width: 256, height: 256, colors: 300 })[3]!.text).toBe("Video memory: 128 KB at 16-bit, 13% of the PSX's 1 MB.")
+    expect(psxChecks({ ...fits, width: 8, height: 8 })[3]!.text).toContain('under 0.1%')
+  })
+})
+
+describe('psxMemory', () => {
+  it('uses 4, 8 or 16 bits per texel by color count', () => {
+    expect(psxMemory(64, 64, 16)).toEqual({ depth: 4, texels: 2048, clut: 32 })
+    expect(psxMemory(64, 64, 17)).toEqual({ depth: 8, texels: 4096, clut: 512 })
+    expect(psxMemory(64, 64, 257)).toEqual({ depth: 16, texels: 8192, clut: 0 })
+  })
+
+  it('rounds odd sizes up to whole bytes', () => {
+    expect(psxMemory(3, 3, 2).texels).toBe(5)
   })
 })

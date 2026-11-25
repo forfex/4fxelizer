@@ -32,6 +32,30 @@ export function psxStats(image: RgbaImage): PsxStats {
   return { off15bit: off.size, opaqueBlack }
 }
 
+/** Bytes of the PSX's video memory (1024×512 at 16 bits), shared by the screen and every texture. */
+export const PSX_VRAM_BYTES = 1024 * 512 * 2
+
+export interface PsxMemory {
+  /** Bits per texel: 4 or 8 with a CLUT, 16 for direct color. */
+  depth: 4 | 8 | 16
+  /** Bytes of the texels. */
+  texels: number
+  /** Bytes of the CLUT (16 or 256 entries of 16 bits; none for direct color). */
+  clut: number
+}
+
+/** What a texture of that size and color count takes in PSX video memory. */
+export function psxMemory(width: number, height: number, colors: number): PsxMemory {
+  const depth = colors <= 16 ? 4 : colors <= 256 ? 8 : 16
+  return { depth, texels: Math.ceil((width * height * depth) / 8), clut: depth === 4 ? 32 : depth === 8 ? 512 : 0 }
+}
+
+function bytesText(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  return `${kb >= 100 ? Math.round(kb) : Math.round(kb * 10) / 10} KB`
+}
+
 export type PsxCheckState = 'ok' | 'warn' | 'fail'
 
 export interface PsxCheck {
@@ -75,6 +99,16 @@ export function psxChecks(o: PsxInput): PsxCheck[] {
       text: `${n} ${o.off15bit > 1 ? "colors aren't" : "color isn't"} 15-bit and will shift slightly. Turn on "15-bit colors" in the palette generator, use the palette's 15-bit button, or quantize to 32 levels.`
     })
   }
+
+  const memory = psxMemory(o.width, o.height, o.colors)
+  const share = ((memory.texels + memory.clut) / PSX_VRAM_BYTES) * 100
+  checks.push({
+    state: 'ok',
+    text:
+      `Video memory: ${bytesText(memory.texels)} at ${memory.depth}-bit` +
+      (memory.clut ? ` + ${bytesText(memory.clut)} CLUT` : '') +
+      `, ${share < 0.1 ? 'under 0.1' : share >= 10 ? Math.round(share) : Math.round(share * 10) / 10}% of the PSX's 1 MB.`
+  })
 
   if (o.translucent) {
     checks.push({ state: 'warn', text: 'Semi-transparent pixels: PSX texels are opaque or fully transparent (semi-transparency is set per polygon).' })
