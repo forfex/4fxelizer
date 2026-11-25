@@ -21,7 +21,7 @@ const errorText = (e: unknown): string => (e instanceof Error ? e.message : Stri
 type Target = { textureId: string } | 'all'
 
 /** Cache key of the image a palette is generated from, or a reason it can't be generated. */
-function generatorInput(
+export function generatorInput(
   palette: Palette,
   plan: ChainPlan | null,
   sourceKey: string | null
@@ -42,7 +42,7 @@ function generatorInput(
   return { key: stages[index]!.inputKey }
 }
 
-function generationKey(palette: Palette, inputKey: string): string {
+export function generationKey(palette: Palette, inputKey: string): string {
   const locked = palette.colors.filter((c) => c.locked).map((c) => c.hex)
   const { auto: _auto, ...settings } = palette.generator!
   return hashString(`${inputKey}|${stableStringify(settings)}|${locked.join(',')}`)

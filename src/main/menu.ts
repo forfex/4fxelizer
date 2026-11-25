@@ -23,7 +23,7 @@ export function runMenuRole(win: BrowserWindow, role: MenuRole): void {
  * title bar but still provides the keyboard shortcuts; on macOS it's the real menu bar.
  * shortcuts: false keeps them shown but not registered (while Settings records a new one).
  */
-export function buildMenu(win: BrowserWindow, isDev: boolean, keybinds: Keybinds, shortcuts = true): Menu {
+export function buildMenu(win: BrowserWindow, isDev: boolean, keybinds: Keybinds, recent: readonly string[], shortcuts = true): Menu {
   const send = (command: MenuCommand) => () => win.webContents.send(IPC.menuCommand, command)
   const isMac = process.platform === 'darwin'
   const item = (entry: MenuEntry): MenuItemConstructorOptions => {
@@ -35,7 +35,7 @@ export function buildMenu(win: BrowserWindow, isDev: boolean, keybinds: Keybinds
   const build = (binds: Keybinds): Menu =>
     Menu.buildFromTemplate([
       ...(isMac ? [{ role: 'appMenu' } as const] : []),
-      ...appMenu(process.platform, isDev, binds).map((section) => ({ label: section.label, submenu: section.items.map(item) }))
+      ...appMenu(process.platform, isDev, binds, recent).map((section) => ({ label: section.label, submenu: section.items.map(item) }))
     ])
   try {
     return build(keybinds)

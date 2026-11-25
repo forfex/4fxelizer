@@ -134,6 +134,8 @@ export interface AppState extends Doc {
   saveWorkspaceOpen: boolean
   /** Help › Search Commands. */
   commandSearchOpen: boolean
+  /** File › Process Folder. */
+  batchOpen: boolean
   /** The tutorial's current step (null = not running). */
   tutorialStep: number | null
   /** The first launch's offer to take the tutorial. */
@@ -224,6 +226,7 @@ export interface AppState extends Doc {
   setSaveWorkspaceOpen(open: boolean): void
   setCommandSearchOpen(open: boolean): void
   setTutorialStep(step: number | null): void
+  setBatchOpen(open: boolean): void
   setTutorialPromptOpen(open: boolean): void
   setPresetName(name: string | null): void
   presetsChanged(): void
@@ -368,6 +371,7 @@ export const useApp = create<AppState>()((set, get) => ({
   saveWorkspaceOpen: false,
   commandSearchOpen: false,
   tutorialStep: null,
+  batchOpen: false,
   tutorialPromptOpen: false,
   presetName: null,
   presetsVersion: 0,
@@ -509,6 +513,7 @@ export const useApp = create<AppState>()((set, get) => ({
   setSaveWorkspaceOpen: (saveWorkspaceOpen) => set({ saveWorkspaceOpen }),
   setCommandSearchOpen: (commandSearchOpen) => set({ commandSearchOpen }),
   setTutorialStep: (tutorialStep) => set({ tutorialStep }),
+  setBatchOpen: (batchOpen) => set({ batchOpen }),
   setTutorialPromptOpen: (tutorialPromptOpen) => set({ tutorialPromptOpen }),
   setPresetName: (presetName) => set({ presetName }),
   presetsChanged: () => set({ presetsVersion: get().presetsVersion + 1 }),

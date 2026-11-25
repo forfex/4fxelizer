@@ -28,7 +28,7 @@ const FILE_HINTS = {
  * Palette the result was most likely snapped to: the output lock's, else the last snapping stage's.
  * Only palettes that fit an indexed image.
  */
-function likelyPalette(): string | null {
+export function likelyPalette(): string | null {
   const { outputLock, stages, palettes } = useApp.getState()
   const last = [...stages].reverse().find(snapsColors)
   const params = last?.params as QuantizeParams | DitherParams | undefined
@@ -120,7 +120,7 @@ export function ExportDialog() {
       <DialogContent title="Export" className="w-[min(460px,90vw)]">
         <div className="flex flex-col gap-2.5">
           {textureCount > 1 && (
-            <Field label="Textures" hint="Export the texture you're working on, or every open texture into one folder (named like each texture).">
+            <Field label="Textures" hint="Export the texture you're working on, or every open texture, under its own name, into a 4fxelizer folder inside the folder you pick.">
               <Segmented
                 className="flex-1"
                 value={exportAll ? 'all' : 'this'}

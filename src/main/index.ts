@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
-import { readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { IPC, THEME_WINDOW_COLORS, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
+import { BATCH_OUTPUT_FOLDER, batchInputs } from '@shared/batch'
 import { isExportFileName } from '@shared/exportNames'
-import { MAP_IMAGE_EXTENSIONS, siblingMaps } from '@shared/maps'
+import { isImageFile, MAP_IMAGE_EXTENSIONS, siblingMaps } from '@shared/maps'
 import { isModelFile, isModelResource, MODEL_EXTENSIONS, referenceCandidates } from '@shared/model'
 import { baseName, isProjectFile, PROJECT_EXTENSION, type ProjectFileRef } from '@shared/project'
 import type { LinkMessage } from '@shared/blenderLink'
@@ -221,7 +222,8 @@ function sendToWindows(channel: string, ...args: unknown[]): void {
 let shortcutsSuspended = false
 
 function refreshMenu(win: BrowserWindow): void {
-  Menu.setApplicationMenu(buildMenu(win, isDev, getSettings().keybinds, !shortcutsSuspended))
+  const { keybinds, recentFiles } = getSettings()
+  Menu.setApplicationMenu(buildMenu(win, isDev, keybinds, recentFiles, !shortcutsSuspended))
 }
 
 function registerIpc(): void {
@@ -263,20 +265,63 @@ function registerIpc(): void {
     return result.filePath
   })
 
+  // Open Recent: only files on the list, and only the kinds the app opens.
+  ipcMain.handle(IPC.openRecent, async (_event, path: unknown) => {
+    if (typeof path !== 'string' || !getSettings().recentFiles.includes(path)) return null
+    if (!(isImageFile(path) || isModelFile(path) || isProjectFile(path))) return null
+    try {
+      const file = resolve(path)
+      if (!(await stat(file)).isFile()) return null
+      rememberOpenFolder(file)
+      return { name: basename(file), bytes: new Uint8Array(await readFile(file)), path: file }
+    } catch {
+      return null
+    }
+  })
+
+  // Process Folder: the textures of a folder the user picked, readable one at a time.
+  const batchFiles = new Set<string>()
+  ipcMain.handle(IPC.chooseBatchFolder, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(win, { title: 'Folder with the textures to process', properties: ['openDirectory'], defaultPath: lastOpenFolder() })
+    const picked = result.filePaths[0]
+    if (result.canceled || !picked) return null
+    const folder = resolve(picked)
+    const entries = await readdir(folder, { withFileTypes: true })
+    const files = batchInputs(entries.filter((e) => e.isFile()).map((e) => e.name)).map((name) => ({ name, path: join(folder, name) }))
+    batchFiles.clear()
+    for (const f of files) batchFiles.add(f.path)
+    // The results go into a folder of their own inside it, so no texture is ever replaced.
+    const output = join(folder, BATCH_OUTPUT_FOLDER)
+    exportFolders.add(output)
+    return { folder, output, files }
+  })
+  ipcMain.handle(IPC.readBatchFile, async (_event, path: unknown) => {
+    if (typeof path !== 'string' || !batchFiles.has(path)) return null
+    try {
+      return { name: basename(path), bytes: new Uint8Array(await readFile(path)), path }
+    } catch {
+      return null
+    }
+  })
+
   // Export into a folder: only folders the user picked in a dialog, only plain image file names.
   const exportFolders = new Set<string>()
   ipcMain.handle(IPC.chooseExportFolder, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)!
-    const result = await dialog.showOpenDialog(win, { title: 'Export all textures into', properties: ['openDirectory', 'createDirectory'] })
-    const folder = result.filePaths[0]
-    if (result.canceled || !folder) return null
-    exportFolders.add(resolve(folder))
+    const result = await dialog.showOpenDialog(win, { title: 'Export all textures into a 4fxelizer folder in', properties: ['openDirectory', 'createDirectory'], defaultPath: lastOpenFolder() })
+    const picked = result.filePaths[0]
+    if (result.canceled || !picked) return null
+    // The files go into a folder of their own inside it (picking that folder itself exports into it again).
+    const folder = basename(resolve(picked)).toLowerCase() === BATCH_OUTPUT_FOLDER ? resolve(picked) : join(resolve(picked), BATCH_OUTPUT_FOLDER)
+    exportFolders.add(folder)
     return folder
   })
   ipcMain.handle(IPC.writeExportFile, async (_event, folder: unknown, name: unknown, bytes: unknown) => {
     if (typeof folder !== 'string' || !exportFolders.has(resolve(folder))) throw new Error('Pick the folder to export into first.')
     if (typeof name !== 'string' || !isExportFileName(name)) throw new Error(`"${String(name)}" isn't a file name the app exports.`)
     if (!(bytes instanceof Uint8Array)) throw new Error('Nothing to write.')
+    await mkdir(resolve(folder), { recursive: true })
     const path = join(resolve(folder), name)
     await writeFile(path, bytes)
     return path
@@ -356,9 +401,9 @@ function registerIpc(): void {
   })
   ipcMain.on(IPC.settingsSave, (event, patch: unknown) => {
     updateSettings(patch)
-    // Changed shortcuts: rebuild the native menu, which provides them.
+    // Changed shortcuts or recent files: rebuild the native menu, which shows them.
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (win && typeof patch === 'object' && patch !== null && 'keybinds' in patch) refreshMenu(win)
+    if (win && typeof patch === 'object' && patch !== null && ('keybinds' in patch || 'recentFiles' in patch)) refreshMenu(win)
     if (typeof patch === 'object' && patch !== null && 'blenderLink' in patch) linkServer.configure(getSettings().blenderLink)
   })
   ipcMain.on(IPC.suspendShortcuts, (event, suspend: unknown) => {

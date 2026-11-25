@@ -18,7 +18,8 @@ describe('keybinds', () => {
     for (const platform of ['win32', 'darwin', 'linux']) {
       const commands = bindableCommands(platform).map((c) => c.command)
       expect(new Set(commands).size).toBe(commands.length)
-      expect([...commands].sort()).toEqual([...MENU_COMMANDS].sort())
+      // Open Recent's items depend on the list of files and take no shortcuts.
+      expect([...commands].sort()).toEqual(MENU_COMMANDS.filter((c) => !c.startsWith('recent-')).sort())
     }
     const open = bindableCommands('win32').find((c) => c.command === 'open')!
     expect(open).toEqual({ command: 'open', label: 'Open Textures', group: 'File', defaultAccelerator: 'CmdOrCtrl+O' })

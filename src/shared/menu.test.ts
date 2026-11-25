@@ -62,6 +62,18 @@ describe('app menu', () => {
     expect(commands).toEqual(expect.arrayContaining(['workspace-essentials', 'workspace-floating', 'reset-workspace', 'save-workspace', 'panel-stack', 'panel-maps']))
   })
 
+  it('lists recent files under File › Open Recent, and leaves the submenu out when there are none', () => {
+    const file = (recent: string[]) => appMenu('win32', false, {}, recent).find((s) => s.label === 'File')!
+    expect(file([]).items.some((i) => i.kind === 'submenu' && i.label === 'Open Recent')).toBe(false)
+    const submenu = file(['C:\\art\\rock.png', 'C:\\game\\level.pxproj']).items.find((i) => i.kind === 'submenu' && i.label === 'Open Recent')
+    expect(submenu?.kind === 'submenu' && submenu.items.map((i) => (i.kind === 'command' ? [i.label, i.command] : i.kind))).toEqual([
+      ['rock.png — art', 'recent-0'],
+      ['level.pxproj — game', 'recent-1'],
+      'separator',
+      ['Clear Recent Files', 'recent-clear']
+    ])
+  })
+
   it('formats shortcuts per platform', () => {
     expect(formatAccelerator('CmdOrCtrl+Shift+P', 'win32')).toBe('Ctrl+Shift+P')
     expect(formatAccelerator('CmdOrCtrl+\\', 'linux')).toBe('Ctrl+\\')
