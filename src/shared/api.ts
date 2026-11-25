@@ -412,11 +412,14 @@ export interface FxApi {
   saveFile(defaultName: string, bytes: Uint8Array, filters: FileFilter[]): Promise<string | null>
   /** Asks for a folder to export into; null = cancelled. */
   chooseExportFolder(): Promise<string | null>
-  /** Writes an exported image into a folder picked with chooseExportFolder (plain image file names only). Returns its path. */
+  /** Writes an exported image into a folder picked with chooseExportFolder, or a processed folder's output (plain image file names only). Returns its path. */
   writeExportFile(folder: string, name: string, bytes: Uint8Array): Promise<string>
   /** Reads a file on the Open Recent list (projects, textures and models only); null = it is gone. */
   openRecent(path: string): Promise<OpenedFile | null>
-  /** File › Process Folder: asks for a folder and lists the textures in it (see @shared/batch); null = cancelled. */
+  /**
+   * File › Process Folder: asks for a folder and lists the textures in it (see @shared/batch), with
+   * the folder inside it the results are written to (writeExportFile accepts it); null = cancelled.
+   */
   chooseBatchFolder(): Promise<BatchFolder | null>
   /** Reads a texture listed by chooseBatchFolder; null = it can't be read. */
   readBatchFile(path: string): Promise<OpenedFile | null>
@@ -498,6 +501,8 @@ export interface FxApi {
 /** A folder picked for File › Process Folder, with the textures found in it. */
 export interface BatchFolder {
   folder: string
+  /** Where the results go: a folder inside `folder`, made when the first one is written. */
+  output: string
   files: { name: string; path: string }[]
 }
 

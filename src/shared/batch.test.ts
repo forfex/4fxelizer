@@ -17,8 +17,8 @@ describe('batchInputs', () => {
 })
 
 describe('batchOutputName', () => {
-  it('names the export like its texture', () => {
-    expect(batchOutputName('rock.jpg', 'png')).toBe('rock_4fx.png')
-    expect(batchOutputName('wall.v2.tga', 'bmp')).toBe('wall.v2_4fx.bmp')
+  it('keeps the texture\'s name, with the export format\'s extension', () => {
+    expect(batchOutputName('rock.jpg', 'png')).toBe('rock.png')
+    expect(batchOutputName('wall.v2.tga', 'bmp')).toBe('wall.v2.bmp')
   })
 })

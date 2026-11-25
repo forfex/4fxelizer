@@ -77,19 +77,18 @@ async function runStack(engine: Engine, id: string, doc: Doc): Promise<void> {
 }
 
 /**
- * Processes the folder's textures into `outFolder` (picked with chooseExportFolder), named like
- * each texture (rock_4fx.png). A file that fails is reported and the rest carry on.
+ * Processes the folder's textures into its output folder (a "4fxelizer" folder inside it), each
+ * under its own name. A file that fails is reported and the rest carry on.
  */
 export async function processFolder(
   input: BatchFolder,
-  outFolder: string,
   options: ExportOptions,
   onProgress: (progress: BatchProgress) => void,
   cancelled: () => boolean
 ): Promise<BatchResult> {
   const engine = getEngine()
   const total = input.files.length
-  const result: BatchResult = { written: 0, total, failed: [], cancelled: false, folder: outFolder }
+  const result: BatchResult = { written: 0, total, failed: [], cancelled: false, folder: input.output }
   if (!engine) return result
   const extension = ENCODERS[parseExportFormat(options.format).type].filter.extensions[0]!
   const names = uniqueFileNames(input.files.map((f) => batchOutputName(f.name, extension)))
@@ -111,7 +110,7 @@ export async function processFolder(
       await runStack(engine, id, doc)
       const rgba = await engine.readOutput(id)
       const { bytes } = await encodeOutput(rgba, options, doc.palettes)
-      await window.fx.writeExportFile(outFolder, names[i]!, bytes)
+      await window.fx.writeExportFile(input.output, names[i]!, bytes)
       result.written++
     } catch (e) {
       result.failed.push({ name: file.name, reason: errorText(e) })

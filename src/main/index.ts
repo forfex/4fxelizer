@@ -1,8 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
-import { readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { IPC, THEME_WINDOW_COLORS, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
-import { batchInputs } from '@shared/batch'
+import { BATCH_OUTPUT_FOLDER, batchInputs } from '@shared/batch'
 import { isExportFileName } from '@shared/exportNames'
 import { isImageFile, MAP_IMAGE_EXTENSIONS, siblingMaps } from '@shared/maps'
 import { isModelFile, isModelResource, MODEL_EXTENSIONS, referenceCandidates } from '@shared/model'
@@ -291,7 +291,10 @@ function registerIpc(): void {
     const files = batchInputs(entries.filter((e) => e.isFile()).map((e) => e.name)).map((name) => ({ name, path: join(folder, name) }))
     batchFiles.clear()
     for (const f of files) batchFiles.add(f.path)
-    return { folder, files }
+    // The results go into a folder of their own inside it, so no texture is ever replaced.
+    const output = join(folder, BATCH_OUTPUT_FOLDER)
+    exportFolders.add(output)
+    return { folder, output, files }
   })
   ipcMain.handle(IPC.readBatchFile, async (_event, path: unknown) => {
     if (typeof path !== 'string' || !batchFiles.has(path)) return null
@@ -316,6 +319,7 @@ function registerIpc(): void {
     if (typeof folder !== 'string' || !exportFolders.has(resolve(folder))) throw new Error('Pick the folder to export into first.')
     if (typeof name !== 'string' || !isExportFileName(name)) throw new Error(`"${String(name)}" isn't a file name the app exports.`)
     if (!(bytes instanceof Uint8Array)) throw new Error('Nothing to write.')
+    await mkdir(resolve(folder), { recursive: true })
     const path = join(resolve(folder), name)
     await writeFile(path, bytes)
     return path

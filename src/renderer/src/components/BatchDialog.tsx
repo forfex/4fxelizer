@@ -1,8 +1,9 @@
 // File › Process Folder: pick a folder of textures, run the current stack on each and export the
-// results into another folder. Uses the Export dialog's format.
+// results into a "4fxelizer" folder inside it. Uses the Export dialog's format.
 
 import { useEffect, useRef, useState } from 'react'
 import { EXPORT_FILE_TYPES, type BatchFolder } from '@shared/api'
+import { BATCH_OUTPUT_FOLDER } from '@shared/batch'
 import { ENCODERS, parseExportFormat, type ExportFormat } from '@/actions'
 import { processFolder, type BatchProgress, type BatchResult } from '@/batch'
 import { savedSettings, saveSettings } from '@/settings'
@@ -59,12 +60,10 @@ export function BatchDialog() {
 
   const run = async (): Promise<void> => {
     if (!input?.files.length) return
-    const outFolder = await window.fx.chooseExportFolder()
-    if (!outFolder) return
     cancel.current = false
     setResult(null)
     setProgress({ done: 0, total: input.files.length, name: '' })
-    const done = await processFolder(input, outFolder, { format, paletteId: indexed ? likelyPalette() : null }, setProgress, () => cancel.current)
+    const done = await processFolder(input, { format, paletteId: indexed ? likelyPalette() : null }, setProgress, () => cancel.current)
     setResult(done)
     useApp.getState().setMessage({
       kind: done.failed.length ? 'error' : 'info',
@@ -78,8 +77,8 @@ export function BatchDialog() {
       <DialogContent title="Process folder" className="w-[min(480px,90vw)]">
         <div className="flex flex-col gap-2.5">
           <p className="text-dim">
-            Runs the current stack ({stageCount} {stageCount === 1 ? 'stage' : 'stages'} on) on every texture in a folder and saves the results into
-            another folder, named like each texture (rock_4fx). The textures are not opened.
+            Runs the current stack ({stageCount} {stageCount === 1 ? 'stage' : 'stages'} on) on every texture in a folder and saves the results, under
+            the same names, into a folder called {BATCH_OUTPUT_FOLDER} inside it. The textures are not opened or changed.
           </p>
           <Field label="Textures" hint="The folder with the textures to process. Its subfolders are not included.">
             <Button disabled={running || !gpuReady} onClick={() => void chooseInput()}>
@@ -139,7 +138,7 @@ export function BatchDialog() {
               <>
                 <Button onClick={() => setOpen(false)}>{result ? 'Close' : 'Cancel'}</Button>
                 <Button variant="primary" disabled={!input?.files.length || !gpuReady} onClick={() => void run()}>
-                  Process…
+                  Process
                 </Button>
               </>
             )}
