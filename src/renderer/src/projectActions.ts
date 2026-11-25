@@ -13,6 +13,7 @@ import { encodePng } from '@/image/png'
 import { closeModel, loadModelFile, stopBake } from '@/modelActions'
 import { initialDoc } from '@/stack/doc'
 import { base64ToBytes, bytesToBase64, parseProject, projectSignature, serializeProject, type ProjectData, type ProjectMap, type ProjectTexture } from '@/stack/project'
+import { noteRecent } from '@/recent'
 import { useApp, type AppState } from '@/store'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
@@ -102,6 +103,7 @@ export async function saveProject(opts: { as?: boolean } = {}): Promise<boolean>
     await window.fx.writeProject(path, serializeProject(data))
     const name = withoutSuffix(baseName(path))
     useApp.getState().setProject({ path, name, saved: signature })
+    noteRecent([path])
     useApp.getState().setMessage({ kind: notes.length ? 'error' : 'info', text: `Saved project ${name}.${notes.length ? ` ${notes.join(' ')}` : ''}` })
     return true
   } catch (e) {
@@ -284,6 +286,7 @@ export async function openProjectFile(file: OpenedFile, opts: { confirmed?: bool
 
   const name = withoutSuffix(file.name)
   useApp.getState().setProject({ path: projectPath, name, saved: projectSignature(useApp.getState()) })
+  noteRecent([projectPath])
   const problems = [
     ...(missing.length ? [`Couldn't find ${[...new Set(missing)].join(', ')}; saving leaves them out of the project.`] : []),
     ...warnings

@@ -4,6 +4,7 @@ import { normalizeBake, normalizeBakePresets, DEFAULT_BAKE, type BakePreset, typ
 import { normalizeView3d, DEFAULT_VIEW3D, VIEW3D_LOOKS, type View3dLookChoice, type View3dSettings } from './view3d'
 import { normalizeLinkSettings, DEFAULT_LINK_SETTINGS, type LinkMessage, type LinkSettings, type LinkState } from './blenderLink'
 import type { MenuRole } from './menu'
+import { MAX_RECENT, normalizeRecent } from './recent'
 import type { ProjectFileRef } from './project'
 import type { ScreenPickResult } from './screenPick'
 import { normalizeUpdateSettings, DEFAULT_UPDATE_SETTINGS, type UpdateSettings, type UpdateState } from './update'
@@ -76,6 +77,8 @@ export interface UserSettings {
   blenderLink: LinkSettings
   /** The first launch's offer to take the tutorial was shown. */
   tutorialSeen: boolean
+  /** File › Open Recent: paths of the projects, textures and models opened last, newest first. */
+  recentFiles: string[]
 }
 
 /**
@@ -196,7 +199,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   invertZoom: false,
   updates: DEFAULT_UPDATE_SETTINGS,
   blenderLink: DEFAULT_LINK_SETTINGS,
-  tutorialSeen: false
+  tutorialSeen: false,
+  recentFiles: []
 }
 
 const isObject = (v: unknown): v is object => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -279,7 +283,8 @@ export function normalizeSettings(raw: unknown): UserSettings {
     invertZoom: bool('invertZoom'),
     updates: normalizeUpdateSettings(r.updates),
     blenderLink: normalizeLinkSettings(r.blenderLink),
-    tutorialSeen: bool('tutorialSeen')
+    tutorialSeen: bool('tutorialSeen'),
+    recentFiles: normalizeRecent(r.recentFiles)
   }
 }
 
@@ -353,8 +358,13 @@ const PLAIN_COMMANDS = [
   'reset-workspace',
   'save-workspace',
   'command-search',
-  'tutorial'
+  'tutorial',
+  'process-folder',
+  'recent-clear'
 ] as const
+
+/** File › Open Recent: one command per place in the list. */
+export const RECENT_COMMANDS = Array.from({ length: MAX_RECENT }, (_, i) => `recent-${i}` as const)
 
 export type MenuCommand =
   | (typeof PLAIN_COMMANDS)[number]
@@ -364,6 +374,7 @@ export type MenuCommand =
   | `look-${View3dLookChoice}`
   | `workspace-${BuiltinWorkspaceId}`
   | `panel-${ToolPanelId}`
+  | `recent-${number}`
 
 /** The 3D view's looks and the Custom style, as View › 3D Look lists them. */
 export const LOOK_CHOICES: readonly View3dLookChoice[] = [...VIEW3D_LOOKS, 'custom']
@@ -376,7 +387,8 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
   ...VIEW_MODES.map((m) => `view-${m}` as const),
   ...LOOK_CHOICES.map((l) => `look-${l}` as const),
   ...BUILTIN_WORKSPACE_IDS.map((w) => `workspace-${w}` as const),
-  ...TOOL_PANEL_IDS.map((p) => `panel-${p}` as const)
+  ...TOOL_PANEL_IDS.map((p) => `panel-${p}` as const),
+  ...RECENT_COMMANDS
 ]
 
 export interface FxApi {
@@ -402,6 +414,12 @@ export interface FxApi {
   chooseExportFolder(): Promise<string | null>
   /** Writes an exported image into a folder picked with chooseExportFolder (plain image file names only). Returns its path. */
   writeExportFile(folder: string, name: string, bytes: Uint8Array): Promise<string>
+  /** Reads a file on the Open Recent list (projects, textures and models only); null = it is gone. */
+  openRecent(path: string): Promise<OpenedFile | null>
+  /** File › Process Folder: asks for a folder and lists the textures in it (see @shared/batch); null = cancelled. */
+  chooseBatchFolder(): Promise<BatchFolder | null>
+  /** Reads a texture listed by chooseBatchFolder; null = it can't be read. */
+  readBatchFile(path: string): Promise<OpenedFile | null>
   /** Map files (AO, cavity, …) next to a texture, recognized by name (see @shared/maps). */
   findMaps(texturePath: string): Promise<OpenedFile[]>
   /** Path on disk of a dropped file ('' when it has none). */
@@ -477,7 +495,16 @@ export interface FxApi {
   saveBlenderAddon(): Promise<string | null>
 }
 
+/** A folder picked for File › Process Folder, with the textures found in it. */
+export interface BatchFolder {
+  folder: string
+  files: { name: string; path: string }[]
+}
+
 export const IPC = {
+  openRecent: 'file:open-recent',
+  chooseBatchFolder: 'batch:choose-folder',
+  readBatchFile: 'batch:read-file',
   openImages: 'image:open',
   openModel: 'model:open',
   readModelFile: 'model:read-file',

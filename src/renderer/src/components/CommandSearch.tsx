@@ -40,9 +40,9 @@ export function CommandSearch() {
 }
 
 function SearchBody({ onDone }: { onDone(): void }) {
-  const { keybinds } = useSavedSettings()
+  const { keybinds, recentFiles } = useSavedSettings()
   const items = useMemo((): SearchItem<Action>[] => {
-    const menu = menuItems(appMenu(platform, import.meta.env.DEV, keybinds)).filter(
+    const menu = menuItems(appMenu(platform, import.meta.env.DEV, keybinds, recentFiles)).filter(
       // Searching for the search itself is no use, and panels are shown (below) rather than toggled.
       (i) => !(i.value.kind === 'command' && (i.value.command === 'command-search' || i.value.command.startsWith('panel-')))
     )
@@ -55,7 +55,7 @@ function SearchBody({ onDone }: { onDone(): void }) {
       })
     )
     return [...menu, ...panels, ...presets]
-  }, [keybinds])
+  }, [keybinds, recentFiles])
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const results = useMemo(() => filterItems(items, query), [items, query])

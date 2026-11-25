@@ -2,8 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { IPC, THEME_WINDOW_COLORS, type FileFilter, type MainGpuInfo, type PresetEntry, type RendererGpuReport, type TitleBarOverlay } from '@shared/api'
+import { batchInputs } from '@shared/batch'
 import { isExportFileName } from '@shared/exportNames'
-import { MAP_IMAGE_EXTENSIONS, siblingMaps } from '@shared/maps'
+import { isImageFile, MAP_IMAGE_EXTENSIONS, siblingMaps } from '@shared/maps'
 import { isModelFile, isModelResource, MODEL_EXTENSIONS, referenceCandidates } from '@shared/model'
 import { baseName, isProjectFile, PROJECT_EXTENSION, type ProjectFileRef } from '@shared/project'
 import type { LinkMessage } from '@shared/blenderLink'
@@ -221,7 +222,8 @@ function sendToWindows(channel: string, ...args: unknown[]): void {
 let shortcutsSuspended = false
 
 function refreshMenu(win: BrowserWindow): void {
-  Menu.setApplicationMenu(buildMenu(win, isDev, getSettings().keybinds, !shortcutsSuspended))
+  const { keybinds, recentFiles } = getSettings()
+  Menu.setApplicationMenu(buildMenu(win, isDev, keybinds, recentFiles, !shortcutsSuspended))
 }
 
 function registerIpc(): void {
@@ -261,6 +263,43 @@ function registerIpc(): void {
     if (result.canceled || !result.filePath) return null
     await writeFile(result.filePath, bytes)
     return result.filePath
+  })
+
+  // Open Recent: only files on the list, and only the kinds the app opens.
+  ipcMain.handle(IPC.openRecent, async (_event, path: unknown) => {
+    if (typeof path !== 'string' || !getSettings().recentFiles.includes(path)) return null
+    if (!(isImageFile(path) || isModelFile(path) || isProjectFile(path))) return null
+    try {
+      const file = resolve(path)
+      if (!(await stat(file)).isFile()) return null
+      rememberOpenFolder(file)
+      return { name: basename(file), bytes: new Uint8Array(await readFile(file)), path: file }
+    } catch {
+      return null
+    }
+  })
+
+  // Process Folder: the textures of a folder the user picked, readable one at a time.
+  const batchFiles = new Set<string>()
+  ipcMain.handle(IPC.chooseBatchFolder, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)!
+    const result = await dialog.showOpenDialog(win, { title: 'Folder with the textures to process', properties: ['openDirectory'], defaultPath: lastOpenFolder() })
+    const picked = result.filePaths[0]
+    if (result.canceled || !picked) return null
+    const folder = resolve(picked)
+    const entries = await readdir(folder, { withFileTypes: true })
+    const files = batchInputs(entries.filter((e) => e.isFile()).map((e) => e.name)).map((name) => ({ name, path: join(folder, name) }))
+    batchFiles.clear()
+    for (const f of files) batchFiles.add(f.path)
+    return { folder, files }
+  })
+  ipcMain.handle(IPC.readBatchFile, async (_event, path: unknown) => {
+    if (typeof path !== 'string' || !batchFiles.has(path)) return null
+    try {
+      return { name: basename(path), bytes: new Uint8Array(await readFile(path)), path }
+    } catch {
+      return null
+    }
   })
 
   // Export into a folder: only folders the user picked in a dialog, only plain image file names.
@@ -356,9 +395,9 @@ function registerIpc(): void {
   })
   ipcMain.on(IPC.settingsSave, (event, patch: unknown) => {
     updateSettings(patch)
-    // Changed shortcuts: rebuild the native menu, which provides them.
+    // Changed shortcuts or recent files: rebuild the native menu, which shows them.
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (win && typeof patch === 'object' && patch !== null && 'keybinds' in patch) refreshMenu(win)
+    if (win && typeof patch === 'object' && patch !== null && ('keybinds' in patch || 'recentFiles' in patch)) refreshMenu(win)
     if (typeof patch === 'object' && patch !== null && 'blenderLink' in patch) linkServer.configure(getSettings().blenderLink)
   })
   ipcMain.on(IPC.suspendShortcuts, (event, suspend: unknown) => {

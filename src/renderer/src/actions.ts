@@ -1,5 +1,6 @@
 import {
   BUILTIN_WORKSPACE_IDS,
+  RECENT_COMMANDS,
   TOOL_PANEL_IDS,
   type ExportFileType,
   type ExportFormat,
@@ -30,6 +31,7 @@ import { applyPick, MAX_PALETTE, rgb8ToHex, type Palette } from '@/palette/palet
 import { saveBlenderAddon, toggleBlenderLink } from '@/blenderLink'
 import { loadModelFile, openModel } from '@/modelActions'
 import { newProject, openProject, openProjectFile, saveProject } from '@/projectActions'
+import { clearRecent, noteRecent, openRecent } from '@/recent'
 import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
 import { LEGACY_PRESET_EXTENSION, parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
 import { newId, useApp, type MapInfo } from '@/store'
@@ -137,6 +139,7 @@ export async function addBlankTexture(name: string, size: number): Promise<strin
 export async function openImage(): Promise<void> {
   const files = await window.fx.openImages()
   for (const file of files) await loadImageFile(file.name, file.bytes, file.path)
+  noteRecent(files.map((f) => f.path))
 }
 
 /** Closes a texture's tab (its maps and separate stack go with it). */
@@ -170,6 +173,8 @@ export async function openDroppedFiles(files: OpenedFile[]): Promise<void> {
   // A project replaces everything, so it opens alone.
   const project = files.find((f) => isProjectFile(f.name))
   if (project) return openProjectFile(project)
+  // Textures and models the user dropped (maps and palettes that come along aren't listed).
+  noteRecent(files.filter((f) => isModelFile(f.name) || (MAP_IMAGE_EXTENSIONS.includes(extensionOf(f.name)) && !detectMap(f.name))).map((f) => f.path))
   const images: OpenedFile[] = []
   const model = files.find((f) => isModelFile(f.name))
   if (model) await loadModelFile(model.name, model.bytes, model.path)
@@ -432,7 +437,7 @@ export async function describeOutput(): Promise<OutputSummary | null> {
 }
 
 /** An exported file's bytes, and how it was stored (for the message). */
-async function encodeOutput(rgba: RgbaImage, options: ExportOptions, palettes: Palette[]): Promise<{ bytes: Uint8Array; detail: string }> {
+export async function encodeOutput(rgba: RgbaImage, options: ExportOptions, palettes: Palette[]): Promise<{ bytes: Uint8Array; detail: string }> {
   const { type, indexed } = parseExportFormat(options.format)
   const encoder = ENCODERS[type]
   if (!indexed) return { bytes: await encoder.rgba(rgba), detail: 'RGBA' }
@@ -753,11 +758,15 @@ export function runMenuCommand(command: MenuCommand): void {
   if (workspace) return selectWorkspace(workspace)
   const panel = TOOL_PANEL_IDS.find((p) => command === `panel-${p}`)
   if (panel) return togglePanel(panel)
+  const recent = RECENT_COMMANDS.indexOf(command as (typeof RECENT_COMMANDS)[number])
+  if (recent >= 0) return void openRecent(recent)
   switch (command) {
     case 'reset-workspace': return resetWorkspace()
     case 'save-workspace': return app.setSaveWorkspaceOpen(true)
     case 'command-search': return app.setCommandSearchOpen(true)
     case 'tutorial': return app.setTutorialStep(0)
+    case 'process-folder': return app.setBatchOpen(true)
+    case 'recent-clear': return clearRecent()
     case 'new-project': return void newProject()
     case 'open-project': return void openProject()
     case 'save-project': return void saveProject()

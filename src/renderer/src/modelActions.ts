@@ -10,6 +10,7 @@ import { readTextureRgba8 } from '@/gpu/textureIO'
 import { gbufferAsync, loadModelAsync } from '@/model/modelAsync'
 import type { ModelData, TextureRef } from '@/model/model'
 import { objMaterialLibraries } from '@/model/mtl'
+import { noteRecent } from '@/recent'
 import { useApp, type ModelInfo } from '@/store'
 import { activeMaterials, unboundPick } from '@/stack/textures'
 
@@ -194,7 +195,9 @@ export async function loadModelFile(
 
 export async function openModel(): Promise<void> {
   const file = await window.fx.openModel()
-  if (file) await loadModelFile(file.name, file.bytes, file.path)
+  if (!file) return
+  await loadModelFile(file.name, file.bytes, file.path)
+  noteRecent([file.path])
 }
 
 export function closeModel(): void {

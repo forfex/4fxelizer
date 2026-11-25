@@ -16,6 +16,7 @@ import {
   type Keybinds,
   type MenuCommand
 } from './api'
+import { recentLabel } from './recent'
 import { VIEW3D_LOOK_INFO } from './view3d'
 
 /** Actions main performs itself (clipboard, window, dev tools). */
@@ -36,17 +37,20 @@ const command = (label: string, cmd: MenuCommand, accelerator?: string): MenuEnt
 const role = (label: string, r: MenuRole, accelerator?: string): MenuEntry => ({ kind: 'role', label, role: r, accelerator })
 const separator: MenuEntry = { kind: 'separator' }
 
-/** The menu with `keybinds` (the user's changed shortcuts) in place of the default accelerators. */
-export function appMenu(platform: string, isDev: boolean, keybinds: Keybinds = {}): MenuSection[] {
+/**
+ * The menu with `keybinds` (the user's changed shortcuts) in place of the default accelerators, and
+ * `recent` (the files opened last) as File › Open Recent; with none, that submenu is left out.
+ */
+export function appMenu(platform: string, isDev: boolean, keybinds: Keybinds = {}, recent: readonly string[] = []): MenuSection[] {
   const rebind = (entry: MenuEntry): MenuEntry => {
     if (entry.kind === 'submenu') return { ...entry, items: entry.items.map(rebind) }
     if (entry.kind !== 'command' || keybinds[entry.command] === undefined) return entry
     return { ...entry, accelerator: keybinds[entry.command] || undefined }
   }
-  return defaultMenu(platform, isDev).map((section) => ({ ...section, items: section.items.map(rebind) }))
+  return defaultMenu(platform, isDev, recent).map((section) => ({ ...section, items: section.items.map(rebind) }))
 }
 
-function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
+function defaultMenu(platform: string, isDev: boolean, recent: readonly string[]): MenuSection[] {
   const isMac = platform === 'darwin'
   return [
     {
@@ -60,7 +64,17 @@ function defaultMenu(platform: string, isDev: boolean): MenuSection[] {
         command('Open Textures…', 'open', 'CmdOrCtrl+O'),
         command('Close Texture', 'close-texture', isMac ? 'Shift+Cmd+W' : 'Ctrl+F4'),
         command('Open Model…', 'open-model', 'CmdOrCtrl+Shift+O'),
+        ...(recent.length
+          ? [
+              {
+                kind: 'submenu' as const,
+                label: 'Open Recent',
+                items: [...recent.map((path, i) => command(recentLabel(path), `recent-${i}`)), separator, command('Clear Recent Files', 'recent-clear')]
+              }
+            ]
+          : []),
         command('Export…', 'export', 'CmdOrCtrl+E'),
+        command('Process Folder…', 'process-folder'),
         separator,
         command('Import Palette…', 'import-palette'),
         separator,

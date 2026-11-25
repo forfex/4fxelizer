@@ -87,8 +87,8 @@ export function TitleBar() {
 function AppMenuBar() {
   const root = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState('')
-  const { keybinds, blenderLink, workspace } = useSavedSettings()
-  const menu = useMemo(() => appMenu(platform, import.meta.env.DEV, keybinds), [keybinds])
+  const { keybinds, blenderLink, workspace, recentFiles } = useSavedSettings()
+  const menu = useMemo(() => appMenu(platform, import.meta.env.DEV, keybinds, recentFiles), [keybinds, recentFiles])
   const menuRef = useRef(menu)
   menuRef.current = menu
   // Commands that are on/off states show the selected mark in the menu.

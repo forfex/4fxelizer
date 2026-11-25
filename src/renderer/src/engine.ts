@@ -120,6 +120,17 @@ export class Engine {
     }
   }
 
+  /**
+   * Frees a slot the store doesn't know about (Process Folder's temporary ones, made by
+   * loadBitmap with an id of their own).
+   */
+  disposeTexture(id: string): void {
+    const slot = this.slots.get(id)
+    if (!slot || id === this.activeId) return
+    slot.dispose()
+    this.slots.delete(id)
+  }
+
   /** The texture a slot currently outputs (the full stack's result, for the 3D view and export). */
   outputOf(id: string): GPUTexture | null {
     return this.slots.get(id)?.output ?? null

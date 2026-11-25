@@ -28,7 +28,7 @@ const FILE_HINTS = {
  * Palette the result was most likely snapped to: the output lock's, else the last snapping stage's.
  * Only palettes that fit an indexed image.
  */
-function likelyPalette(): string | null {
+export function likelyPalette(): string | null {
   const { outputLock, stages, palettes } = useApp.getState()
   const last = [...stages].reverse().find(snapsColors)
   const params = last?.params as QuantizeParams | DitherParams | undefined
