@@ -410,7 +410,10 @@ export interface FxApi {
   readModelFile(modelPath: string, reference: string): Promise<OpenedFile | null>
   openFile(filters: FileFilter[]): Promise<OpenedFile | null>
   saveFile(defaultName: string, bytes: Uint8Array, filters: FileFilter[]): Promise<string | null>
-  /** Asks for a folder to export into; null = cancelled. */
+  /**
+   * Asks for a folder to export into and returns the "4fxelizer" folder inside it, where the files
+   * go (made when the first one is written); null = cancelled.
+   */
   chooseExportFolder(): Promise<string | null>
   /** Writes an exported image into a folder picked with chooseExportFolder, or a processed folder's output (plain image file names only). Returns its path. */
   writeExportFile(folder: string, name: string, bytes: Uint8Array): Promise<string>

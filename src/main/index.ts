@@ -309,10 +309,12 @@ function registerIpc(): void {
   const exportFolders = new Set<string>()
   ipcMain.handle(IPC.chooseExportFolder, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)!
-    const result = await dialog.showOpenDialog(win, { title: 'Export all textures into', properties: ['openDirectory', 'createDirectory'] })
-    const folder = result.filePaths[0]
-    if (result.canceled || !folder) return null
-    exportFolders.add(resolve(folder))
+    const result = await dialog.showOpenDialog(win, { title: 'Export all textures into a 4fxelizer folder in', properties: ['openDirectory', 'createDirectory'], defaultPath: lastOpenFolder() })
+    const picked = result.filePaths[0]
+    if (result.canceled || !picked) return null
+    // The files go into a folder of their own inside it (picking that folder itself exports into it again).
+    const folder = basename(resolve(picked)).toLowerCase() === BATCH_OUTPUT_FOLDER ? resolve(picked) : join(resolve(picked), BATCH_OUTPUT_FOLDER)
+    exportFolders.add(folder)
     return folder
   })
   ipcMain.handle(IPC.writeExportFile, async (_event, folder: unknown, name: unknown, bytes: unknown) => {

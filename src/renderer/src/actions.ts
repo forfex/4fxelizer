@@ -13,6 +13,7 @@ import {
 } from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, textureBase, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
+import { batchOutputName } from '@shared/batch'
 import { uniqueFileNames } from '@shared/exportNames'
 import { isProjectFile } from '@shared/project'
 import type { View3dLookChoice } from '@shared/view3d'
@@ -479,7 +480,7 @@ function processTextureNow(id: string): void {
 }
 
 /**
- * Exports every open texture into a folder picked once, named like its texture (rock_4fx.png).
+ * Exports every open texture, under its own name, into a "4fxelizer" folder inside a folder picked once.
  * An indexed export against a palette uses each texture's own colors of it. Returns true when
  * any file was written.
  */
@@ -490,7 +491,7 @@ export async function exportAllTextures(options: ExportOptions): Promise<boolean
   const folder = await window.fx.chooseExportFolder()
   if (!folder) return false
   const ext = ENCODERS[parseExportFormat(options.format).type].filter.extensions[0]
-  const names = uniqueFileNames(textures.map((t) => `${t.image.name.replace(/\.[^.]+$/, '')}_4fx.${ext}`))
+  const names = uniqueFileNames(textures.map((t) => batchOutputName(t.image.name, ext!)))
   const failed: string[] = []
   let written = 0
   for (const [i, t] of textures.entries()) {
