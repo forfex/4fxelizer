@@ -1,4 +1,4 @@
-import { THEME_HINTS, THEME_NAMES, THEMES, VIEW_MODE_NAMES, VIEW_MODES, type ViewMode } from '@shared/api'
+import { VIEW_MODE_NAMES, VIEW_MODES, type ViewMode } from '@shared/api'
 import { openImage, redo, undo } from '@/actions'
 import { useSavedSettings, withShortcut } from '@/settings'
 import { useApp } from '@/store'
@@ -7,7 +7,6 @@ import { Button } from './ui/button'
 import { Segmented } from './ui/controls'
 import { MinusIcon, PlusIcon, RedoIcon, SettingsIcon, UndoIcon } from './ui/icons'
 import { Lcd } from './ui/retro'
-import { Select } from './ui/select'
 import { WorkspaceMenu } from './Workspace'
 
 const VIEW_MODE_HINTS: Record<ViewMode, string> = {
@@ -27,11 +26,10 @@ export function Toolbar() {
   const grid = useApp((s) => s.grid)
   const split = useApp((s) => s.split)
   const tile = useApp((s) => s.tile)
-  const theme = useApp((s) => s.theme)
   const viewMode = useApp((s) => s.viewMode)
   const canUndo = useApp((s) => s.past.length > 0)
   const canRedo = useApp((s) => s.future.length > 0)
-  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setTheme, setViewMode, setExportOpen, setSettingsOpen } = useApp.getState()
+  const { zoomStep, zoomFit, zoomActual, toggleGrid, toggleSplit, toggleTile, setViewMode, setExportOpen, setSettingsOpen } = useApp.getState()
   // Tooltips show the shortcuts as the user set them.
   const settings = useSavedSettings()
   const tip = (text: string, command: Parameters<typeof withShortcut>[1]): string => withShortcut(text, command, settings)
@@ -75,8 +73,8 @@ export function Toolbar() {
       <Button aria-pressed={grid} onClick={toggleGrid} title={tip('Pixel grid', 'toggle-grid')}>
         Grid
       </Button>
-      <Button aria-pressed={split} onClick={toggleSplit} title={tip('Before/after split', 'toggle-split')}>
-        Split
+      <Button aria-pressed={split} onClick={toggleSplit} title={tip('Compare: the source and the result side by side, split by a divider you can drag', 'toggle-split')}>
+        Compare
       </Button>
       <Button aria-pressed={tile} onClick={toggleTile} title={tip('Tiling view: copies around the texture to check its seams', 'toggle-tile')}>
         Tile
@@ -92,13 +90,6 @@ export function Toolbar() {
 
       <div className="flex-1" />
       <WorkspaceMenu />
-      <Select
-        className="w-28"
-        title="Interface theme"
-        value={theme}
-        onValueChange={setTheme}
-        options={THEMES.map((t) => ({ value: t, label: THEME_NAMES[t], hint: THEME_HINTS[t] }))}
-      />
       <Button size="icon" onClick={() => setSettingsOpen(true)} title={tip('Settings', 'settings')} aria-label="Settings">
         <SettingsIcon />
       </Button>

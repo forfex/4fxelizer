@@ -301,6 +301,22 @@ export interface RendererGpuReport {
   smokeTest?: { ok: boolean; detail: string }
 }
 
+/** Built-in panel layouts (Window menu, toolbar workspace dropdown), in menu order. */
+export const BUILTIN_WORKSPACE_IDS = ['essentials', 'wide-viewer', 'palette-focus', '3d', 'floating'] as const
+export type BuiltinWorkspaceId = (typeof BUILTIN_WORKSPACE_IDS)[number]
+export const BUILTIN_WORKSPACE_NAMES: Record<BuiltinWorkspaceId, string> = {
+  essentials: 'Essentials',
+  'wide-viewer': 'Wide viewer',
+  'palette-focus': 'Palette editing',
+  '3d': '3D',
+  floating: 'Floating'
+}
+
+/** Dockable tool panels (their ids are stored in layouts: keep them stable), in menu order. */
+export const TOOL_PANEL_IDS = ['stack', 'palettes', 'maps', 'textures'] as const
+export type ToolPanelId = (typeof TOOL_PANEL_IDS)[number]
+export const TOOL_PANEL_NAMES: Record<ToolPanelId, string> = { stack: 'Stack', palettes: 'Palettes', maps: 'Maps', textures: 'Textures' }
+
 const PLAIN_COMMANDS = [
   'new-project',
   'open-project',
@@ -329,7 +345,10 @@ const PLAIN_COMMANDS = [
   'check-updates',
   'pick-screen-color',
   'blender-link',
-  'blender-addon'
+  'blender-addon',
+  'reset-workspace',
+  'save-workspace',
+  'command-search'
 ] as const
 
 export type MenuCommand =
@@ -338,6 +357,8 @@ export type MenuCommand =
   | `live-reload-${LiveReloadMode}`
   | `view-${ViewMode}`
   | `look-${View3dLookChoice}`
+  | `workspace-${BuiltinWorkspaceId}`
+  | `panel-${ToolPanelId}`
 
 /** The 3D view's looks and the Custom style, as View › 3D Look lists them. */
 export const LOOK_CHOICES: readonly View3dLookChoice[] = [...VIEW3D_LOOKS, 'custom']
@@ -348,7 +369,9 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
   ...THEMES.map((t) => `theme-${t}` as const),
   ...LIVE_RELOAD_MODES.map((m) => `live-reload-${m}` as const),
   ...VIEW_MODES.map((m) => `view-${m}` as const),
-  ...LOOK_CHOICES.map((l) => `look-${l}` as const)
+  ...LOOK_CHOICES.map((l) => `look-${l}` as const),
+  ...BUILTIN_WORKSPACE_IDS.map((w) => `workspace-${w}` as const),
+  ...TOOL_PANEL_IDS.map((p) => `panel-${p}` as const)
 ]
 
 export interface FxApi {

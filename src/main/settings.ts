@@ -2,7 +2,7 @@
 // every OS). Read once at startup; writes are debounced and atomic (temp file + rename).
 
 import { app, screen, type BrowserWindow, type Rectangle } from 'electron'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { normalizeSettings, type UserSettings } from '@shared/api'
 
@@ -15,6 +15,8 @@ interface SettingsFile {
   version: 1
   ui: UserSettings
   window: WindowState
+  /** Folder of the file opened last, where the next open dialog starts. */
+  lastFolder?: string
 }
 
 const SAVE_DELAY_MS = 300
@@ -32,7 +34,12 @@ function load(): SettingsFile {
   } catch {
     // Missing or unreadable: start from defaults.
   }
-  state = { version: 1, ui: normalizeSettings(raw.ui), window: validWindow(raw.window) }
+  state = {
+    version: 1,
+    ui: normalizeSettings(raw.ui),
+    window: validWindow(raw.window),
+    lastFolder: typeof raw.lastFolder === 'string' ? raw.lastFolder : undefined
+  }
   return state
 }
 
@@ -76,6 +83,26 @@ export function getSettings(): UserSettings {
 export function updateSettings(patch: unknown): void {
   const current = load()
   current.ui = normalizeSettings({ ...current.ui, ...(typeof patch === 'object' && patch !== null ? patch : {}) })
+  saveSoon()
+}
+
+/** Where an open dialog starts: the folder of the file opened last, if it still exists (else the OS default). */
+export function lastOpenFolder(): string | undefined {
+  const folder = load().lastFolder
+  if (!folder) return undefined
+  try {
+    return statSync(folder).isDirectory() ? folder : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Remembers the folder of a file the user just opened. */
+export function rememberOpenFolder(filePath: string): void {
+  const folder = dirname(filePath)
+  const current = load()
+  if (current.lastFolder === folder) return
+  current.lastFolder = folder
   saveSoon()
 }
 

@@ -143,11 +143,17 @@ export function removeStage(doc: Doc, uid: string): Partial<Doc> {
   }
 }
 
-/** Default document: Adjust → Downscale → Dither with a 16-color palette generated from its input. */
+/**
+ * Default document: Adjust → Downscale → Dither (with a 16-color palette generated from its input),
+ * set up so a newly opened texture comes out unchanged: Downscale at 100%, and Dither, which has no
+ * setting that leaves an image as it is, switched off.
+ */
 export function initialDoc(): Doc {
   const adjust = makeStage('adjust')
   const downscale = makeStage('downscale')
+  downscale.stage.params = { ...(downscale.stage.params as object), sizeMode: 'scale', scale: 1 }
   const dither = makeStage('dither')
+  dither.stage.enabled = false
   return {
     stages: [adjust.stage, downscale.stage, dither.stage],
     palettes: dither.palettes,

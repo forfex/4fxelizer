@@ -14,7 +14,7 @@ import { applyGpuFlags } from './gpuFlags'
 import { buildMenu, runMenuRole } from './menu'
 import { presetPath, presetsDir, PRESET_SUFFIX } from './presets'
 import { pickScreenColors, registerScreenPicker } from './screenPicker'
-import { flushSettings, getSettings, savedWindowBounds, trackWindow, updateSettings } from './settings'
+import { flushSettings, getSettings, lastOpenFolder, rememberOpenFolder, savedWindowBounds, trackWindow, updateSettings } from './settings'
 import { checkForUpdates, currentVersion, installUpdate, prepareInstall, runInstaller, updateState } from './updater'
 import { FileWatcher } from './watch'
 
@@ -58,16 +58,18 @@ async function getGpuInfo(): Promise<MainGpuInfo> {
 }
 
 async function openFile(win: BrowserWindow, filters: FileFilter[]) {
-  const result = await dialog.showOpenDialog(win, { properties: ['openFile'], filters })
+  const result = await dialog.showOpenDialog(win, { properties: ['openFile'], filters, defaultPath: lastOpenFolder() })
   const path = result.filePaths[0]
   if (result.canceled || !path) return null
+  rememberOpenFolder(path)
   return { name: basename(path), bytes: new Uint8Array(await readFile(path)), path }
 }
 
 /** Asks for several files; empty when cancelled. */
 async function openFiles(win: BrowserWindow, filters: FileFilter[]) {
-  const result = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters })
+  const result = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters, defaultPath: lastOpenFolder() })
   if (result.canceled) return []
+  if (result.filePaths[0]) rememberOpenFolder(result.filePaths[0])
   return Promise.all(result.filePaths.map(async (path) => ({ name: basename(path), bytes: new Uint8Array(await readFile(path)), path })))
 }
 

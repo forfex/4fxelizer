@@ -1,4 +1,15 @@
-import type { ExportFileType, ExportFormat, FileFilter, LiveReloadMode, MenuCommand, OpenedFile, Theme, ViewMode } from '@shared/api'
+import {
+  BUILTIN_WORKSPACE_IDS,
+  TOOL_PANEL_IDS,
+  type ExportFileType,
+  type ExportFormat,
+  type FileFilter,
+  type LiveReloadMode,
+  type MenuCommand,
+  type OpenedFile,
+  type Theme,
+  type ViewMode
+} from '@shared/api'
 import { detectMap, MAP_IMAGE_EXTENSIONS, mapFileName, MAP_SLOTS, textureBase, type MapChannel, type MapSlot } from '@shared/maps'
 import { isModelFile } from '@shared/model'
 import { uniqueFileNames } from '@shared/exportNames'
@@ -23,6 +34,7 @@ import { BUILTIN_PRESETS, type BuiltinPreset } from '@/stack/builtinPresets'
 import { LEGACY_PRESET_EXTENSION, parsePreset, PRESET_EXTENSION, presetFileName, serializePreset, type ParsedPreset } from '@/stack/preset'
 import { newId, useApp, type MapInfo } from '@/store'
 import { docFor } from '@/stack/textures'
+import { resetWorkspace, selectWorkspace, togglePanel } from '@/workspace/workspace'
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -737,7 +749,14 @@ export function redo(): void {
 
 export function runMenuCommand(command: MenuCommand): void {
   const app = useApp.getState()
+  const workspace = BUILTIN_WORKSPACE_IDS.find((w) => command === `workspace-${w}`)
+  if (workspace) return selectWorkspace(workspace)
+  const panel = TOOL_PANEL_IDS.find((p) => command === `panel-${p}`)
+  if (panel) return togglePanel(panel)
   switch (command) {
+    case 'reset-workspace': return resetWorkspace()
+    case 'save-workspace': return app.setSaveWorkspaceOpen(true)
+    case 'command-search': return app.setCommandSearchOpen(true)
     case 'new-project': return void newProject()
     case 'open-project': return void openProject()
     case 'save-project': return void saveProject()

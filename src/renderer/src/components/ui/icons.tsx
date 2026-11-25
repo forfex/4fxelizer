@@ -90,3 +90,11 @@ export const ScreenPickIcon = ({ className }: P) => (
     <rect x="6" y="4.5" width="2" height="2" fill="currentColor" stroke="none" />
   </Icon>
 )
+
+/** Help: a square question mark. */
+export const HelpIcon = ({ className }: P) => (
+  <Icon className={className}>
+    <path d="M4 4V2h6v5H7v2" />
+    <rect x="6" y="11" width="2" height="2" fill="currentColor" stroke="none" />
+  </Icon>
+)

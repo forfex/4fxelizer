@@ -65,6 +65,11 @@ export function PresetsMenu() {
         )}
         <MenuSeparator />
         <MenuLabel>Built-in</MenuLabel>
+        {BUILTIN_PRESETS.filter((p) => !p.category).map((p) => (
+          <MenuItem key={p.name} title={p.hint} onSelect={() => loadBuiltinPreset(p)}>
+            {p.name}
+          </MenuItem>
+        ))}
         {PRESET_CATEGORIES.map((c) => (
           <MenuSub key={c.id}>
             <MenuSubTrigger>{c.label}</MenuSubTrigger>

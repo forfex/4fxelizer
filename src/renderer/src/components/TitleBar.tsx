@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Menubar } from 'radix-ui'
 import { useShallow } from 'zustand/react/shallow'
-import type { MenuCommand } from '@shared/api'
+import { TOOL_PANEL_IDS, type MenuCommand } from '@shared/api'
 import { appMenu, formatAccelerator, type MenuEntry } from '@shared/menu'
 import { runMenuCommand } from '@/actions'
 import iconUrl from '@/assets/icon.svg'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { useProjectDirty } from '@/projectActions'
 import { useSavedSettings } from '@/settings'
 import { useApp } from '@/store'
+import { isPanelOpen } from '@/workspace/workspace'
 import { CAPTURE_KEYS_ATTR } from './settings/Keybinds'
 import { CaretIcon } from './ui/icons'
 import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_MARK_CLASS, MENU_SEPARATOR_CLASS } from './ui/menu'
@@ -86,7 +87,7 @@ export function TitleBar() {
 function AppMenuBar() {
   const root = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState('')
-  const { keybinds, blenderLink } = useSavedSettings()
+  const { keybinds, blenderLink, workspace } = useSavedSettings()
   const menu = useMemo(() => appMenu(platform, import.meta.env.DEV, keybinds), [keybinds])
   const menuRef = useRef(menu)
   menuRef.current = menu
@@ -101,7 +102,14 @@ function AppMenuBar() {
       [`view-${s.viewMode}`]: true
     }))
   )
-  const checked: Partial<Record<MenuCommand, boolean>> = { ...checkedState, 'blender-link': blenderLink.enabled }
+  // Panels open now (read on every render: the menu re-renders as it opens).
+  const panels = Object.fromEntries(TOOL_PANEL_IDS.map((p) => [`panel-${p}`, isPanelOpen(p)]))
+  const checked: Partial<Record<MenuCommand, boolean>> = {
+    ...checkedState,
+    ...panels,
+    [`workspace-${workspace}`]: true,
+    'blender-link': blenderLink.enabled
+  }
   // Clipboard actions must reach the field that was focused before the menu took focus. Recorded
   // before Radix moves focus (pointer down, or the keyboard shortcuts below).
   const lastFocus = useRef<HTMLElement | null>(null)

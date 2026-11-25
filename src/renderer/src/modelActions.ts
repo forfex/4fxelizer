@@ -1,7 +1,7 @@
 // Connects the UI to 3D models: opening one (with the files it refers to and its base color
 // texture), choosing the texture set shown with the open texture, and baking maps from it.
 
-import { BAKE_MAPS, type BakeMap } from '@shared/bake'
+import { BAKE_MAPS, type BakeMap, type BakeSettings } from '@shared/bake'
 import { modelFormat } from '@shared/model'
 import { addBlankTexture, clearMaps, loadImageFile, nextMapVersion, reloadImageFile, thumbnail } from '@/actions'
 import { getEngine } from '@/engine'
@@ -245,15 +245,16 @@ const MAP_NAMES: Record<BakeMap, string> = {
   up: 'up-facing'
 }
 
-/** Bakes the chosen maps from the model into the map slots, refining them step by step. */
-export async function startBake(): Promise<void> {
+/** Bakes the chosen maps (or `only` that one) from the model into the map slots, refining them step by step. */
+export async function startBake(only?: BakeMap): Promise<void> {
   const engine = getEngine()
   const s = useApp.getState()
   const model = engine?.model
   if (!engine || !model || !s.model || bakeRun) return
   const run = { stop: false }
   bakeRun = run
-  const settings = s.bake
+  // One map alone (a map slot's Bake button), with the other settings as they are.
+  const settings = only ? { ...s.bake, maps: Object.fromEntries(BAKE_MAPS.map((m) => [m, m === only])) as BakeSettings['maps'] } : s.bake
   const size = settings.size
   const setJob = useApp.getState().setBakeJob
   setJob({ status: 'running', progress: 0, label: 'Preparing' })

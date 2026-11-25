@@ -130,6 +130,10 @@ export interface AppState extends Doc {
   settingsOpen: boolean
   exportOpen: boolean
   presetsOpen: boolean
+  /** The Save workspace dialog (toolbar workspace menu, Window menu). */
+  saveWorkspaceOpen: boolean
+  /** Help › Search Commands. */
+  commandSearchOpen: boolean
   /** Name of the last loaded or saved preset (suggested when saving). */
   presetName: string | null
   /** Bumped when the user's preset files change, so lists reload. */
@@ -138,6 +142,8 @@ export interface AppState extends Doc {
   previewUid: string | null
   /** Stage whose dither mask the viewer shows (null = none). */
   maskUid: string | null
+  /** Stage cards shown open in the Stack panel (UI state: not in the document, presets or undo). */
+  openStages: string[]
   selectedPaletteId: string | null
   /** Color selected in the palette editor (index into that palette's colors). */
   selectedColor: { paletteId: string; index: number } | null
@@ -211,11 +217,15 @@ export interface AppState extends Doc {
   setSettingsOpen(open: boolean): void
   setExportOpen(open: boolean): void
   setPresetsOpen(open: boolean): void
+  setSaveWorkspaceOpen(open: boolean): void
+  setCommandSearchOpen(open: boolean): void
   setPresetName(name: string | null): void
   presetsChanged(): void
   /** Replaces the whole document (e.g. loading a preset) as one undo step. */
   loadDoc(doc: Doc): void
   setPreview(uid: string | null): void
+  /** Opens or closes a stage card; opening closes the others unless `keepOthers`. */
+  setStageOpen(uid: string, open: boolean, keepOthers?: boolean): void
   setMaskView(uid: string | null): void
   selectPalette(id: string | null): void
   selectColor(selection: { paletteId: string; index: number } | null): void
@@ -349,10 +359,13 @@ export const useApp = create<AppState>()((set, get) => ({
   settingsOpen: false,
   exportOpen: false,
   presetsOpen: false,
+  saveWorkspaceOpen: false,
+  commandSearchOpen: false,
   presetName: null,
   presetsVersion: 0,
   previewUid: null,
   maskUid: null,
+  openStages: [],
   selectedPaletteId: doc0.palettes[0]!.id,
   selectedColor: null,
   picking: false,
@@ -485,6 +498,8 @@ export const useApp = create<AppState>()((set, get) => ({
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
   setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
+  setSaveWorkspaceOpen: (saveWorkspaceOpen) => set({ saveWorkspaceOpen }),
+  setCommandSearchOpen: (commandSearchOpen) => set({ commandSearchOpen }),
   setPresetName: (presetName) => set({ presetName }),
   presetsChanged: () => set({ presetsVersion: get().presetsVersion + 1 }),
   loadDoc: (doc) => {
@@ -493,6 +508,10 @@ export const useApp = create<AppState>()((set, get) => ({
     set({ previewUid: null, maskUid: null, selectedPaletteId: firstStagePalette?.id ?? null })
   },
   setPreview: (previewUid) => set({ previewUid, maskUid: null }),
+  setStageOpen: (uid, open, keepOthers = false) => {
+    const others = keepOthers ? get().openStages.filter((u) => u !== uid) : []
+    set({ openStages: open ? [...others, uid] : get().openStages.filter((u) => u !== uid) })
+  },
   setMaskView: (maskUid) => set({ maskUid }),
   selectPalette: (selectedPaletteId) => set({ selectedPaletteId }),
   selectColor: (selectedColor) => set({ selectedColor }),
@@ -599,6 +618,8 @@ export const useApp = create<AppState>()((set, get) => ({
       stages.splice(index ?? stages.length, 0, stage)
       return { stages, palettes: [...d.palettes, ...palettes] }
     })
+    // A new stage opens (alone), ready to set up.
+    set({ openStages: [stage.uid] })
   },
   duplicateStage: (uid) => get().edit((d) => docOps.duplicateStage(d, uid)),
   removeStage: (uid) => {
